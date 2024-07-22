@@ -1,0 +1,325 @@
+package lol.mmrtr.lolrepository.repository;
+
+
+import lol.mmrtr.lolrepository.entity.MatchSummoner;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public class MatchSummonerRepository {
+
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+
+
+    public MatchSummonerRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public void bulkSave(List<MatchSummoner> matchSummoners) {
+
+        String sql = " INSERT INTO match_summoner (" +
+                "summoner_id," +
+                "match_id," +
+                "riot_id_game_name," +
+                "riot_id_tagline," +
+                "puuid," +
+                "profile_icon," +
+                "summoner_name," +
+                "participant_id," +
+                "champ_level," +
+                "champion_id," +
+                "champion_name," +
+                "lane," +
+                "champ_experience," +
+                "role," +
+                "spell1casts," +
+                "spell2casts," +
+                "spell3casts," +
+                "spell4casts," +
+                "summoner1casts," +
+                "summoner1id," +
+                "summoner2casts," +
+                "summoner2id," +
+                "summoner_level," +
+                "bounty_level," +
+                "kills," +
+                "assists," +
+                "deaths," +
+                "double_kills," +
+                "triple_kills," +
+                "quadra_kills," +
+                "penta_kills," +
+                "unreal_kills," +
+                "champion_transform," +
+                "gold_earned," +
+                "gold_spent," +
+                "items_purchased," +
+                "consumables_purchased," +
+                "neutral_minions_killed," +
+                "total_minions_killed," +
+                "objectives_stolen," +
+                "objectives_stolen_assists," +
+                "detector_wards_placed," +
+                "sight_wards_bought_in_game," +
+                "vision_score," +
+                "vision_wards_bought_in_game," +
+                "wards_killed," +
+                "wards_placed," +
+                "baron_kills," +
+                "dragon_kills," +
+                "first_blood_assist," +
+                "first_blood_kill," +
+                "first_tower_assist," +
+                "first_tower_kill," +
+                "inhibitor_kills," +
+                "inhibitor_takedowns," +
+                "inhibitors_lost," +
+                "nexus_kills," +
+                "nexus_takedowns," +
+                "nexus_lost," +
+                "turret_kills," +
+                "turret_takedowns," +
+                "turrets_lost," +
+                "game_ended_in_early_surrender," +
+                "game_ended_in_surrender," +
+                "team_early_surrendered," +
+                "team_position," +
+                "team_id," +
+                "win," +
+                "time_played," +
+                "individual_position," +
+                "magic_damage_dealt," +
+                "magic_damage_dealt_to_champions," +
+                "magic_damage_taken," +
+                "physical_damage_dealt," +
+                "physical_damage_dealt_to_champions," +
+                "physical_damage_taken," +
+                "damage_dealt_to_buildings," +
+                "damage_dealt_to_objectives," +
+                "damage_dealt_to_turrets," +
+                "damage_self_mitigated," +
+                "total_damage_dealt," +
+                "total_damage_dealt_to_champions," +
+                "total_damage_shielded_on_teammates," +
+                "total_damage_taken," +
+                "true_damage_dealt," +
+                "true_damage_dealt_to_champions," +
+                "true_damage_taken," +
+                "total_heal," +
+                "total_heals_on_teammates," +
+                "total_timeccdealt," +
+                "total_time_spent_dead," +
+                "total_units_healed," +
+                "timeccing_others," +
+                "killing_sprees," +
+                "largest_critical_strike," +
+                "largest_killing_spree," +
+                "largest_multi_kill," +
+                "longest_time_spent_living," +
+                "all_in_pings," +
+                "assist_me_pings," +
+                "command_pings," +
+                "eligible_for_progression," +
+                "enemy_missing_pings," +
+                "enemy_vision_pings," +
+                "hold_pings," +
+                "get_back_pings," +
+                "need_vision_pings," +
+                "on_my_way_pings," +
+                "player_score0," +
+                "player_score1," +
+                "player_score2," +
+                "player_score3," +
+                "player_score4," +
+                "player_score5," +
+                "player_score6," +
+                "player_score7," +
+                "player_score8," +
+                "player_score9," +
+                "player_score10," +
+                "player_score11," +
+                "placement," +
+                "player_augment1," +
+                "player_augment2," +
+                "player_augment3," +
+                "player_augment4," +
+                "player_subteam_id," +
+                "push_pings," +
+                "riot_id_name," +
+                "subteam_placement," +
+                "total_ally_jungle_minions_killed," +
+                "total_enemy_jungle_minions_killed," +
+                "vision_cleared_pings," +
+                "item0," +
+                "item1," +
+                "item2," +
+                "item3," +
+                "item4," +
+                "item5," +
+                "item6," +
+                "defense," +
+                "flex," +
+                "offense," +
+                "primary_rune_id," +
+                "primary_rune_ids," +
+                "secondary_rune_id," +
+                "secondary_rune_ids " +
+                ") VALUES (" +
+                ":summonerId," +
+                ":matchId," +
+                ":riotIdGameName," +
+                ":riotIdTagline," +
+                ":puuid," +
+                ":profileIcon," +
+                ":summonerName," +
+                ":participantId," +
+                ":champLevel," +
+                ":championId," +
+                ":championName," +
+                ":lane," +
+                ":champExperience," +
+                ":role," +
+                ":spell1Casts," +
+                ":spell2Casts," +
+                ":spell3Casts," +
+                ":spell4Casts," +
+                ":summoner1Casts," +
+                ":summoner1Id," +
+                ":summoner2Casts," +
+                ":summoner2Id," +
+                ":summonerLevel," +
+                ":bountyLevel," +
+                ":kills," +
+                ":assists," +
+                ":deaths," +
+                ":doubleKills," +
+                ":tripleKills," +
+                ":quadraKills," +
+                ":pentaKills," +
+                ":unrealKills," +
+                ":championTransform," +
+                ":goldEarned," +
+                ":goldSpent," +
+                ":itemsPurchased," +
+                ":consumablesPurchased," +
+                ":neutralMinionsKilled," +
+                ":totalMinionsKilled," +
+                ":objectivesStolen," +
+                ":objectivesStolenAssists," +
+                ":detectorWardsPlaced," +
+                ":sightWardsBoughtInGame," +
+                ":visionScore," +
+                ":visionWardsBoughtInGame," +
+                ":wardsKilled," +
+                ":wardsPlaced," +
+                ":baronKills," +
+                ":dragonKills," +
+                ":firstBloodAssist," +
+                ":firstBloodKill," +
+                ":firstTowerAssist," +
+                ":firstTowerKill," +
+                ":inhibitorKills," +
+                ":inhibitorTakedowns," +
+                ":inhibitorsLost," +
+                ":nexusKills," +
+                ":nexusTakedowns," +
+                ":nexusLost," +
+                ":turretKills," +
+                ":turretTakedowns," +
+                ":turretsLost," +
+                ":gameEndedInEarlySurrender," +
+                ":gameEndedInSurrender," +
+                ":teamEarlySurrendered," +
+                ":teamPosition," +
+                ":teamId," +
+                ":win," +
+                ":timePlayed," +
+                ":individualPosition," +
+                ":magicDamageDealt," +
+                ":magicDamageDealtToChampions," +
+                ":magicDamageTaken," +
+                ":physicalDamageDealt," +
+                ":physicalDamageDealtToChampions," +
+                ":physicalDamageTaken," +
+                ":damageDealtToBuildings," +
+                ":damageDealtToObjectives," +
+                ":damageDealtToTurrets," +
+                ":damageSelfMitigated," +
+                ":totalDamageDealt," +
+                ":totalDamageDealtToChampions," +
+                ":totalDamageShieldedOnTeammates," +
+                ":totalDamageTaken," +
+                ":trueDamageDealt," +
+                ":trueDamageDealtToChampions," +
+                ":trueDamageTaken," +
+                ":totalHeal," +
+                ":totalHealsOnTeammates," +
+                ":totalTimeCCDealt," +
+                ":totalTimeSpentDead," +
+                ":totalUnitsHealed," +
+                ":timeCCingOthers," +
+                ":killingSprees," +
+                ":largestCriticalStrike," +
+                ":largestKillingSpree," +
+                ":largestMultiKill," +
+                ":longestTimeSpentLiving," +
+                ":allInPings," +
+                ":assistMePings," +
+                ":commandPings," +
+                ":eligibleForProgression," +
+                ":enemyMissingPings," +
+                ":enemyVisionPings," +
+                ":holdPings," +
+                ":getBackPings," +
+                ":needVisionPings," +
+                ":onMyWayPings," +
+                ":playerScore0," +
+                ":playerScore1," +
+                ":playerScore2," +
+                ":playerScore3," +
+                ":playerScore4," +
+                ":playerScore5," +
+                ":playerScore6," +
+                ":playerScore7," +
+                ":playerScore8," +
+                ":playerScore9," +
+                ":playerScore10," +
+                ":playerScore11," +
+                ":placement," +
+                ":playerAugment1," +
+                ":playerAugment2," +
+                ":playerAugment3," +
+                ":playerAugment4," +
+                ":playerSubteamId," +
+                ":pushPings," +
+                ":riotIdName," +
+                ":subteamPlacement," +
+                ":totalAllyJungleMinionsKilled," +
+                ":totalEnemyJungleMinionsKilled," +
+                ":visionClearedPings," +
+                ":item0," +
+                ":item1," +
+                ":item2," +
+                ":item3," +
+                ":item4," +
+                ":item5," +
+                ":item6," +
+                ":defense," +
+                ":flex," +
+                ":offense," +
+                ":primaryRuneId," +
+                ":primaryRuneIds," +
+                ":secondaryRuneId," +
+                ":secondaryRuneIds" +
+                ") ON CONFLICT (summoner_id, match_id) DO NOTHING";
+
+        SqlParameterSource[] params = SqlParameterSourceUtils.createBatch(matchSummoners);
+
+        jdbcTemplate.batchUpdate(sql, params);
+    }
+}
