@@ -5,6 +5,7 @@ import lol.mmrtr.lolrepository.service.TimelineService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -17,6 +18,7 @@ public class TimelineConsumer {
         this.timelineService = timelineService;
     }
 
+    @Async
     @KafkaListener(topics = "timeline", groupId = "group_1")
     public void listener(
             @Payload TimelineDto message
@@ -24,4 +26,5 @@ public class TimelineConsumer {
         log.info("timeline message 도착");
         timelineService.save(message);
     }
+
 }

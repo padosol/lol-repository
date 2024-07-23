@@ -78,7 +78,6 @@ public class TimelineService {
             List<ParticipantFrameDto> list = participantFrames.getList();
             for (ParticipantFrameDto participantFrameDto : list) {
                 int participantId = participantFrameDto.getParticipantId();
-                if(participantId == 0)continue;
 
                 ParticipantFrame participantFrame = new ParticipantFrame(
                         matchId,
