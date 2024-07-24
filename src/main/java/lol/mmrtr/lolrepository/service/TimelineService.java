@@ -3,6 +3,7 @@ package lol.mmrtr.lolrepository.service;
 import lol.mmrtr.lolrepository.dto.match_timeline.*;
 import lol.mmrtr.lolrepository.entity.ParticipantFrame;
 import lol.mmrtr.lolrepository.entity.TimeLineEvent;
+import lol.mmrtr.lolrepository.entity.event.*;
 import lol.mmrtr.lolrepository.repository.EventVictimDamageDealtRepository;
 import lol.mmrtr.lolrepository.repository.EventVictimDamageReceivedRepository;
 import lol.mmrtr.lolrepository.repository.ParticipantFrameRepository;
@@ -50,6 +51,17 @@ public class TimelineService {
         List<TimeLineEvent> timeLineEvents = new ArrayList<>();
         List<ParticipantFrame> participantFramesData = new ArrayList<>();
 
+        // log event
+        List<BuildingEvents> buildingEvents = new ArrayList<>();
+        List<ChampionSpecialKillEvent> championSpecialKillEvents = new ArrayList<>();
+        List<GameEvents> gameEvents = new ArrayList<>();
+        List<ItemEvents> itemEvents = new ArrayList<>();
+        List<KillEvents> killEvents = new ArrayList<>();
+        List<LevelEvents> levelEvents = new ArrayList<>();
+        List<SkillEvents> skillEvents = new ArrayList<>();
+        List<TurretPlateDestroyedEvent> turretPlateDestroyedEvents = new ArrayList<>();
+        List<WardEvents> wardEvents = new ArrayList<>();
+
         for (FramesTimeLineDto frame : frames) {
 
             int timestamp = frame.getTimestamp();
@@ -58,18 +70,6 @@ public class TimelineService {
             List<EventsTimeLineDto> events = frame.getEvents();
             for (EventsTimeLineDto event : events) {
                 
-                int participantId = event.getParticipantId();
-                // 0 으로 거르면 안됨
-                if(participantId == 0) continue;
-
-                TimeLineEvent timeLineEvent = new TimeLineEvent(
-                        matchId,
-                        timestamp,
-                        puuidMap.get(participantId),
-                        event
-                );
-
-                timeLineEvents.add(timeLineEvent);
             }
 
             // participant frame

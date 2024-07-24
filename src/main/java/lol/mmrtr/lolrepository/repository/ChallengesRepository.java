@@ -23,7 +23,7 @@ public class ChallengesRepository {
     public void bulkSave(List<Challenges> challenges) {
 
         String sql = " INSERT INTO challenges (" +
-                "summoner_id," +
+                "puuid," +
                 "match_id," +
                 "assist_streak_count12," +
                 "infernal_scale_pickup," +
@@ -142,7 +142,7 @@ public class ChallengesRepository {
                 "ward_takedowns_before20m," +
                 "wards_guarded" +
                 ") VALUES (" +
-                ":summonerId," +
+                ":puuid," +
                 ":matchId," +
                 ":assistStreakCount12," +
                 ":infernalScalePickup," +
@@ -260,7 +260,7 @@ public class ChallengesRepository {
                 ":wardTakedowns," +
                 ":wardTakedownsBefore20M," +
                 ":wardsGuarded "+
-                ") ON CONFLICT (summoner_id, match_id) DO NOTHING";
+                ") ON CONFLICT (puuid, match_id) DO NOTHING";
 
         SqlParameterSource[] params = SqlParameterSourceUtils.createBatch(challenges);
 

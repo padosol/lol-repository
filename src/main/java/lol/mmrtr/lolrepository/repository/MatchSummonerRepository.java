@@ -316,7 +316,7 @@ public class MatchSummonerRepository {
                 ":primaryRuneIds," +
                 ":secondaryRuneId," +
                 ":secondaryRuneIds" +
-                ") ON CONFLICT (summoner_id, match_id) DO NOTHING";
+                ") ON CONFLICT (puuid, match_id) DO NOTHING";
 
         SqlParameterSource[] params = SqlParameterSourceUtils.createBatch(matchSummoners);
 

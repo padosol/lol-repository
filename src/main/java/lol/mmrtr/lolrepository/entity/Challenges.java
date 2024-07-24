@@ -10,7 +10,7 @@ import lombok.Setter;
 @Setter
 public class Challenges {
 
-    private String summonerId;
+    private String puuid;
     private String matchId;
     private int assistStreakCount12;
     private int infernalScalePickup;
@@ -134,7 +134,7 @@ public class Challenges {
 
     public Challenges(MatchDto matchDto, ParticipantDto participantDto, ChallengesDto challengesDto){
 
-        this.summonerId = participantDto.getSummonerId();
+        this.puuid = participantDto.getPuuid();
         this.matchId = matchDto.getMetadata().getMatchId();
         this.assistStreakCount12 = challengesDto.getAssistStreakCount12();
         this.infernalScalePickup = challengesDto.getInfernalScalePickup();
