@@ -22,7 +22,6 @@ public class ParticipantFrameRepository {
         String sql = " INSERT INTO participant_frame (" +
                 "match_id," +
                 "timestamp," +
-                "puuid," +
                 "ability_haste," +
                 "ability_power," +
                 "armor," +
@@ -74,7 +73,6 @@ public class ParticipantFrameRepository {
                 ") VALUES (" +
                 ":matchId," +
                 ":timestamp," +
-                ":puuid," +
                 ":abilityHaste," +
                 ":abilityPower," +
                 ":armor," +

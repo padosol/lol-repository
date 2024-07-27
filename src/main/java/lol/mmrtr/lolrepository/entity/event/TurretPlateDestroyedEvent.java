@@ -1,6 +1,7 @@
 package lol.mmrtr.lolrepository.entity.event;
 
 
+import lol.mmrtr.lolrepository.dto.match_timeline.EventsTimeLineDto;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,7 +10,7 @@ import lombok.Setter;
 public class TurretPlateDestroyedEvent {
 
     private Long id;
-    private Long timeLineEventId;
+    private int timelineTimestamp;
 
     private int killerId;
     private String laneType;
@@ -20,4 +21,19 @@ public class TurretPlateDestroyedEvent {
     private int teamId;
     private long timestamp;
     private String type;
+
+    public TurretPlateDestroyedEvent(){}
+
+    public TurretPlateDestroyedEvent(int timelineTimestamp, EventsTimeLineDto eventsTimeLineDto){
+
+        this.timelineTimestamp = timelineTimestamp;
+        this.killerId = eventsTimeLineDto.getKillerId();
+        this.laneType = eventsTimeLineDto.getLaneType();
+        this.x = eventsTimeLineDto.getPosition().getX();
+        this.y = eventsTimeLineDto.getPosition().getY();
+        this.teamId = eventsTimeLineDto.getTeamId();
+        this.timestamp = eventsTimeLineDto.getTimestamp();
+        this.type = eventsTimeLineDto.getType();
+
+    }
 }

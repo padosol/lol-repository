@@ -1,5 +1,6 @@
 package lol.mmrtr.lolrepository.entity;
 
+import lol.mmrtr.lolrepository.dto.match_timeline.EventsTimeLineDto;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -7,11 +8,16 @@ import lombok.Setter;
 @Setter
 public class TimeLineEvent {
 
-    private Long id;
     private String matchId;
     private int timestamp;
 
     public TimeLineEvent(){};
+
+    public TimeLineEvent(String matchId, int timestamp) {
+        this.matchId = matchId;
+        this.timestamp = timestamp;
+    }
+
 
 
 }

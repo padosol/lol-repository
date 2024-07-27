@@ -1,5 +1,6 @@
 package lol.mmrtr.lolrepository.entity.event;
 
+import lol.mmrtr.lolrepository.dto.match_timeline.EventsTimeLineDto;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -8,7 +9,7 @@ import lombok.Setter;
 public class BuildingEvents {
 
     private Long id;
-    private Long timeLineEventId;
+    private int timelineTimestamp;
 
     private String assistingParticipantIds;
     private int bounty;
@@ -23,4 +24,22 @@ public class BuildingEvents {
     private long timestamp;
     private String towerType;
     private String type;
+
+    public BuildingEvents(){};
+    public BuildingEvents(int timelineTimestamp, EventsTimeLineDto eventsTimeLineDto) {
+
+        this.timelineTimestamp = timelineTimestamp;
+//        this.assistingParticipantIds = eventsTimeLineDto.getAssistingParticipantIds().stream().map( data -> data).toString();
+        this.bounty = eventsTimeLineDto.getBounty();
+        this.buildingType = eventsTimeLineDto.getBuildingType();
+        this.killerId = eventsTimeLineDto.getKillerId();
+        this.laneType = eventsTimeLineDto.getLaneType();
+        this.x = eventsTimeLineDto.getPosition().getX();
+        this.y = eventsTimeLineDto.getPosition().getX();
+        this.teamId = eventsTimeLineDto.getTeamId();
+        this.timestamp = eventsTimeLineDto.getTimestamp();
+        this.towerType = eventsTimeLineDto.getTowerType();
+        this.type = eventsTimeLineDto.getType();
+
+    }
 }

@@ -1,5 +1,6 @@
 package lol.mmrtr.lolrepository.entity.event;
 
+import lol.mmrtr.lolrepository.dto.match_timeline.EventsTimeLineDto;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -8,7 +9,7 @@ import lombok.Setter;
 public class ChampionSpecialKillEvent {
 
     private Long id;
-    private Long timeLineEventId;
+    private int timelineTimestamp;
 
     private String killType;
     private int killerId;
@@ -19,4 +20,16 @@ public class ChampionSpecialKillEvent {
 
     private long timestamp;
     private String type;
+
+    public ChampionSpecialKillEvent(){}
+    public ChampionSpecialKillEvent(int timelineTimestamp, EventsTimeLineDto eventsTimeLineDto){
+        this.timelineTimestamp = timelineTimestamp;
+        this.killType = eventsTimeLineDto.getKillType();
+        this.killerId = eventsTimeLineDto.getKillerId();
+        this.multiKillLength = eventsTimeLineDto.getMultiKillLength();
+        this.x = eventsTimeLineDto.getPosition().getX();
+        this.y = eventsTimeLineDto.getPosition().getY();
+        this.timestamp = eventsTimeLineDto.getTimestamp();
+        this.type = eventsTimeLineDto.getType();
+    }
 }

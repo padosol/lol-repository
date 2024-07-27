@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.List;
 
 @Getter
@@ -32,7 +34,7 @@ public class ParticipantFramesDto {
     private ParticipantFrameDto participantFrame10;
 
     public List<ParticipantFrameDto> getList() {
-        return List.of(
+        return Arrays.asList(
             this.participantFrame1,
             this.participantFrame2,
             this.participantFrame3,

@@ -53,16 +53,20 @@ public class MatchTeam {
         this.riftHeraldKills = teamDto.getObjectives().getRiftHerald().getKills();
         this.towerFirst = teamDto.getObjectives().getTower().isFirst();
         this.towerKills = teamDto.getObjectives().getTower().getKills();
-        this.champion1Id = teamDto.getBans().get(0).getChampionId();
-        this.pick1Turn = teamDto.getBans().get(0).getPickTurn();
-        this.champion2Id = teamDto.getBans().get(1).getChampionId();
-        this.pick2Turn = teamDto.getBans().get(1).getPickTurn();
-        this.champion3Id = teamDto.getBans().get(2).getChampionId();
-        this.pick3Turn = teamDto.getBans().get(2).getPickTurn();
-        this.champion4Id = teamDto.getBans().get(3).getChampionId();
-        this.pick4Turn = teamDto.getBans().get(3).getPickTurn();
-        this.champion5Id = teamDto.getBans().get(4).getChampionId();
-        this.pick5Turn = teamDto.getBans().get(4).getPickTurn();
+
+        if(!teamDto.getBans().isEmpty()) {
+            this.champion1Id = teamDto.getBans().get(0).getChampionId();
+            this.pick1Turn = teamDto.getBans().get(0).getPickTurn();
+            this.champion2Id = teamDto.getBans().get(1).getChampionId();
+            this.pick2Turn = teamDto.getBans().get(1).getPickTurn();
+            this.champion3Id = teamDto.getBans().get(2).getChampionId();
+            this.pick3Turn = teamDto.getBans().get(2).getPickTurn();
+            this.champion4Id = teamDto.getBans().get(3).getChampionId();
+            this.pick4Turn = teamDto.getBans().get(3).getPickTurn();
+            this.champion5Id = teamDto.getBans().get(4).getChampionId();
+            this.pick5Turn = teamDto.getBans().get(4).getPickTurn();
+        }
+
     }
 
 }

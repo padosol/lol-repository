@@ -12,7 +12,7 @@ public class ParticipantFrame {
 
     private String matchId;
     private int timestamp;
-    private String puuid;
+    private int participantId;
 
     private int abilityHaste;
     private int abilityPower;
@@ -59,7 +59,6 @@ public class ParticipantFrame {
     private int jungleMinionsKilled;
     private int level;
     private int minionsKilled;
-    private int participantId;
 
     private int x;
     private int y;
@@ -74,13 +73,13 @@ public class ParticipantFrame {
     public ParticipantFrame(
             String matchId,
             int timestamp,
-            String puuid,
             ParticipantFrameDto participantFrameDto
     ) {
 
         this.matchId= matchId;
         this.timestamp= timestamp;
-        this.puuid= puuid;
+        this.participantId= participantFrameDto.getParticipantId();
+
 
         this.abilityHaste= participantFrameDto.getChampionStats().getAbilityHaste();
         this.abilityPower= participantFrameDto.getChampionStats().getAbilityPower();
@@ -124,7 +123,6 @@ public class ParticipantFrame {
         this.jungleMinionsKilled= participantFrameDto.getJungleMinionsKilled();
         this.level= participantFrameDto.getLevel();
         this.minionsKilled= participantFrameDto.getMinionsKilled();
-        this.participantId= participantFrameDto.getParticipantId();
         this.x= participantFrameDto.getPosition().getX();
         this.y= participantFrameDto.getPosition().getY();
         this.timeEnemySpentControlled= participantFrameDto.getTimeEnemySpentControlled();
