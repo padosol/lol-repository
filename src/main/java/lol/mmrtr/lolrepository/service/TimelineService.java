@@ -125,9 +125,5 @@ public class TimelineService {
 
         itemEventRepository.bulkSave(itemEvents);
         skillEventRepository.bulkSave(skillEvents);
-
     }
-
-
-
 }
