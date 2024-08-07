@@ -20,10 +20,28 @@ public class TimelineConsumer {
 
     @Async
     @KafkaListener(topics = "timeline", groupId = "group_1")
-    public void listener(
+    public void listener0(
             @Payload TimelineDto message
     ) {
-        log.info("timeline message 도착");
+        log.info("[{}] timeline message 도착", message.getMetadata().getMatchId());
+        timelineService.save(message);
+    }
+
+    @Async
+    @KafkaListener(topics = "timeline", groupId = "group_1")
+    public void listener1(
+            @Payload TimelineDto message
+    ) {
+        log.info("[{}] timeline message 도착", message.getMetadata().getMatchId());
+        timelineService.save(message);
+    }
+
+    @Async
+    @KafkaListener(topics = "timeline", groupId = "group_1")
+    public void listener2(
+            @Payload TimelineDto message
+    ) {
+        log.info("[{}] timeline message 도착", message.getMetadata().getMatchId());
         timelineService.save(message);
     }
 

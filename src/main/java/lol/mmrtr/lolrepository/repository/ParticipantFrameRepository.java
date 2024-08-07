@@ -121,7 +121,7 @@ public class ParticipantFrameRepository {
                 ":timeEnemySpentControlled," +
                 ":totalGold," +
                 ":xp "+
-                ")";
+                ") ON CONFLICT (participant_id, timestamp , match_id) DO NOTHING";
 
         SqlParameterSource[] param = SqlParameterSourceUtils.createBatch(participantFrames);
         jdbcTemplate.batchUpdate(sql, param);

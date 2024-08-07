@@ -20,11 +20,20 @@ public class MatchConsumer {
 
     @Async
     @KafkaListener(topics = "match", groupId = "group_1", containerFactory = "kafkaListenerContainerFactory")
-    public void listener(
+    public void listener0(
             @Payload MatchDto matchDto
     )  {
-        
-        log.info("match message 도착");
+        log.info("[{}] match message 도착", matchDto.getMetadata().getMatchId());
+        matchService.save(matchDto);
+    }
+
+    @Async
+    @KafkaListener(topics = "match", groupId = "group_1", containerFactory = "kafkaListenerContainerFactory")
+    public void listener1(
+            @Payload MatchDto matchDto
+    )  {
+
+        log.info("[{}] match message 도착", matchDto.getMetadata().getMatchId());
         matchService.save(matchDto);
     }
 
@@ -34,7 +43,7 @@ public class MatchConsumer {
             @Payload MatchDto matchDto
     )  {
 
-        log.info("match message 도착");
+        log.info("[{}] match message 도착", matchDto.getMetadata().getMatchId());
         matchService.save(matchDto);
     }
 

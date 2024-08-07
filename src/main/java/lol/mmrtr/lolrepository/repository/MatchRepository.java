@@ -59,7 +59,7 @@ public class MatchRepository {
                 ":gameCreateDatetime," +
                 ":gameEndDatetime," +
                 ":gameStartDatetime "+
-                ")";
+                ") ON CONFLICT (match_id) DO NOTHING";
 
         SqlParameterSource param = new BeanPropertySqlParameterSource(match);
 

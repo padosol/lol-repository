@@ -20,7 +20,7 @@ public class TimeLineEventRepository {
 
     public void bulkSave(List<TimeLineEvent> timeLineEvents) {
 
-        String sql = " INSERT INTO time_line_event ( match_id, timestamp ) VALUES (:matchId, :timestamp)";
+        String sql = " INSERT INTO time_line_event ( match_id, timestamp ) VALUES (:matchId, :timestamp) ON CONFLICT (match_id, timestamp) DO NOTHING ";
 
         SqlParameterSource[] param = SqlParameterSourceUtils.createBatch(timeLineEvents);
         
