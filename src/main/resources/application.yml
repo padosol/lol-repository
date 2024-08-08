@@ -21,3 +21,6 @@ spring:
           order_updates: true
 
     show-sql: true
+  kafka:
+    consumer:
+      bootstrap-servers: localhost:9094
