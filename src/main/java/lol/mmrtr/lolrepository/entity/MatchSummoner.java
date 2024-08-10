@@ -1,9 +1,10 @@
 package lol.mmrtr.lolrepository.entity;
 
-import lol.mmrtr.lolrepository.dto.match.MatchDto;
-import lol.mmrtr.lolrepository.dto.match.ParticipantDto;
-import lol.mmrtr.lolrepository.dto.match.PerkStyleDto;
-import lol.mmrtr.lolrepository.dto.match.PerkStyleSelectionDto;
+
+import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
+import lol.mmrtr.lolrepository.riot.dto.match.ParticipantDto;
+import lol.mmrtr.lolrepository.riot.dto.match.PerkStyleDto;
+import lol.mmrtr.lolrepository.riot.dto.match.PerkStyleSelectionDto;
 import lombok.Getter;
 import lombok.Setter;
 

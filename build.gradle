@@ -36,6 +36,15 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.kafka:spring-kafka-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // redis
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    implementation 'com.bucket4j:bucket4j_jdk17-redis-common:8.12.1'
+    implementation 'com.bucket4j:bucket4j_jdk17-lettuce:8.12.1'
+
+    // webClient
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
 }
 
 tasks.named('test') {

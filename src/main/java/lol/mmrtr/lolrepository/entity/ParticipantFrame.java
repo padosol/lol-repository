@@ -1,8 +1,6 @@
 package lol.mmrtr.lolrepository.entity;
 
-import lol.mmrtr.lolrepository.dto.match.ParticipantDto;
-import lol.mmrtr.lolrepository.dto.match_timeline.ParticipantFrameDto;
-import lol.mmrtr.lolrepository.dto.match_timeline.ParticipantFramesDto;
+import lol.mmrtr.lolrepository.riot.dto.match_timeline.ParticipantFrameDto;
 import lombok.Getter;
 import lombok.Setter;
 

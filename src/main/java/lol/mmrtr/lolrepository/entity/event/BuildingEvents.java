@@ -1,6 +1,6 @@
 package lol.mmrtr.lolrepository.entity.event;
 
-import lol.mmrtr.lolrepository.dto.match_timeline.EventsTimeLineDto;
+import lol.mmrtr.lolrepository.riot.dto.match_timeline.EventsTimeLineDto;
 import lombok.Getter;
 import lombok.Setter;
 

@@ -21,6 +21,13 @@ spring:
           order_updates: true
 
     show-sql: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
   kafka:
     consumer:
       bootstrap-servers: localhost:9094
+
+riot.api.key: ${API_KEY}

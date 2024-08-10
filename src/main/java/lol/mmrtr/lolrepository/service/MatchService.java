@@ -1,8 +1,5 @@
 package lol.mmrtr.lolrepository.service;
 
-import lol.mmrtr.lolrepository.dto.match.MatchDto;
-import lol.mmrtr.lolrepository.dto.match.ParticipantDto;
-import lol.mmrtr.lolrepository.dto.match.TeamDto;
 import lol.mmrtr.lolrepository.entity.Challenges;
 import lol.mmrtr.lolrepository.entity.Match;
 import lol.mmrtr.lolrepository.entity.MatchSummoner;
@@ -11,6 +8,9 @@ import lol.mmrtr.lolrepository.repository.ChallengesRepository;
 import lol.mmrtr.lolrepository.repository.MatchRepository;
 import lol.mmrtr.lolrepository.repository.MatchSummonerRepository;
 import lol.mmrtr.lolrepository.repository.MatchTeamRepository;
+import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
+import lol.mmrtr.lolrepository.riot.dto.match.ParticipantDto;
+import lol.mmrtr.lolrepository.riot.dto.match.TeamDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,6 +57,41 @@ public class MatchService {
         }
 
         matchRepository.save(match);
+        matchSummonerRepository.bulkSave(matchSummoners);
+        matchTeamRepository.bulkSave(matchTeams);
+        challengesRepository.bulkSave(challenges);
+    }
+
+    public void bulkSave(List<MatchDto> matchDtoList) {
+
+        List<Match> matches = new ArrayList<>();
+        List<MatchSummoner> matchSummoners = new ArrayList<>();
+        List<Challenges> challenges = new ArrayList<>();
+        List<MatchTeam> matchTeams = new ArrayList<>();
+
+
+        for (MatchDto matchDto : matchDtoList) {
+
+            // match
+            matches.add(new Match(matchDto));
+
+            // match_summoner, challenges
+            List<ParticipantDto> participants = matchDto.getInfo().getParticipants();
+
+            for (ParticipantDto participant : participants) {
+                matchSummoners.add(new MatchSummoner(matchDto, participant));
+                challenges.add(new Challenges(matchDto, participant, participant.getChallenges()));
+            }
+
+            // match_team
+            List<TeamDto> teams = matchDto.getInfo().getTeams();
+            for (TeamDto team : teams) {
+                matchTeams.add(new MatchTeam(matchDto, team));
+            }
+
+        }
+
+        matchRepository.bulkSave(matches);
         matchSummonerRepository.bulkSave(matchSummoners);
         matchTeamRepository.bulkSave(matchTeams);
         challengesRepository.bulkSave(challenges);

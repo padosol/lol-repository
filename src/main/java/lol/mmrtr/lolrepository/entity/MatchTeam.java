@@ -1,7 +1,7 @@
 package lol.mmrtr.lolrepository.entity;
 
-import lol.mmrtr.lolrepository.dto.match.MatchDto;
-import lol.mmrtr.lolrepository.dto.match.TeamDto;
+import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
+import lol.mmrtr.lolrepository.riot.dto.match.TeamDto;
 import lombok.Getter;
 import lombok.Setter;
 
