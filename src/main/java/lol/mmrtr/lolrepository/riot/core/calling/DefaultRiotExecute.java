@@ -46,7 +46,7 @@ public class DefaultRiotExecute implements RiotExecute{
                 .uri(uri)
                 .exchangeToMono(clientResponse -> {
 
-                    log.info("[URI 호출]: {}", uri.toString());
+                    log.debug("[URI 호출]: {}", uri.toString());
                     Map<String, String> headerMap = clientResponse.headers().asHttpHeaders().toSingleValueMap();
 
                     for(String key : headerMap.keySet()) {

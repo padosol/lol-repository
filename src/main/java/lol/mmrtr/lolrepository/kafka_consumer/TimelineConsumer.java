@@ -29,40 +29,4 @@ public class TimelineConsumer {
         timelineService.bulkSave(message);
     }
 
-    @Async
-    @KafkaListener(topics = "timeline", groupId = "group_1")
-    public void listener1(
-            @Payload List<TimelineDto> message
-    ) {
-        log.info("[{}] timeline message 도착", message.size());
-        timelineService.bulkSave(message);
-    }
-
-    @Async
-    @KafkaListener(topics = "timeline", groupId = "group_1")
-    public void listener2(
-            @Payload List<TimelineDto> message
-    ) {
-        log.info("[{}] timeline message 도착", message.size());
-        timelineService.bulkSave(message);
-    }
-
-    @Async
-    @KafkaListener(topics = "timeline", groupId = "group_1")
-    public void listener3(
-            @Payload List<TimelineDto> message
-    ) {
-        log.info("[{}] timeline message 도착", message.size());
-        timelineService.bulkSave(message);
-    }
-
-    @Async
-    @KafkaListener(topics = "timeline", groupId = "group_1")
-    public void listener4(
-            @Payload List<TimelineDto> message
-    ) {
-        log.info("[{}] timeline message 도착", message.size());
-        timelineService.bulkSave(message);
-    }
-
 }

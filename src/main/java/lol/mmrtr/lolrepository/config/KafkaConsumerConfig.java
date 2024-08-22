@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 
@@ -69,9 +70,11 @@ public class KafkaConsumerConfig {
 
         config.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
 
-        config.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 500);
+        config.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 30);
         config.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 5000);
         config.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 2500);
+
+        config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
 
 
         return new DefaultKafkaConsumerFactory<>(config);
@@ -81,7 +84,8 @@ public class KafkaConsumerConfig {
     public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory() {
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(batchConsumerFactory());
-        factory.getContainerProperties().setIdleBetweenPolls(2000);
+        factory.getContainerProperties().setIdleBetweenPolls(1000);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         factory.setBatchListener(true);
 
         return factory;

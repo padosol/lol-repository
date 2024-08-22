@@ -1,11 +1,12 @@
 package lol.mmrtr.lolrepository.scheduling;
 
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import lol.mmrtr.lolrepository.bucket.BucketService;
+import lol.mmrtr.lolrepository.kafka_consumer.MatchIdConsumer;
+import lol.mmrtr.lolrepository.kafka_consumer.exception.MatchIdConsumerActiveException;
 import lol.mmrtr.lolrepository.redis.model.MatchSession;
 import lol.mmrtr.lolrepository.riot.core.api.RiotAPI;
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
@@ -17,6 +18,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -43,58 +46,61 @@ public class MatchScheduling {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Async(value = "schedulerTask")
+//    @Async(value = "schedulerTask")
     @Scheduled(fixedRate = 1000)
+//    @Retryable(retryFor = {MatchIdConsumerActiveException.class}, maxAttempts = 3, backoff = @Backoff(delay = 1000))
     public void run() throws IOException {
-        ZSetOperations<String, Object> zSet = redisTemplate.opsForZSet();
 
-        Bucket platformBucket = bucketService.getBucket(BucketService.BucketKey.PLATFORM_PLATFORM);
+        if(!MatchIdConsumer.active) {
+            ZSetOperations<String, Object> zSet = redisTemplate.opsForZSet();
 
-        Set<Object> matchIds = zSet.range("matchId", 0, 20);
+            Bucket platformBucket = bucketService.getBucket(BucketService.BucketKey.PLATFORM_PLATFORM);
 
-        assert matchIds != null;
+            List<String> matchIds = zSet.range("matchId", 0, 20).stream().map(mathId -> (String) mathId).toList();
 
-        List<CompletableFuture<MatchDto>> matchDtoFutureList = new ArrayList<>();
-        List<CompletableFuture<TimelineDto>> timelineFutureList = new ArrayList<>();
+            List<CompletableFuture<MatchDto>> matchDtoFutureList = new ArrayList<>();
+            List<CompletableFuture<TimelineDto>> timelineFutureList = new ArrayList<>();
 
-        for (Object matchData : matchIds) {
+            for (String matchId : matchIds) {
 
-            ConsumptionProbe probe = platformBucket.tryConsumeAndReturnRemaining(2);
-            if(probe.isConsumed()) {
+                ConsumptionProbe probe = platformBucket.tryConsumeAndReturnRemaining(2);
+                if(probe.isConsumed()) {
 
-                MatchSession matchSession = objectMapper.readValue((String) matchData, MatchSession.class);
-                log.info("MatchId: {} 요청, App 남은 토큰 수: {}", matchSession.getMatchId(), probe.getRemainingTokens());
-                zSet.remove("matchId", matchData);
+                    log.info("MatchId: {} 요청, App 남은 토큰 수: {}", (String) matchId, probe.getRemainingTokens());
+                    zSet.remove("matchId", matchId);
 
-                String matchId = matchSession.getMatchId();
-                Platform platform = matchSession.getPlatform();
+                    Platform platform = Platform.valueOfName(matchId.split("_")[0]);
 
-                CompletableFuture<TimelineDto> timelineDtoFuture = CompletableFuture.supplyAsync(() -> {
-                    try {
-                        return RiotAPI.timeLine(platform).byMatchIdFuture(matchId).get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-                CompletableFuture<MatchDto> matchDtoFuture = CompletableFuture.supplyAsync(() -> {
+                    CompletableFuture<TimelineDto> timelineDtoFuture = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return RiotAPI.timeLine(platform).byMatchIdFuture(matchId).get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+                    CompletableFuture<MatchDto> matchDtoFuture = CompletableFuture.supplyAsync(() -> {
 
-                    try {
-                        return RiotAPI.match(platform).byMatchIdFuture(matchId).get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
+                        try {
+                            return RiotAPI.match(platform).byMatchIdFuture(matchId).get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
 
-                timelineFutureList.add(timelineDtoFuture);
-                matchDtoFutureList.add(matchDtoFuture);
+                    timelineFutureList.add(timelineDtoFuture);
+                    matchDtoFutureList.add(matchDtoFuture);
+                }
             }
+
+            List<MatchDto> matchDtoList = matchDtoFutureList.stream().map(CompletableFuture::join).toList();
+            matchService.bulkSave(matchDtoList);
+
+            List<TimelineDto> timelineDtoList = timelineFutureList.stream().map(CompletableFuture::join).toList();
+            timelineService.bulkSave(timelineDtoList);
+        } else {
+            log.warn("MatchIdConsumer 동작중.... 대기");
         }
 
-        List<MatchDto> matchDtoList = matchDtoFutureList.stream().map(CompletableFuture::join).toList();
-        matchService.bulkSave(matchDtoList);
-
-        List<TimelineDto> timelineDtoList = timelineFutureList.stream().map(CompletableFuture::join).toList();
-        timelineService.bulkSave(timelineDtoList);
 
     }
 
