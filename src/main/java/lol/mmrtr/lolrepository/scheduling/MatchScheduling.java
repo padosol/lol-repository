@@ -65,8 +65,7 @@ public class MatchScheduling {
 
                 ConsumptionProbe probe = platformBucket.tryConsumeAndReturnRemaining(2);
                 if(probe.isConsumed()) {
-
-                    log.info("MatchId: {} 요청, App 남은 토큰 수: {}", (String) matchId, probe.getRemainingTokens());
+                    log.info("MatchId: {} 요청, App 남은 토큰 수: {}", matchId, probe.getRemainingTokens());
                     zSet.remove("matchId", matchId);
 
                     Platform platform = Platform.valueOfName(matchId.split("_")[0]);

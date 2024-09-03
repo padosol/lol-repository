@@ -47,7 +47,6 @@ public class RedisSubscriberListener implements MessageListener {
 
             String s = objectMapper.readValue(body, String.class);
 
-
             MatchRenewalSession matchRenewalSession = objectMapper.readValue(s, MatchRenewalSession.class);
             List<String> matchIds = matchRenewalSession.getMatchIds();
             String puuid = matchRenewalSession.getPuuid();
