@@ -19,7 +19,6 @@ public class SummonerRepository{
         insert(summoner);
     }
 
-
     private void update(Summoner summoner) {
         String sql = " SELECT * FROM summoner where puuid = ?";
     }

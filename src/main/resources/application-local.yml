@@ -1,12 +1,12 @@
 server:
-  port: 8080
+  port: 8111
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5555/postgres
+    url: jdbc:postgresql://localhost:5432/postgres
     driver-class-name: org.postgresql.Driver
-    username: ${PUSER}
-    password: ${PASSWORD}
+    username: postgres
+    password: 1234
   jpa:
     hibernate:
       ddl-auto: none
@@ -28,6 +28,11 @@ spring:
       port: 6379
   kafka:
     consumer:
-      bootstrap-servers: localhost:9094
+      bootstrap-servers: "localhost:10000,localhost:10001,localhost:10002"
 
 riot.api.key: ${API_KEY}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

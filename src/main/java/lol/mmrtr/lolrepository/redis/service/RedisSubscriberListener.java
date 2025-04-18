@@ -1,12 +1,10 @@
 package lol.mmrtr.lolrepository.redis.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import lol.mmrtr.lolrepository.bucket.BucketService;
 import lol.mmrtr.lolrepository.redis.model.MatchRenewalSession;
-import lol.mmrtr.lolrepository.redis.model.SummonerRenewalSession;
 import lol.mmrtr.lolrepository.riot.core.api.RiotAPI;
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
 import lol.mmrtr.lolrepository.riot.dto.match_timeline.TimelineDto;

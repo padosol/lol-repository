@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://db:5555/postgres
+    url: jdbc:postgresql://host.docker.internal:5432/postgres
     driver-class-name: org.postgresql.Driver
-    username: ${PUSER}
+    username: ${USERNAME}
     password: ${PASSWORD}
   jpa:
     hibernate:
@@ -24,15 +24,20 @@ spring:
 
   data:
     redis:
-      host: redis
+      host: host.docker.internal
       port: 6379
   kafka:
     consumer:
-      bootstrap-servers: kafka:9094
+      bootstrap-servers: host.docker.internal:9094
 
 logging:
   level:
     lol.mmrtr.lolrepository.riot: INFO
 
-
+riot.api.key: ${API_KEY}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
 

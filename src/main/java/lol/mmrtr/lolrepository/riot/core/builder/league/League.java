@@ -30,6 +30,8 @@ public class League {
         private String summonerId;
         private String leagueId;
 
+        private String puuid;
+
 
         public Builder platform(Platform platform) {
             this.platform = platform;
@@ -48,6 +50,11 @@ public class League {
 
         public Builder leagueTier(LeagueTier tier) {
             this.tier = tier;
+            return this;
+        }
+
+        public Builder puuid(String puuid) {
+            this.puuid = puuid;
             return this;
         }
 
@@ -98,6 +105,10 @@ public class League {
 
     public Set<LeagueEntryDTO> bySummonerId(String summonerId) {
         return new Builder().summonerId(summonerId).platform(this.platform).getLeagueEntry();
+    }
+
+    public Set<LeagueEntryDTO> byPuuid(String puuid) {
+        return new Builder().puuid(puuid).platform(this.platform).getLeagueEntry();
     }
 
     public LeagueListDTO byLeagueId(String leagueId) {

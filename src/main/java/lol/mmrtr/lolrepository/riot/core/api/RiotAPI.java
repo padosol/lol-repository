@@ -1,7 +1,6 @@
 package lol.mmrtr.lolrepository.riot.core.api;
 
 
-import io.github.bucket4j.Bucket;
 import lol.mmrtr.lolrepository.bucket.BucketService;
 import lol.mmrtr.lolrepository.riot.core.builder.account.Account;
 import lol.mmrtr.lolrepository.riot.core.builder.champion.Champion;

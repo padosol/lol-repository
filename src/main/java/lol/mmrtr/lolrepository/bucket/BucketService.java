@@ -38,15 +38,12 @@ public class BucketService {
         PLATFORM_PLATFORM(500, Duration.ofSeconds(10))
         ;
 
-        private int maxRequestCount;
-        private Duration duration;
+        private final int maxRequestCount;
+        private final Duration duration;
 
         BucketKey(int maxRequestCount, Duration duration) {
             this.maxRequestCount = maxRequestCount;
             this.duration = duration;
         }
-
-
     }
-
 }
