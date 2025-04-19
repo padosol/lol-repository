@@ -1,6 +1,6 @@
 package lol.mmrtr.lolrepository.repository;
 
-import lol.mmrtr.lolrepository.entity.LeagueSummoner;
+import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
 import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;

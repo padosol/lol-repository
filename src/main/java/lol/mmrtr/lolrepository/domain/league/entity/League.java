@@ -1,13 +1,19 @@
-package lol.mmrtr.lolrepository.entity;
+package lol.mmrtr.lolrepository.domain.league.entity;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import lol.mmrtr.lolrepository.message.LeagueMessage;
 import lombok.*;
 
+
+@Entity
 @Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class League {
+
+    @Id
     private String leagueId;
     private String tier;
     private String name;

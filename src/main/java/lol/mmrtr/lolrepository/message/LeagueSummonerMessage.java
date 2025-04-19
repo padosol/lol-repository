@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @Setter
 public class LeagueSummonerMessage {
 
-    private String summonerId;
+    private String puuid;
     private String leagueId;
     private LocalDateTime createAt;
 

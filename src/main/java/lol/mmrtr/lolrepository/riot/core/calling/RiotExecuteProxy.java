@@ -9,8 +9,8 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class RiotExecuteProxy implements RiotExecute{
 
-    private RiotExecute execute;
-    private BucketService bucketService;
+    private final RiotExecute execute;
+    private final BucketService bucketService;
 
     public RiotExecuteProxy(RiotExecute execute, BucketService bucketService) {
         this.execute = execute;
@@ -19,6 +19,10 @@ public class RiotExecuteProxy implements RiotExecute{
 
     @Override
     public <T> CompletableFuture<T> execute(Class<T> clazz, URI uri) {
+
+
         return execute.execute(clazz, uri);
+
+
     }
 }

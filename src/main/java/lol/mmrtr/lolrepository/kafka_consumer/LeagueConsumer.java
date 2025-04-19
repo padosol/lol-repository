@@ -1,8 +1,8 @@
 package lol.mmrtr.lolrepository.kafka_consumer;
 
-import lol.mmrtr.lolrepository.entity.League;
+import lol.mmrtr.lolrepository.domain.league.entity.League;
 import lol.mmrtr.lolrepository.message.LeagueMessage;
-import lol.mmrtr.lolrepository.repository.LeagueRepository;
+import lol.mmrtr.lolrepository.domain.league.repository.LeagueRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.handler.annotation.Payload;

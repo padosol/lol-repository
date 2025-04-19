@@ -1,9 +1,11 @@
 package lol.mmrtr.lolrepository.domain.summoner.service;
 
+import lol.mmrtr.lolrepository.domain.league.entity.League;
+import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
 import lol.mmrtr.lolrepository.domain.summoner.dto.response.SummonerResponse;
-import lol.mmrtr.lolrepository.entity.League;
 import lol.mmrtr.lolrepository.entity.Summoner;
-import lol.mmrtr.lolrepository.repository.LeagueRepository;
+import lol.mmrtr.lolrepository.domain.league.repository.LeagueRepository;
+import lol.mmrtr.lolrepository.repository.LeagueSummonerRepository;
 import lol.mmrtr.lolrepository.repository.SummonerRepository;
 import lol.mmrtr.lolrepository.riot.core.api.RiotAPI;
 import lol.mmrtr.lolrepository.riot.dto.account.AccountDto;
@@ -21,11 +23,14 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class SummonerService {
 
+    private final LeagueSummonerRepository leagueSummonerRepository;
     private final SummonerRepository summonerRepository;
     private final LeagueRepository leagueRepository;
 
     @Transactional
     public SummonerResponse getSummonerInfo(String region, String gameName, String tagLine) {
+        LocalDateTime now = LocalDateTime.now();
+
         Platform platform = Platform.valueOfName(region);
 
         AccountDto accountDto = RiotAPI.account(platform).byRiotId(gameName, tagLine);
@@ -50,6 +55,32 @@ public class SummonerService {
         summonerRepository.save(summoner);
 
         for (LeagueEntryDTO leagueEntryDTO : leagueEntryDTOS) {
+            String leagueId = leagueEntryDTO.getLeagueId();
+            League league = leagueRepository.findById(leagueId);
+            if (league == null) {
+                League newLeague = League.builder()
+                        .leagueId(leagueEntryDTO.getLeagueId())
+                        .queue(leagueEntryDTO.getQueueType())
+                        .tier(leagueEntryDTO.getTier())
+                        .build();
+
+                leagueRepository.save(newLeague);
+            }
+            LeagueSummoner leagueSummoner = LeagueSummoner.builder()
+                    .puuid(summoner.getPuuid())
+                    .leagueId(leagueEntryDTO.getLeagueId())
+                    .createAt(now)
+                    .leaguePoints(leagueEntryDTO.getLeaguePoints())
+                    .rank(leagueEntryDTO.getRank())
+                    .wins(leagueEntryDTO.getWins())
+                    .losses(leagueEntryDTO.getLosses())
+                    .veteran(leagueEntryDTO.isVeteran())
+                    .inactive(leagueEntryDTO.isInactive())
+                    .freshBlood(leagueEntryDTO.isFreshBlood())
+                    .hotStreak(leagueEntryDTO.isHotStreak())
+                    .build();
+
+            leagueSummonerRepository.save(leagueSummoner);
         }
 
         return SummonerResponse.builder()

@@ -34,6 +34,8 @@ dependencies {
     testImplementation 'org.springframework.kafka:spring-kafka-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
     // actuator
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
@@ -48,7 +50,6 @@ dependencies {
 
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework:spring-aspects'
-
 
     // configuration-processor
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'

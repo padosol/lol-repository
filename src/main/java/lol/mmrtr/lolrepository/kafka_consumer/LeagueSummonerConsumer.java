@@ -1,6 +1,6 @@
 package lol.mmrtr.lolrepository.kafka_consumer;
 
-import lol.mmrtr.lolrepository.entity.LeagueSummoner;
+import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
 import lol.mmrtr.lolrepository.message.LeagueSummonerMessage;
 import lol.mmrtr.lolrepository.repository.LeagueSummonerRepository;
 import lombok.extern.slf4j.Slf4j;

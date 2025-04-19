@@ -1,19 +1,19 @@
-package lol.mmrtr.lolrepository.entity;
+package lol.mmrtr.lolrepository.domain.league_summoner.entity;
 
 import lol.mmrtr.lolrepository.message.LeagueSummonerMessage;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
 @Getter
-@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class LeagueSummoner {
 
-    private String summonerId;
+    private String puuid;
     private String leagueId;
     private LocalDateTime createAt;
-
     private int leaguePoints;
     private String rank;
     private int wins;
@@ -23,11 +23,10 @@ public class LeagueSummoner {
     private boolean freshBlood;
     private boolean hotStreak;
 
-    public LeagueSummoner(){};
 
     public LeagueSummoner(LeagueSummonerMessage leagueSummonerMessage) {
 
-        this.summonerId = leagueSummonerMessage.getSummonerId();
+        this.puuid = leagueSummonerMessage.getPuuid();
         this.leagueId = leagueSummonerMessage.getLeagueId();
         this.createAt = leagueSummonerMessage.getCreateAt();
         this.leaguePoints = leagueSummonerMessage.getLeaguePoints();

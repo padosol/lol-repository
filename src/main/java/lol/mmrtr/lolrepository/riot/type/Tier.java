@@ -16,7 +16,7 @@ public enum Tier {
     BRONZE(2000),
     IRON(1000);
 
-    private int score;
+    private final int score;
 
     Tier(int score) {
         this.score = score;
