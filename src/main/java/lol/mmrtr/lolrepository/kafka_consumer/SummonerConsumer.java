@@ -20,7 +20,7 @@ public class SummonerConsumer {
         this.summonerRepository = summonerRepository;
     }
 
-    @KafkaListener(topics = "summoner", groupId = "group_1")
+//    @KafkaListener(topics = "summoner", groupId = "group_1")
     public void listener(
         @Headers MessageHeaders messageHeaders,
         @Payload SummonerMessage message

@@ -21,7 +21,7 @@ public class TimelineConsumer {
     }
 
     @Async
-    @KafkaListener(topics = "timeline", groupId = "group_1")
+//    @KafkaListener(topics = "timeline", groupId = "group_1")
     public void listener0(
             @Payload List<TimelineDto> message
     ) {

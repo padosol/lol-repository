@@ -1,26 +1,21 @@
 package lol.mmrtr.lolrepository.repository;
 
 import lol.mmrtr.lolrepository.entity.Summoner;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class SummonerRepository{
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
-
-    public SummonerRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+    private final SummonerJpaRepository summonerJpaRepository;
 
     public void save(Summoner summoner) {
-        insert(summoner);
-    }
-
-    private void update(Summoner summoner) {
-        String sql = " SELECT * FROM summoner where puuid = ?";
+        summonerJpaRepository.save(summoner);
     }
 
     private void insert(Summoner summoner) {
