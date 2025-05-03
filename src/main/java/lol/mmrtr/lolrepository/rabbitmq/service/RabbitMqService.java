@@ -8,6 +8,7 @@ import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
 import lol.mmrtr.lolrepository.entity.Summoner;
 import lol.mmrtr.lolrepository.rabbitmq.dto.SummonerMessage;
 import lol.mmrtr.lolrepository.redis.model.SummonerRenewalSession;
+import lol.mmrtr.lolrepository.redis.repository.SummonerRedisRepository;
 import lol.mmrtr.lolrepository.repository.LeagueSummonerRepository;
 import lol.mmrtr.lolrepository.repository.SummonerRepository;
 import lol.mmrtr.lolrepository.riot.core.api.RiotAPI;
@@ -38,6 +39,7 @@ public class RabbitMqService {
     private final LeagueRepository leagueRepository;
     private final LeagueSummonerRepository leagueSummonerRepository;
     private final ObjectMapper objectMapper;
+    private final SummonerRedisRepository summonerRedisRepository;
 
     @RabbitListener(queues = "mmrtr.match")
     public void receiveMessage(String matchId) {
@@ -56,17 +58,8 @@ public class RabbitMqService {
         SummonerDTO summonerDTO = RiotAPI.summoner(platform).byPuuid(puuid);
         long newRevisionDate = summonerDTO.getRevisionDate();
 
-        HashOperations<String, Object, Object> summonerHash = redisTemplate.opsForHash();
-        String hashString = (String) summonerHash.get("renewal", puuid);
-        if (!StringUtils.hasText(hashString)) {
-            return;
-        }
-        SummonerRenewalSession renewalSession = objectMapper.readValue(
-                hashString,
-                SummonerRenewalSession.class
-        );
-
-
+        SummonerRenewalSession renewalSession = summonerRedisRepository
+                .findById(puuid).orElseThrow(() -> new RuntimeException(""));
 
         log.info("renewalSession: {}", renewalSession);
 
@@ -76,14 +69,14 @@ public class RabbitMqService {
         } else {
 
             // account, summoner 갱신
-            if (!renewalSession.isAccountUpdate()) {
+            if (!renewalSession.isSummonerUpdate()) {
                 AccountDto accountDto = RiotAPI.account(platform).byPuuid(puuid);
                 Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
 
                 summonerRepository.save(summoner);
 
                 renewalSession.summonerUpdate();
-                summonerHash.put("renewal", puuid, renewalSession);
+                summonerRedisRepository.save(renewalSession);
             }
 
             // league 갱신
@@ -107,7 +100,7 @@ public class RabbitMqService {
                 }
 
                 renewalSession.leagueUpdate();
-                summonerHash.put("renewal", puuid, renewalSession);
+                summonerRedisRepository.save(renewalSession);
             }
 
             // match 갱신
@@ -117,9 +110,8 @@ public class RabbitMqService {
                 // 20 게임에 대해서만 즉시 추가
                 // 나머지 게임은 백그라운드로 처리함.
 
-
                 renewalSession.matchUpdate();
-                summonerHash.put("renewal", puuid, renewalSession);
+                summonerRedisRepository.save(renewalSession);
             }
 
             log.info("새로운 유저 정보 갱신 시작 {}", puuid);

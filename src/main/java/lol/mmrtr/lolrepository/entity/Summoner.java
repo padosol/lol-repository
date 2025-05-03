@@ -1,5 +1,7 @@
 package lol.mmrtr.lolrepository.entity;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import lol.mmrtr.lolrepository.message.SummonerMessage;
 import lol.mmrtr.lolrepository.riot.dto.account.AccountDto;
 import lol.mmrtr.lolrepository.riot.dto.summoner.SummonerDTO;
@@ -12,11 +14,13 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Getter
+@Entity
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class Summoner{
 
+    @Id
     private String summonerId;
     private String accountId;
     private String puuid;

@@ -18,7 +18,7 @@ public class LeagueSummonerConsumer {
         this.leagueSummonerRepository = leagueSummonerRepository;
     }
 
-    @KafkaListener(topics = "league_summoner", groupId = "group_1")
+//    @KafkaListener(topics = "league_summoner", groupId = "group_1")
     public void listener(
             @Payload LeagueSummonerMessage message
     ) {
