@@ -25,4 +25,10 @@ public class League {
         this.name = leagueMessage.getName();
         this.queue = leagueMessage.getQueue();
     }
+
+    public League(String leagueId, String tier, String queue) {
+        this.leagueId = leagueId;
+        this.tier = tier;
+        this.queue = queue;
+    }
 }

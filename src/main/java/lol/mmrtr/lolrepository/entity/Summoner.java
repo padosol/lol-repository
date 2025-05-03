@@ -3,6 +3,7 @@ package lol.mmrtr.lolrepository.entity;
 import lol.mmrtr.lolrepository.message.SummonerMessage;
 import lol.mmrtr.lolrepository.riot.dto.account.AccountDto;
 import lol.mmrtr.lolrepository.riot.dto.summoner.SummonerDTO;
+import lol.mmrtr.lolrepository.riot.type.Platform;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -38,5 +39,18 @@ public class Summoner{
         this.tagLine = summonerMessage.getTagLine();
         this.region = summonerMessage.getRegion();
         this.revisionClickDate = summonerMessage.getRevisionClickDate();
+    }
+
+    public Summoner(AccountDto accountDto, SummonerDTO summonerDTO, Platform platform) {
+        this.summonerId = summonerDTO.getId();
+        this.accountId = summonerDTO.getAccountId();
+        this.puuid = summonerDTO.getPuuid();
+        this.profileIconId = summonerDTO.getProfileIconId();
+        this.revisionDate = summonerDTO.getRevisionDate();
+        this.summonerLevel = summonerDTO.getSummonerLevel();
+        this.gameName = accountDto.getGameName();
+        this.tagLine = accountDto.getTagLine();
+        this.region = platform.getRegion();
+        this.revisionClickDate = LocalDateTime.now();
     }
 }

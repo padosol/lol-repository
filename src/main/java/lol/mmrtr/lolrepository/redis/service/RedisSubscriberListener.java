@@ -101,6 +101,5 @@ public class RedisSubscriberListener implements MessageListener {
             //
             e.printStackTrace();
         }
-
     }
 }

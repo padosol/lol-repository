@@ -42,7 +42,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health, metrics
 
 rabbitmq:
   queue.name: sample.queue

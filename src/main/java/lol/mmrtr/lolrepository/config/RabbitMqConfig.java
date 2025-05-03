@@ -1,6 +1,7 @@
 package lol.mmrtr.lolrepository.config;
 
-import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.annotation.EnableRabbit;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -11,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@EnableRabbit
 public class RabbitMqConfig {
     @Value("${spring.rabbitmq.host}")
     private String rabbitmqHost;
@@ -32,9 +34,9 @@ public class RabbitMqConfig {
         connectionFactory.setPort(rabbitmqPort);
         connectionFactory.setUsername(rabbitmqUsername);
         connectionFactory.setPassword(rabbitmqPassword);
+
         return connectionFactory;
     }
-
 
     /* 연결 설정으로 연결 후 실제 작업을 위한 RabbitTemplate */
     @Bean
@@ -50,4 +52,29 @@ public class RabbitMqConfig {
     public MessageConverter jackson2JsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }
+
+    /* 리스너 펙토리 */
+//    @Bean
+//    public SimpleRabbitListenerContainerFactory simpleRabbitListenerContainerFactory() {
+//        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+//        factory.setConnectionFactory(connectionFactory());
+//        factory.setMessageConverter(jackson2JsonMessageConverter());
+//
+//        // Prefetch 설정
+//        factory.setPrefetchCount(20);
+//
+//        // 동시 소비자 수 설정
+//        factory.setConcurrentConsumers(2);
+//        factory.setMaxConcurrentConsumers(5);
+//
+//        // 배치 크기 설정
+//        factory.setBatchSize(50);
+//
+//        // 처리 간격 설정
+//        factory.setConsumerBatchEnabled(true);
+//        factory.setReceiveTimeout(1000L);
+//
+//        return factory;
+//    }
+
 }
