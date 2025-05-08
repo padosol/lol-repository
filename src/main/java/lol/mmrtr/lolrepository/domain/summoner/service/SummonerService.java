@@ -1,9 +1,11 @@
 package lol.mmrtr.lolrepository.domain.summoner.service;
 
+import jakarta.persistence.Column;
 import lol.mmrtr.lolrepository.domain.league.entity.League;
 import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
+import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummonerId;
 import lol.mmrtr.lolrepository.domain.summoner.dto.response.SummonerResponse;
-import lol.mmrtr.lolrepository.entity.Summoner;
+import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueRepository;
 import lol.mmrtr.lolrepository.repository.LeagueSummonerRepository;
 import lol.mmrtr.lolrepository.repository.SummonerRepository;
@@ -13,6 +15,7 @@ import lol.mmrtr.lolrepository.riot.dto.league.LeagueEntryDTO;
 import lol.mmrtr.lolrepository.riot.dto.summoner.SummonerDTO;
 import lol.mmrtr.lolrepository.riot.type.Platform;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,7 +52,7 @@ public class SummonerService {
                 .gameName(accountDto.getGameName())
                 .tagLine(accountDto.getTagLine())
                 .region(region)
-                .revisionClickDate(LocalDateTime.MIN)
+                .revisionClickDate(LocalDateTime.of(1999,1,1,12,0))
                 .build();
 
         summonerRepository.save(summoner);
@@ -64,12 +67,14 @@ public class SummonerService {
                         .tier(leagueEntryDTO.getTier())
                         .build();
 
-                leagueRepository.save(newLeague);
+                league = leagueRepository.save(newLeague);
             }
             LeagueSummoner leagueSummoner = LeagueSummoner.builder()
-                    .puuid(summoner.getPuuid())
-                    .leagueId(leagueEntryDTO.getLeagueId())
-                    .createAt(now)
+                    .leagueSummonerId(new LeagueSummonerId(
+                        leagueId, puuid, now
+                    ))
+                    .summoner(summoner)
+                    .league(league)
                     .leaguePoints(leagueEntryDTO.getLeaguePoints())
                     .rank(leagueEntryDTO.getRank())
                     .wins(leagueEntryDTO.getWins())

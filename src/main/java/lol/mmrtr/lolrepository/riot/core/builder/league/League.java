@@ -85,6 +85,33 @@ public class League {
             }
         }
 
+        public Set<LeagueEntryDTO> getLeagueEntryByPuuid()  {
+
+            URI uri = UriComponentsBuilder.newInstance()
+                    .scheme("https")
+                    .host(RiotAPI.createRegionPath(this.platform))
+                    .path("/lol/league/v4/entries/by-puuid/" + this.puuid)
+                    .build()
+                    .toUri();
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                Object[] objects = RiotAPI.getExecute().execute(Object[].class, uri).get();
+                Set<LeagueEntryDTO> result = new HashSet<>();
+                for (Object object : objects) {
+
+                    String objectToJson = mapper.writeValueAsString(object);
+                    LeagueEntryDTO leagueEntryDTO = mapper.readValue(objectToJson, LeagueEntryDTO.class);
+
+                    result.add(leagueEntryDTO);
+                }
+                return result;
+            } catch(ExecutionException | InterruptedException e) {
+                throw new IllegalStateException();
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
         public LeagueListDTO getLeagueList() {
 
             URI uri = UriComponentsBuilder.newInstance()
@@ -108,7 +135,7 @@ public class League {
     }
 
     public Set<LeagueEntryDTO> byPuuid(String puuid) {
-        return new Builder().puuid(puuid).platform(this.platform).getLeagueEntry();
+        return new Builder().puuid(puuid).platform(this.platform).getLeagueEntryByPuuid();
     }
 
     public LeagueListDTO byLeagueId(String leagueId) {

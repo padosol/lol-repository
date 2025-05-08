@@ -23,6 +23,6 @@ public class LeagueSummonerConsumer {
             @Payload LeagueSummonerMessage message
     ) {
         log.info("league_summoner message 도착");
-        leagueSummonerRepository.save(new LeagueSummoner(message));
+//        leagueSummonerRepository.save(new LeagueSummoner(message));
     }
 }

@@ -1,20 +1,33 @@
 package lol.mmrtr.lolrepository.domain.league_summoner.entity;
 
-import lol.mmrtr.lolrepository.message.LeagueSummonerMessage;
+import jakarta.persistence.*;
+import lol.mmrtr.lolrepository.domain.league.entity.League;
+import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
 import lol.mmrtr.lolrepository.riot.dto.league.LeagueEntryDTO;
 import lombok.*;
 
 import java.time.LocalDateTime;
 
 @Getter
+@Entity
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class LeagueSummoner {
 
-    private String puuid;
-    private String leagueId;
-    private LocalDateTime createAt;
+    @EmbeddedId
+    private LeagueSummonerId leagueSummonerId;
+
+    @MapsId("puuid")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "puuid")
+    private Summoner summoner;
+
+    @MapsId("leagueId")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "league_id")
+    private League league;
+
     private int leaguePoints;
     private String rank;
     private int wins;
@@ -25,24 +38,9 @@ public class LeagueSummoner {
     private boolean hotStreak;
 
 
-    public LeagueSummoner(LeagueSummonerMessage leagueSummonerMessage) {
-        this.puuid = leagueSummonerMessage.getPuuid();
-        this.leagueId = leagueSummonerMessage.getLeagueId();
-        this.createAt = leagueSummonerMessage.getCreateAt();
-        this.leaguePoints = leagueSummonerMessage.getLeaguePoints();
-        this.rank = leagueSummonerMessage.getRank();
-        this.wins = leagueSummonerMessage.getWins();
-        this.losses = leagueSummonerMessage.getLosses();
-        this.veteran = leagueSummonerMessage.isVeteran();
-        this.inactive = leagueSummonerMessage.isInactive();
-        this.freshBlood = leagueSummonerMessage.isFreshBlood();
-        this.hotStreak = leagueSummonerMessage.isHotStreak();
-    }
-
-    public LeagueSummoner(String puuid, LeagueEntryDTO leagueEntryDTO) {
-        this.puuid = puuid;
-        this.leagueId = leagueEntryDTO.getLeagueId();
-        this.createAt = LocalDateTime.now();
+    public LeagueSummoner(Summoner summoner, League league, LeagueEntryDTO leagueEntryDTO) {
+        this.summoner = summoner;
+        this.league = league;
         this.leaguePoints = leagueEntryDTO.getLeaguePoints();
         this.rank = leagueEntryDTO.getRank();
         this.wins = leagueEntryDTO.getWins();

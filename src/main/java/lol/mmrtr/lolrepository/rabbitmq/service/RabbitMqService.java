@@ -1,11 +1,11 @@
 package lol.mmrtr.lolrepository.rabbitmq.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rabbitmq.client.Channel;
 import lol.mmrtr.lolrepository.domain.league.entity.League;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueRepository;
 import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
-import lol.mmrtr.lolrepository.entity.Summoner;
+import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
 import lol.mmrtr.lolrepository.rabbitmq.dto.SummonerMessage;
 import lol.mmrtr.lolrepository.redis.model.SummonerRenewalSession;
 import lol.mmrtr.lolrepository.redis.repository.SummonerRedisRepository;
@@ -19,12 +19,14 @@ import lol.mmrtr.lolrepository.riot.type.Platform;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.data.redis.core.HashOperations;
+import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
@@ -48,7 +50,11 @@ public class RabbitMqService {
 
     @Transactional
     @RabbitListener(queues = "mmrtr.summoner")
-    public void receiveSummonerMessage(SummonerMessage summonerMessage) throws JsonProcessingException {
+    public void receiveSummonerMessage(
+            Channel channel,
+            @Header(AmqpHeaders.DELIVERY_TAG) long tag,
+            @Payload SummonerMessage summonerMessage
+    ) throws IOException {
 
         // 유저 정보 호출해서 갱신가능한지 체크
         Platform platform = Platform.valueOfName(summonerMessage.getPlatform());
@@ -59,7 +65,12 @@ public class RabbitMqService {
         long newRevisionDate = summonerDTO.getRevisionDate();
 
         SummonerRenewalSession renewalSession = summonerRedisRepository
-                .findById(puuid).orElseThrow(() -> new RuntimeException(""));
+                .findById(puuid).orElse(null);
+
+        if (renewalSession == null) {
+            channel.basicAck(tag, false);
+            return;
+        }
 
         log.info("renewalSession: {}", renewalSession);
 
@@ -69,15 +80,13 @@ public class RabbitMqService {
         } else {
 
             // account, summoner 갱신
-            if (!renewalSession.isSummonerUpdate()) {
-                AccountDto accountDto = RiotAPI.account(platform).byPuuid(puuid);
-                Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
+            AccountDto accountDto = RiotAPI.account(platform).byPuuid(puuid);
+            Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
 
-                summonerRepository.save(summoner);
+            Summoner saveSummoner = summonerRepository.save(summoner);
 
-                renewalSession.summonerUpdate();
-                summonerRedisRepository.save(renewalSession);
-            }
+            renewalSession.summonerUpdate();
+            summonerRedisRepository.save(renewalSession);
 
             // league 갱신
             if (!renewalSession.isLeagueUpdate()) {
@@ -91,10 +100,10 @@ public class RabbitMqService {
                                 leagueEntryDTO.getTier(),
                                 leagueEntryDTO.getQueueType()
                         );
-                        leagueRepository.save(newLeague);
+                        league = leagueRepository.save(newLeague);
                     }
                     LeagueSummoner leagueSummoner = new LeagueSummoner(
-                        puuid, leagueEntryDTO
+                        saveSummoner, league, leagueEntryDTO
                     );
                     leagueSummonerRepository.save(leagueSummoner);
                 }
