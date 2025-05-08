@@ -1,6 +1,6 @@
 package lol.mmrtr.lolrepository.repository;
 
-import lol.mmrtr.lolrepository.entity.Summoner;
+import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -14,8 +14,8 @@ public class SummonerRepository{
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final SummonerJpaRepository summonerJpaRepository;
 
-    public void save(Summoner summoner) {
-        summonerJpaRepository.save(summoner);
+    public Summoner save(Summoner summoner) {
+        return summonerJpaRepository.save(summoner);
     }
 
     private void insert(Summoner summoner) {

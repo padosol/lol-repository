@@ -24,12 +24,8 @@ public class LeagueRepository {
         this.leagueJpaRepository = leagueJpaRepository;
     }
 
-    public void save(League league ){
-        String sql = " INSERT INTO league(league_id, tier, name, queue) VALUES(:leagueId, :tier, :name, :queue)";
-
-        SqlParameterSource param = new BeanPropertySqlParameterSource(league);
-
-        jdbcTemplate.update(sql, param);
+    public League save(League league ){
+        return leagueJpaRepository.save(league);
     }
 
     public League findById(String leagueId) {

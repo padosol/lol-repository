@@ -1,4 +1,4 @@
-package lol.mmrtr.lolrepository.entity;
+package lol.mmrtr.lolrepository.domain.summoner.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -21,9 +21,9 @@ import java.time.LocalDateTime;
 public class Summoner{
 
     @Id
+    private String puuid;
     private String summonerId;
     private String accountId;
-    private String puuid;
     private int profileIconId;
     private long revisionDate;
     private long summonerLevel;
