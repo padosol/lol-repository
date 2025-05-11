@@ -1,5 +1,6 @@
 package lol.mmrtr.lolrepository.config;
 
+import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
@@ -25,6 +26,25 @@ public class RabbitMqConfig {
 
     @Value("${spring.rabbitmq.password}")
     private String rabbitmqPassword;
+
+    @Bean
+    public Queue matchIdQueue() {
+        return new Queue("mmrtr.mathId");
+    }
+
+    @Bean
+    public DirectExchange matchIdExchange() {
+        return new DirectExchange("mmrtr.matchId.exchange");
+    }
+
+    @Bean
+    public Binding matchIdBinding() {
+        return BindingBuilder
+                .bind(matchIdQueue())
+                .to(matchIdExchange())
+                .with("mmrtr.routingkey.matchId");
+
+    }
 
     /* RabbitMQ 연결 설정 */
     @Bean

@@ -1,35 +1,23 @@
 package lol.mmrtr.lolrepository.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.bucket4j.Bucket;
-import io.github.bucket4j.ConsumptionProbe;
-import lol.mmrtr.lolrepository.bucket.BucketService;
 import lol.mmrtr.lolrepository.entity.Challenges;
-import lol.mmrtr.lolrepository.entity.Match;
-import lol.mmrtr.lolrepository.entity.MatchSummoner;
-import lol.mmrtr.lolrepository.entity.MatchTeam;
-import lol.mmrtr.lolrepository.redis.model.MatchSession;
+import lol.mmrtr.lolrepository.domain.match.entity.Match;
+import lol.mmrtr.lolrepository.domain.match.entity.MatchSummoner;
+import lol.mmrtr.lolrepository.domain.match.entity.MatchTeam;
 import lol.mmrtr.lolrepository.repository.ChallengesRepository;
-import lol.mmrtr.lolrepository.repository.MatchRepository;
-import lol.mmrtr.lolrepository.repository.MatchSummonerRepository;
-import lol.mmrtr.lolrepository.repository.MatchTeamRepository;
-import lol.mmrtr.lolrepository.riot.core.api.RiotAPI;
+import lol.mmrtr.lolrepository.domain.match.repository.MatchRepository;
+import lol.mmrtr.lolrepository.domain.match.repository.MatchSummonerRepository;
+import lol.mmrtr.lolrepository.domain.match.repository.MatchTeamRepository;
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
 import lol.mmrtr.lolrepository.riot.dto.match.ParticipantDto;
 import lol.mmrtr.lolrepository.riot.dto.match.TeamDto;
-import lol.mmrtr.lolrepository.riot.dto.match_timeline.TimelineDto;
-import lol.mmrtr.lolrepository.riot.type.Platform;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 @Slf4j
 @Service

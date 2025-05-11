@@ -1,4 +1,4 @@
-package lol.mmrtr.lolrepository.repository;
+package lol.mmrtr.lolrepository.domain.league_summoner.repository;
 
 import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
 import lol.mmrtr.lolrepository.domain.league_summoner.repository.LeagueSummonerJpaRepository;

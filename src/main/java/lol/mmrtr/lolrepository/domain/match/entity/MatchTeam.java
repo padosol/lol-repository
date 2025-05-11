@@ -1,4 +1,4 @@
-package lol.mmrtr.lolrepository.entity;
+package lol.mmrtr.lolrepository.domain.match.entity;
 
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
 import lol.mmrtr.lolrepository.riot.dto.match.TeamDto;

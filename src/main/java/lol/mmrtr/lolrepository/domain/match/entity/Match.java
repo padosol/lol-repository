@@ -1,8 +1,9 @@
-package lol.mmrtr.lolrepository.entity;
+package lol.mmrtr.lolrepository.domain.match.entity;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -10,8 +11,13 @@ import java.time.ZoneId;
 
 @Getter
 @Setter
+@Entity
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Match {
 
+    @Id
     private String matchId;
     private String dateVersion;
     private String endOfGameResult;
@@ -32,8 +38,6 @@ public class Match {
     private LocalDateTime gameCreateDatetime;
     private LocalDateTime gameEndDatetime;
     private LocalDateTime gameStartDatetime;
-
-    public Match(){};
 
     public Match(MatchDto matchDto) {
         this.matchId = matchDto.getMetadata().getMatchId();

@@ -1,8 +1,7 @@
-package lol.mmrtr.lolrepository.repository;
+package lol.mmrtr.lolrepository.domain.match.repository;
 
 
-import lol.mmrtr.lolrepository.entity.MatchTeam;
-import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
+import lol.mmrtr.lolrepository.domain.match.entity.MatchTeam;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;

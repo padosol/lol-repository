@@ -1,4 +1,4 @@
-package lol.mmrtr.lolrepository.repository;
+package lol.mmrtr.lolrepository.domain.summoner.repository;
 
 import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
 import lombok.RequiredArgsConstructor;

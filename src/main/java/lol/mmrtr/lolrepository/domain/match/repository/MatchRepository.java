@@ -1,30 +1,29 @@
-package lol.mmrtr.lolrepository.repository;
+package lol.mmrtr.lolrepository.domain.match.repository;
 
-import lol.mmrtr.lolrepository.entity.Match;
+import lol.mmrtr.lolrepository.domain.match.entity.Match;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
+@RequiredArgsConstructor
 public class MatchRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final MatchJpaRepository matchJpaRepository;
 
-    public MatchRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public List<Match> findAllByIds(Collection<String> matchIds) {
+        return matchJpaRepository.findAllById(matchIds);
     }
 
-    public void save(Match match){
-
-        String sql = insertSql();
-
-        SqlParameterSource param = new BeanPropertySqlParameterSource(match);
-
-        jdbcTemplate.update(sql, param);
+    public Match save(Match match){
+        return matchJpaRepository.save(match);
     }
 
     public void bulkSave(List<Match> matches) {

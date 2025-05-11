@@ -38,7 +38,8 @@ public class LeagueSummoner {
     private boolean hotStreak;
 
 
-    public LeagueSummoner(Summoner summoner, League league, LeagueEntryDTO leagueEntryDTO) {
+    public LeagueSummoner(LeagueSummonerId leagueSummonerId, Summoner summoner, League league, LeagueEntryDTO leagueEntryDTO) {
+        this.leagueSummonerId = leagueSummonerId;
         this.summoner = summoner;
         this.league = league;
         this.leaguePoints = leagueEntryDTO.getLeaguePoints();
