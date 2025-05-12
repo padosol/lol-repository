@@ -1,13 +1,14 @@
 package lol.mmrtr.lolrepository.domain.match.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 
 @Getter
 @Setter
@@ -18,8 +19,20 @@ import java.time.ZoneId;
 public class Match {
 
     @Id
+    @Column(name = "match_id")
     private String matchId;
+
     private String dateVersion;
+
+    @BatchSize(size = 100)
+    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<MatchSummoner> matchSummoners;
+
+    @BatchSize(size = 20)
+    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<MatchTeam> matchTeams;
+
+    // info
     private String endOfGameResult;
     private	long gameCreation;
     private	long gameDuration;
@@ -29,12 +42,18 @@ public class Match {
     private	String gameMode;
     private	String gameName;
     private	String gameType;
+
     private	String gameVersion;
+
     private	int mapId;
     private	int queueId;
     private	String platformId;
     private	String tournamentCode;
+
+    // 시즌
     private int season;
+
+    // date time
     private LocalDateTime gameCreateDatetime;
     private LocalDateTime gameEndDatetime;
     private LocalDateTime gameStartDatetime;

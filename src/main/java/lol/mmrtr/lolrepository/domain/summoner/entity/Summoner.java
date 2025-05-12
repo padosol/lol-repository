@@ -2,7 +2,6 @@ package lol.mmrtr.lolrepository.domain.summoner.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import lol.mmrtr.lolrepository.message.SummonerMessage;
 import lol.mmrtr.lolrepository.riot.dto.account.AccountDto;
 import lol.mmrtr.lolrepository.riot.dto.summoner.SummonerDTO;
 import lol.mmrtr.lolrepository.riot.type.Platform;
@@ -31,19 +30,6 @@ public class Summoner{
     private String tagLine;
     private String region;
     private LocalDateTime revisionClickDate;
-
-    public Summoner(SummonerMessage summonerMessage) {
-        this.summonerId = summonerMessage.getId();
-        this.accountId = summonerMessage.getAccountId();
-        this.puuid = summonerMessage.getPuuid();
-        this.profileIconId = summonerMessage.getProfileIconId();
-        this.revisionDate = summonerMessage.getRevisionDate();
-        this.summonerLevel = summonerMessage.getSummonerLevel();
-        this.gameName = summonerMessage.getGameName();
-        this.tagLine = summonerMessage.getTagLine();
-        this.region = summonerMessage.getRegion();
-        this.revisionClickDate = summonerMessage.getRevisionClickDate();
-    }
 
     public Summoner(AccountDto accountDto, SummonerDTO summonerDTO, Platform platform) {
         this.summonerId = summonerDTO.getId();
