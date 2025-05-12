@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -18,12 +19,26 @@ public class MatchRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final MatchJpaRepository matchJpaRepository;
 
+    public List<String> findAllMatchIdByIdsNotIn(Collection<String> matchIds) {
+        List<Match> allByMatchIdIsNotIn = matchJpaRepository.findAllByMatchIdIsNotIn(matchIds);
+
+        if (allByMatchIdIsNotIn.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        return matchJpaRepository.findAllByMatchIdIsNotIn(matchIds).stream().map(Match::getMatchId).toList();
+    }
+
     public List<Match> findAllByIds(Collection<String> matchIds) {
         return matchJpaRepository.findAllById(matchIds);
     }
 
     public Match save(Match match){
         return matchJpaRepository.save(match);
+    }
+
+    public List<Match> saveAll(List<Match> matches) {
+        return matchJpaRepository.saveAll(matches);
     }
 
     public void bulkSave(List<Match> matches) {

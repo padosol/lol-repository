@@ -2,6 +2,8 @@ package lol.mmrtr.lolrepository.domain.match.repository;
 
 
 import lol.mmrtr.lolrepository.domain.match.entity.MatchSummoner;
+import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
@@ -10,14 +12,17 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
+@RequiredArgsConstructor
 public class MatchSummonerRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final MatchSummonerJpaRepository matchSummonerJpaRepository;
 
 
-    public MatchSummonerRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public List<MatchSummoner> saveAll(List<MatchSummoner> matchSummoners) {
+        return matchSummonerJpaRepository.saveAll(matchSummoners);
     }
+
 
     public void bulkSave(List<MatchSummoner> matchSummoners) {
 
@@ -317,7 +322,158 @@ public class MatchSummonerRepository {
                 ":secondaryRuneIds" +
                 ") ON CONFLICT (puuid, match_id) DO NOTHING";
 
-        SqlParameterSource[] params = SqlParameterSourceUtils.createBatch(matchSummoners);
+        SqlParameterSource[] params = matchSummoners.stream()
+                .map(comment -> {
+                    return new MapSqlParameterSource()
+                            .addValue("summonerId", comment.getSummonerId())
+                            .addValue("matchId", comment.getMatch().getMatchId())
+                            .addValue("riotIdGameName", comment.getRiotIdGameName())
+                            .addValue("riotIdTagline", comment.getRiotIdTagline())
+                            .addValue("puuid", comment.getMatchSummonerId().getPuuid())
+                            .addValue("profileIcon", comment.getProfileIcon())
+                            .addValue("summonerName", comment.getSummonerName())
+                            .addValue("participantId", comment.getParticipantId())
+                            .addValue("champLevel", comment.getChampLevel())
+                            .addValue("championId", comment.getChampionId())
+                            .addValue("championName", comment.getChampionName())
+                            .addValue("lane", comment.getLane())
+                            .addValue("champExperience", comment.getChampExperience())
+                            .addValue("role", comment.getRole())
+                            .addValue("spell1Casts", comment.getSpell1Casts())
+                            .addValue("spell2Casts", comment.getSpell2Casts())
+                            .addValue("spell3Casts", comment.getSpell3Casts())
+                            .addValue("spell4Casts", comment.getSpell4Casts())
+                            .addValue("summoner1Casts", comment.getSummoner1Casts())
+                            .addValue("summoner1Id", comment.getSummoner1Id())
+                            .addValue("summoner2Casts", comment.getSummoner2Casts())
+                            .addValue("summoner2Id", comment.getSummoner2Id())
+                            .addValue("summonerLevel", comment.getSummonerLevel())
+                            .addValue("bountyLevel", comment.getBountyLevel())
+                            .addValue("kills", comment.getKills())
+                            .addValue("assists", comment.getAssists())
+                            .addValue("deaths", comment.getDeaths())
+                            .addValue("doubleKills", comment.getDoubleKills())
+                            .addValue("tripleKills", comment.getTripleKills())
+                            .addValue("quadraKills", comment.getQuadraKills())
+                            .addValue("pentaKills", comment.getPentaKills())
+                            .addValue("unrealKills", comment.getUnrealKills())
+                            .addValue("championTransform", comment.getChampionTransform())
+                            .addValue("goldEarned", comment.getGoldEarned())
+                            .addValue("goldSpent", comment.getGoldSpent())
+                            .addValue("itemsPurchased", comment.getItemsPurchased())
+                            .addValue("consumablesPurchased", comment.getConsumablesPurchased())
+                            .addValue("neutralMinionsKilled", comment.getNeutralMinionsKilled())
+                            .addValue("totalMinionsKilled", comment.getTotalMinionsKilled())
+                            .addValue("objectivesStolen", comment.getObjectivesStolen())
+                            .addValue("objectivesStolenAssists", comment.getObjectivesStolenAssists())
+                            .addValue("detectorWardsPlaced", comment.getDetectorWardsPlaced())
+                            .addValue("sightWardsBoughtInGame", comment.getSightWardsBoughtInGame())
+                            .addValue("visionScore", comment.getVisionScore())
+                            .addValue("visionWardsBoughtInGame", comment.getVisionWardsBoughtInGame())
+                            .addValue("wardsKilled", comment.getWardsKilled())
+                            .addValue("wardsPlaced", comment.getWardsPlaced())
+                            .addValue("baronKills", comment.getBaronKills())
+                            .addValue("dragonKills", comment.getDragonKills())
+                            .addValue("firstBloodAssist", comment.isFirstBloodAssist())
+                            .addValue("firstBloodKill", comment.isFirstBloodKill())
+                            .addValue("firstTowerAssist", comment.isFirstTowerAssist())
+                            .addValue("firstTowerKill", comment.isFirstTowerKill())
+                            .addValue("inhibitorKills", comment.getInhibitorKills())
+                            .addValue("inhibitorTakedowns", comment.getInhibitorTakedowns())
+                            .addValue("inhibitorsLost", comment.getInhibitorsLost())
+                            .addValue("nexusKills", comment.getNexusKills())
+                            .addValue("nexusTakedowns", comment.getNexusTakedowns())
+                            .addValue("nexusLost", comment.getNexusLost())
+                            .addValue("turretKills", comment.getTurretKills())
+                            .addValue("turretTakedowns", comment.getTurretTakedowns())
+                            .addValue("turretsLost", comment.getTurretsLost())
+                            .addValue("gameEndedInEarlySurrender", comment.isGameEndedInEarlySurrender())
+                            .addValue("gameEndedInSurrender", comment.isGameEndedInSurrender())
+                            .addValue("teamEarlySurrendered", comment.isTeamEarlySurrendered())
+                            .addValue("teamPosition", comment.getTeamPosition())
+                            .addValue("teamId", comment.getTeamId())
+                            .addValue("win", comment.isWin())
+                            .addValue("timePlayed", comment.getTimePlayed())
+                            .addValue("individualPosition", comment.getIndividualPosition())
+                            .addValue("magicDamageDealt", comment.getMagicDamageDealt())
+                            .addValue("magicDamageDealtToChampions", comment.getMagicDamageDealtToChampions())
+                            .addValue("magicDamageTaken", comment.getMagicDamageTaken())
+                            .addValue("physicalDamageDealt", comment.getPhysicalDamageDealt())
+                            .addValue("physicalDamageDealtToChampions", comment.getPhysicalDamageDealtToChampions())
+                            .addValue("physicalDamageTaken", comment.getPhysicalDamageTaken())
+                            .addValue("damageDealtToBuildings", comment.getDamageDealtToBuildings())
+                            .addValue("damageDealtToObjectives", comment.getDamageDealtToObjectives())
+                            .addValue("damageDealtToTurrets", comment.getDamageDealtToTurrets())
+                            .addValue("damageSelfMitigated", comment.getDamageSelfMitigated())
+                            .addValue("totalDamageDealt", comment.getTotalDamageDealt())
+                            .addValue("totalDamageDealtToChampions", comment.getTotalDamageDealtToChampions())
+                            .addValue("totalDamageShieldedOnTeammates", comment.getTotalDamageShieldedOnTeammates())
+                            .addValue("totalDamageTaken", comment.getTotalDamageTaken())
+                            .addValue("trueDamageDealt", comment.getTrueDamageDealt())
+                            .addValue("trueDamageDealtToChampions", comment.getTrueDamageDealtToChampions())
+                            .addValue("trueDamageTaken", comment.getTrueDamageTaken())
+                            .addValue("totalHeal", comment.getTotalHeal())
+                            .addValue("totalHealsOnTeammates", comment.getTotalHealsOnTeammates())
+                            .addValue("totalTimeCCDealt", comment.getTotalTimeCCDealt())
+                            .addValue("totalTimeSpentDead", comment.getTotalTimeSpentDead())
+                            .addValue("totalUnitsHealed", comment.getTotalUnitsHealed())
+                            .addValue("timeCCingOthers", comment.getTimeCCingOthers())
+                            .addValue("killingSprees", comment.getKillingSprees())
+                            .addValue("largestCriticalStrike", comment.getLargestCriticalStrike())
+                            .addValue("largestKillingSpree", comment.getLargestKillingSpree())
+                            .addValue("largestMultiKill", comment.getLargestMultiKill())
+                            .addValue("longestTimeSpentLiving", comment.getLongestTimeSpentLiving())
+                            .addValue("allInPings", comment.getAllInPings())
+                            .addValue("assistMePings", comment.getAssistMePings())
+                            .addValue("commandPings", comment.getCommandPings())
+                            .addValue("eligibleForProgression", comment.isEligibleForProgression())
+                            .addValue("enemyMissingPings", comment.getEnemyMissingPings())
+                            .addValue("enemyVisionPings", comment.getEnemyVisionPings())
+                            .addValue("holdPings", comment.getHoldPings())
+                            .addValue("getBackPings", comment.getGetBackPings())
+                            .addValue("needVisionPings", comment.getNeedVisionPings())
+                            .addValue("onMyWayPings", comment.getOnMyWayPings())
+                            .addValue("playerScore0", comment.getPlayerScore0())
+                            .addValue("playerScore1", comment.getPlayerScore1())
+                            .addValue("playerScore2", comment.getPlayerScore2())
+                            .addValue("playerScore3", comment.getPlayerScore3())
+                            .addValue("playerScore4", comment.getPlayerScore4())
+                            .addValue("playerScore5", comment.getPlayerScore5())
+                            .addValue("playerScore6", comment.getPlayerScore6())
+                            .addValue("playerScore7", comment.getPlayerScore7())
+                            .addValue("playerScore8", comment.getPlayerScore8())
+                            .addValue("playerScore9", comment.getPlayerScore9())
+                            .addValue("playerScore10", comment.getPlayerScore10())
+                            .addValue("playerScore11", comment.getPlayerScore11())
+                            .addValue("placement", comment.getPlacement())
+                            .addValue("playerAugment1", comment.getPlayerAugment1())
+                            .addValue("playerAugment2", comment.getPlayerAugment2())
+                            .addValue("playerAugment3", comment.getPlayerAugment3())
+                            .addValue("playerAugment4", comment.getPlayerAugment4())
+                            .addValue("playerSubteamId", comment.getPlayerSubteamId())
+                            .addValue("pushPings", comment.getPushPings())
+                            .addValue("riotIdName", comment.getRiotIdName())
+                            .addValue("subteamPlacement", comment.getSubteamPlacement())
+                            .addValue("totalAllyJungleMinionsKilled", comment.getTotalAllyJungleMinionsKilled())
+                            .addValue("totalEnemyJungleMinionsKilled", comment.getTotalEnemyJungleMinionsKilled())
+                            .addValue("visionClearedPings", comment.getVisionClearedPings())
+                            .addValue("item0", comment.getItem().getItem0())
+                            .addValue("item1", comment.getItem().getItem1())
+                            .addValue("item2", comment.getItem().getItem2())
+                            .addValue("item3", comment.getItem().getItem3())
+                            .addValue("item4", comment.getItem().getItem4())
+                            .addValue("item5", comment.getItem().getItem5())
+                            .addValue("item6", comment.getItem().getItem6())
+                            .addValue("defense", comment.getStatValue().getDefense())
+                            .addValue("flex", comment.getStatValue().getFlex())
+                            .addValue("offense", comment.getStatValue().getOffense())
+                            .addValue("primaryRuneId", comment.getStyleValue().getPrimaryRuneId())
+                            .addValue("primaryRuneIds", comment.getStyleValue().getPrimaryRuneIds())
+                            .addValue("secondaryRuneId", comment.getStyleValue().getSecondaryRuneId())
+                            .addValue("secondaryRuneIds", comment.getStyleValue().getSecondaryRuneIds())
+                            ;
+                })
+                .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
     }

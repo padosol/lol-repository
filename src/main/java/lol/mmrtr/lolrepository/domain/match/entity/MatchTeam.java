@@ -1,72 +1,86 @@
 package lol.mmrtr.lolrepository.domain.match.entity;
 
+import jakarta.persistence.*;
+import lol.mmrtr.lolrepository.domain.match.entity.id.MatchTeamId;
+import lol.mmrtr.lolrepository.domain.match.entity.value.team.TeamBanValue;
+import lol.mmrtr.lolrepository.domain.match.entity.value.team.TeamObjectValue;
+import lol.mmrtr.lolrepository.riot.dto.match.BanDto;
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
+import lol.mmrtr.lolrepository.riot.dto.match.ObjectivesDto;
 import lol.mmrtr.lolrepository.riot.dto.match.TeamDto;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
+import java.util.List;
+
+@Entity
+@Table(name = "match_team")
+@Builder
 @Getter
-@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 public class MatchTeam {
 
-    private int teamId;
-    private String matchId;
+    @EmbeddedId
+    private MatchTeamId matchTeamId;
+
+    @MapsId("matchId")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "match_id")
+    private Match match;
+
+
     private	boolean win;
-    private	boolean baronFirst;
-    private	int baronKills;
-    private	boolean championFirst;
-    private	int championKills;
-    private	boolean dragonFirst;
-    private	int dragonKills;
-    private	boolean inhibitorFirst;
-    private	int inhibitorKills;
-    private	boolean riftHeraldFirst;
-    private	int riftHeraldKills;
-    private	boolean towerFirst;
-    private	int towerKills;
-    private	int champion1Id;
-    private	int pick1Turn;
-    private	int champion2Id;
-    private	int pick2Turn;
-    private	int champion3Id;
-    private	int pick3Turn;
-    private	int champion4Id;
-    private	int pick4Turn;
-    private	int champion5Id;
-    private	int pick5Turn;
 
-    public MatchTeam(){}
+    @Embedded
+    private TeamObjectValue teamObject;
 
-    public MatchTeam(MatchDto matchDto, TeamDto teamDto) {
-        this.teamId = teamDto.getTeamId();
-        this.matchId = matchDto.getMetadata().getMatchId();
-        this.win = teamDto.isWin();
-        this.baronFirst = teamDto.getObjectives().getBaron().isFirst();
-        this.baronKills = teamDto.getObjectives().getBaron().getKills();
-        this.championFirst = teamDto.getObjectives().getChampion().isFirst();
-        this.championKills = teamDto.getObjectives().getChampion().getKills();
-        this.dragonFirst = teamDto.getObjectives().getDragon().isFirst();
-        this.dragonKills = teamDto.getObjectives().getDragon().getKills();
-        this.inhibitorFirst = teamDto.getObjectives().getInhibitor().isFirst();
-        this.inhibitorKills = teamDto.getObjectives().getInhibitor().getKills();
-        this.riftHeraldFirst = teamDto.getObjectives().getRiftHerald().isFirst();
-        this.riftHeraldKills = teamDto.getObjectives().getRiftHerald().getKills();
-        this.towerFirst = teamDto.getObjectives().getTower().isFirst();
-        this.towerKills = teamDto.getObjectives().getTower().getKills();
+    @Embedded
+    private TeamBanValue teamBan;
 
-        if(!teamDto.getBans().isEmpty()) {
-            this.champion1Id = teamDto.getBans().get(0).getChampionId();
-            this.pick1Turn = teamDto.getBans().get(0).getPickTurn();
-            this.champion2Id = teamDto.getBans().get(1).getChampionId();
-            this.pick2Turn = teamDto.getBans().get(1).getPickTurn();
-            this.champion3Id = teamDto.getBans().get(2).getChampionId();
-            this.pick3Turn = teamDto.getBans().get(2).getPickTurn();
-            this.champion4Id = teamDto.getBans().get(3).getChampionId();
-            this.pick4Turn = teamDto.getBans().get(3).getPickTurn();
-            this.champion5Id = teamDto.getBans().get(4).getChampionId();
-            this.pick5Turn = teamDto.getBans().get(4).getPickTurn();
+    public static MatchTeam of(Match match, TeamDto teamDto) {
+
+        ObjectivesDto objectives = teamDto.getObjectives();
+        TeamObjectValue teamObjectValue = TeamObjectValue.builder()
+                .baronKills(objectives.getBaron().getKills())
+                .baronFirst(objectives.getBaron().isFirst())
+                .championKills(objectives.getChampion().getKills())
+                .championFirst(objectives.getChampion().isFirst())
+                .dragonKills(objectives.getDragon().getKills())
+                .dragonFirst(objectives.getDragon().isFirst())
+                .inhibitorKills(objectives.getInhibitor().getKills())
+                .inhibitorFirst(objectives.getInhibitor().isFirst())
+                .riftHeraldKills(objectives.getRiftHerald().getKills())
+                .riftHeraldFirst(objectives.getRiftHerald().isFirst())
+                .build();
+
+        List<BanDto> bans = teamDto.getBans();
+
+        TeamBanValue.TeamBanValueBuilder builder = TeamBanValue.builder();
+
+        if(!bans.isEmpty()) {
+            TeamBanValue.builder()
+                    .champion1Id(bans.get(0).getChampionId())
+                    .pick1Turn(bans.get(0).getPickTurn())
+                    .champion2Id(bans.get(1).getChampionId())
+                    .pick2Turn(bans.get(1).getPickTurn())
+                    .champion3Id(bans.get(2).getChampionId())
+                    .pick3Turn(bans.get(2).getPickTurn())
+                    .champion4Id(bans.get(3).getChampionId())
+                    .pick4Turn(bans.get(3).getPickTurn())
+                    .champion5Id(bans.get(4).getChampionId())
+                    .pick5Turn(bans.get(4).getPickTurn());
         }
 
+        return new MatchTeam(
+                new MatchTeamId(
+                        match.getMatchId(),
+                        teamDto.getTeamId()
+                ),
+                match,
+                teamDto.isWin(),
+                teamObjectValue,
+                builder.build()
+        );
     }
 
 }

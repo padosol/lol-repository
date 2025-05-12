@@ -1,27 +1,49 @@
 package lol.mmrtr.lolrepository.domain.match.entity;
 
 
-import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
+import jakarta.persistence.*;
+import lol.mmrtr.lolrepository.domain.match.entity.id.MatchSummonerId;
+import lol.mmrtr.lolrepository.domain.match.entity.value.matchsummoner.ItemValue;
+import lol.mmrtr.lolrepository.domain.match.entity.value.matchsummoner.StatValue;
+import lol.mmrtr.lolrepository.domain.match.entity.value.matchsummoner.StyleValue;
 import lol.mmrtr.lolrepository.riot.dto.match.ParticipantDto;
-import lol.mmrtr.lolrepository.riot.dto.match.PerkStyleDto;
-import lol.mmrtr.lolrepository.riot.dto.match.PerkStyleSelectionDto;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.util.List;
 
+@Entity
+@Table(name = "match_summoner")
 @Getter
-@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class MatchSummoner {
 
+    @EmbeddedId
+    private MatchSummonerId matchSummonerId;
+
+    @MapsId("matchId")                  // EmbeddedId 필드명과 일치해야함
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "match_id")
+    private Match match;
+
     private String summonerId;
-    private String matchId;
+
+    // match 정보 필요
+    // summoner 정보 필요
+
+    @OneToOne(mappedBy = "matchSummoner")
+    private Challenges challenges;
+
+    // 유저 정보
     private String riotIdGameName;
     private String riotIdTagline;
-    private String puuid;
+
     private int profileIcon;
     private String summonerName;
     private int participantId;
+
+    // 챔피언, 룬, 스펠 정보
     private int champLevel;
     private int championId;
     private String championName;
@@ -38,6 +60,8 @@ public class MatchSummoner {
     private int summoner2Id;
     private int summonerLevel;
     private int bountyLevel;
+
+    // 킬 관련
     private int kills;
     private int assists;
     private int deaths;
@@ -46,21 +70,31 @@ public class MatchSummoner {
     private int quadraKills;
     private int pentaKills;
     private int unrealKills;
+
+    // 케인 전용
     private int championTransform;
+
+    // 골드 관련, 아이템 구매
     private int goldEarned;
     private int goldSpent;
     private int itemsPurchased;
     private int consumablesPurchased;
+
+    // 미니언 관련
     private int neutralMinionsKilled;
     private int totalMinionsKilled;
     private int objectivesStolen;
     private int objectivesStolenAssists;
+
+    // 와드 관련
     private int detectorWardsPlaced;
     private int sightWardsBoughtInGame;
     private int visionScore;
     private int visionWardsBoughtInGame;
     private int wardsKilled;
     private int wardsPlaced;
+
+    // 오브젝트 관련
     private int baronKills;
     private int dragonKills;
     private boolean firstBloodAssist;
@@ -76,6 +110,8 @@ public class MatchSummoner {
     private int turretKills;
     private int turretTakedowns;
     private int turretsLost;
+
+    // 게임 정보
     private boolean gameEndedInEarlySurrender;
     private boolean gameEndedInSurrender;
     private boolean teamEarlySurrendered;
@@ -84,6 +120,8 @@ public class MatchSummoner {
     private boolean win;
     private int timePlayed;
     private String individualPosition;
+
+    // 피해, 받은 피해, 회복, CC
     private int magicDamageDealt;
     private int magicDamageDealtToChampions;
     private int magicDamageTaken;
@@ -112,6 +150,8 @@ public class MatchSummoner {
     private int largestKillingSpree;
     private int largestMultiKill;
     private int longestTimeSpentLiving;
+
+    // 아레나
     private int allInPings;
     private int assistMePings;
     private int commandPings;
@@ -146,210 +186,156 @@ public class MatchSummoner {
     private int totalAllyJungleMinionsKilled;
     private int totalEnemyJungleMinionsKilled;
     private int visionClearedPings;
-    private int item0;
-    private int item1;
-    private int item2;
-    private int item3;
-    private int item4;
-    private int item5;
-    private int item6;
-    private int defense;
-    private int flex;
-    private int offense;
-    private int primaryRuneId;
-    private String primaryRuneIds;
-    private int secondaryRuneId;
-    private String secondaryRuneIds;
 
-    public MatchSummoner(){};
+    @Embedded
+    private ItemValue item;
 
+    @Embedded
+    private StatValue statValue;
 
-    public MatchSummoner(MatchDto matchDto, ParticipantDto participantDto){
+    @Embedded
+    private StyleValue styleValue;
 
-        this.summonerId = participantDto.getSummonerId();
-        this.matchId = matchDto.getMetadata().getMatchId();
-        this.riotIdGameName = participantDto.getRiotIdGameName();
-        this.riotIdTagline = participantDto.getRiotIdTagline();
-        this.puuid = participantDto.getPuuid();
-        this.profileIcon = participantDto.getProfileIcon();
-        this.summonerName = participantDto.getSummonerName();
-        this.participantId = participantDto.getParticipantId();
-        this.champLevel = participantDto.getChampLevel();
-        this.championId = participantDto.getChampionId();
-        this.championName = participantDto.getChampionName();
-        this.lane = participantDto.getLane();
-        this.champExperience = participantDto.getChampExperience();
-        this.role = participantDto.getRole();
-        this.spell1Casts = participantDto.getSpell1Casts();
-        this.spell2Casts = participantDto.getSpell2Casts();
-        this.spell3Casts = participantDto.getSpell3Casts();
-        this.spell4Casts = participantDto.getSpell4Casts();
-        this.summoner1Casts = participantDto.getSummoner1Casts();
-        this.summoner1Id = participantDto.getSummoner1Id();
-        this.summoner2Casts = participantDto.getSummoner2Casts();
-        this.summoner2Id = participantDto.getSummoner2Id();
-        this.summonerLevel = participantDto.getSummonerLevel();
-        this.bountyLevel = participantDto.getBountyLevel();
-        this.kills = participantDto.getKills();
-        this.assists = participantDto.getAssists();
-        this.deaths = participantDto.getDeaths();
-        this.doubleKills = participantDto.getDoubleKills();
-        this.tripleKills = participantDto.getTripleKills();
-        this.quadraKills = participantDto.getQuadraKills();
-        this.pentaKills = participantDto.getPentaKills();
-        this.unrealKills = participantDto.getUnrealKills();
-        this.championTransform = participantDto.getChampionTransform();
-        this.goldEarned = participantDto.getGoldEarned();
-        this.goldSpent = participantDto.getGoldSpent();
-        this.itemsPurchased = participantDto.getItemsPurchased();
-        this.consumablesPurchased = participantDto.getConsumablesPurchased();
-        this.neutralMinionsKilled = participantDto.getNeutralMinionsKilled();
-        this.totalMinionsKilled = participantDto.getTotalMinionsKilled();
-        this.objectivesStolen = participantDto.getObjectivesStolen();
-        this.objectivesStolenAssists = participantDto.getObjectivesStolenAssists();
-        this.detectorWardsPlaced = participantDto.getDetectorWardsPlaced();
-        this.sightWardsBoughtInGame = participantDto.getSightWardsBoughtInGame();
-        this.visionScore = participantDto.getVisionScore();
-        this.visionWardsBoughtInGame = participantDto.getVisionWardsBoughtInGame();
-        this.wardsKilled = participantDto.getWardsKilled();
-        this.wardsPlaced = participantDto.getWardsPlaced();
-        this.baronKills = participantDto.getBaronKills();
-        this.dragonKills = participantDto.getDragonKills();
-        this.firstBloodAssist = participantDto.isFirstBloodAssist();
-        this.firstBloodKill = participantDto.isFirstBloodKill();
-        this.firstTowerAssist = participantDto.isFirstTowerAssist();
-        this.firstTowerKill = participantDto.isFirstTowerKill();
-        this.inhibitorKills = participantDto.getInhibitorKills();
-        this.inhibitorTakedowns = participantDto.getInhibitorTakedowns();
-        this.inhibitorsLost = participantDto.getInhibitorsLost();
-        this.nexusKills = participantDto.getNexusKills();
-        this.nexusTakedowns = participantDto.getNexusTakedowns();
-        this.nexusLost = participantDto.getNexusLost();
-        this.turretKills = participantDto.getTurretKills();
-        this.turretTakedowns = participantDto.getTurretTakedowns();
-        this.turretsLost = participantDto.getTurretsLost();
-        this.gameEndedInEarlySurrender = participantDto.isGameEndedInEarlySurrender();
-        this.gameEndedInSurrender = participantDto.isGameEndedInSurrender();
-        this.teamEarlySurrendered = participantDto.isTeamEarlySurrendered();
-        this.teamPosition = participantDto.getTeamPosition();
-        this.teamId = participantDto.getTeamId();
-        this.win = participantDto.isWin();
-        this.timePlayed = participantDto.getTimePlayed();
-        this.individualPosition = participantDto.getIndividualPosition();
-        this.magicDamageDealt = participantDto.getMagicDamageDealt();
-        this.magicDamageDealtToChampions = participantDto.getMagicDamageDealtToChampions();
-        this.magicDamageTaken = participantDto.getMagicDamageTaken();
-        this.physicalDamageDealt = participantDto.getPhysicalDamageDealt();
-        this.physicalDamageDealtToChampions = participantDto.getPhysicalDamageDealtToChampions();
-        this.physicalDamageTaken = participantDto.getPhysicalDamageTaken();
-        this.damageDealtToBuildings = participantDto.getDamageDealtToBuildings();
-        this.damageDealtToObjectives = participantDto.getDamageDealtToObjectives();
-        this.damageDealtToTurrets = participantDto.getDamageDealtToTurrets();
-        this.damageSelfMitigated = participantDto.getDamageSelfMitigated();
-        this.totalDamageDealt = participantDto.getTotalDamageDealt();
-        this.totalDamageDealtToChampions = participantDto.getTotalDamageDealtToChampions();
-        this.totalDamageShieldedOnTeammates = participantDto.getTotalDamageShieldedOnTeammates();
-        this.totalDamageTaken = participantDto.getTotalDamageTaken();
-        this.trueDamageDealt = participantDto.getTrueDamageDealt();
-        this.trueDamageDealtToChampions = participantDto.getTrueDamageDealtToChampions();
-        this.trueDamageTaken = participantDto.getTrueDamageTaken();
-        this.totalHeal = participantDto.getTotalHeal();
-        this.totalHealsOnTeammates = participantDto.getTotalHealsOnTeammates();
-        this.totalTimeCCDealt = participantDto.getTotalTimeCCDealt();
-        this.totalTimeSpentDead = participantDto.getTotalTimeSpentDead();
-        this.totalUnitsHealed = participantDto.getTotalUnitsHealed();
-        this.timeCCingOthers = participantDto.getTimeCCingOthers();
-        this.killingSprees = participantDto.getKillingSprees();
-        this.largestCriticalStrike = participantDto.getLargestCriticalStrike();
-        this.largestKillingSpree = participantDto.getLargestKillingSpree();
-        this.largestMultiKill = participantDto.getLargestMultiKill();
-        this.longestTimeSpentLiving = participantDto.getLongestTimeSpentLiving();
-        this.allInPings = participantDto.getAllInPings();
-        this.assistMePings = participantDto.getAssistMePings();
-        this.commandPings = participantDto.getCommandPings();
-        this.eligibleForProgression = participantDto.isEligibleForProgression();
-        this.enemyMissingPings = participantDto.getEnemyMissingPings();
-        this.enemyVisionPings = participantDto.getEnemyVisionPings();
-        this.holdPings = participantDto.getHoldPings();
-        this.getBackPings = participantDto.getGetBackPings();
-        this.needVisionPings = participantDto.getNeedVisionPings();
-        this.onMyWayPings = participantDto.getOnMyWayPings();
-        this.playerScore0 = participantDto.getPlayerScore0();
-        this.playerScore1 = participantDto.getPlayerScore1();
-        this.playerScore2 = participantDto.getPlayerScore2();
-        this.playerScore3 = participantDto.getPlayerScore3();
-        this.playerScore4 = participantDto.getPlayerScore4();
-        this.playerScore5 = participantDto.getPlayerScore5();
-        this.playerScore6 = participantDto.getPlayerScore6();
-        this.playerScore7 = participantDto.getPlayerScore7();
-        this.playerScore8 = participantDto.getPlayerScore8();
-        this.playerScore9 = participantDto.getPlayerScore9();
-        this.playerScore10 = participantDto.getPlayerScore10();
-        this.playerScore11 = participantDto.getPlayerScore11();
-        this.placement = participantDto.getPlacement();
-        this.playerAugment1 = participantDto.getPlayerAugment1();
-        this.playerAugment2 = participantDto.getPlayerAugment2();
-        this.playerAugment3 = participantDto.getPlayerAugment3();
-        this.playerAugment4 = participantDto.getPlayerAugment4();
-        this.playerSubteamId = participantDto.getPlayerSubteamId();
-        this.pushPings = participantDto.getPushPings();
-        this.riotIdName = participantDto.getRiotIdName();
-        this.subteamPlacement = participantDto.getSubteamPlacement();
-        this.totalAllyJungleMinionsKilled = participantDto.getTotalAllyJungleMinionsKilled();
-        this.totalEnemyJungleMinionsKilled = participantDto.getTotalEnemyJungleMinionsKilled();
-        this.visionClearedPings = participantDto.getVisionClearedPings();
-        this.item0 = participantDto.getItem0();
-        this.item1 = participantDto.getItem1();
-        this.item2 = participantDto.getItem2();
-        this.item3 = participantDto.getItem3();
-        this.item4 = participantDto.getItem4();
-        this.item5 = participantDto.getItem5();
-        this.item6 = participantDto.getItem6();
-        this.defense = participantDto.getPerks().getStatPerks().getDefense();
-        this.flex = participantDto.getPerks().getStatPerks().getFlex();
-        this.offense = participantDto.getPerks().getStatPerks().getOffense();
+    public static MatchSummoner of(Match match, ParticipantDto participantDto) {
+        return MatchSummoner.builder()
+                .matchSummonerId(new MatchSummonerId(participantDto.getPuuid(), match.getMatchId()))
+                .match(match)
+                .summonerId(participantDto.getSummonerId())
+                .riotIdGameName(participantDto.getRiotIdGameName())
+                .riotIdTagline(participantDto.getRiotIdTagline())
+                .profileIcon(participantDto.getProfileIcon())
+                .summonerName(participantDto.getSummonerName())
+                .participantId(participantDto.getParticipantId())
+                .champLevel(participantDto.getChampLevel())
+                .championId(participantDto.getChampionId())
+                .championName(participantDto.getChampionName())
+                .lane(participantDto.getLane())
+                .champExperience(participantDto.getChampExperience())
+                .role(participantDto.getRole())
+                .spell1Casts(participantDto.getSpell1Casts())
+                .spell2Casts(participantDto.getSpell2Casts())
+                .spell3Casts(participantDto.getSpell3Casts())
+                .spell4Casts(participantDto.getSpell4Casts())
+                .summoner1Casts(participantDto.getSummoner1Casts())
+                .summoner1Id(participantDto.getSummoner1Id())
+                .summoner2Casts(participantDto.getSummoner2Casts())
+                .summoner2Id(participantDto.getSummoner2Id())
+                .summonerLevel(participantDto.getSummonerLevel())
+                .bountyLevel(participantDto.getBountyLevel())
+                .kills(participantDto.getKills())
+                .assists(participantDto.getAssists())
+                .deaths(participantDto.getDeaths())
+                .doubleKills(participantDto.getDoubleKills())
+                .tripleKills(participantDto.getTripleKills())
+                .quadraKills(participantDto.getQuadraKills())
+                .pentaKills(participantDto.getPentaKills())
+                .unrealKills(participantDto.getUnrealKills())
+                .championTransform(participantDto.getChampionTransform())
+                .goldEarned(participantDto.getGoldEarned())
+                .goldSpent(participantDto.getGoldSpent())
+                .itemsPurchased(participantDto.getItemsPurchased())
+                .consumablesPurchased(participantDto.getConsumablesPurchased())
+                .neutralMinionsKilled(participantDto.getNeutralMinionsKilled())
+                .totalMinionsKilled(participantDto.getTotalMinionsKilled())
+                .objectivesStolen(participantDto.getObjectivesStolen())
+                .objectivesStolenAssists(participantDto.getObjectivesStolenAssists())
+                .detectorWardsPlaced(participantDto.getDetectorWardsPlaced())
+                .sightWardsBoughtInGame(participantDto.getSightWardsBoughtInGame())
+                .visionScore(participantDto.getVisionScore())
+                .visionWardsBoughtInGame(participantDto.getVisionWardsBoughtInGame())
+                .wardsKilled(participantDto.getWardsKilled())
+                .wardsPlaced(participantDto.getWardsPlaced())
+                .baronKills(participantDto.getBaronKills())
+                .dragonKills(participantDto.getDragonKills())
+                .firstBloodAssist(participantDto.isFirstBloodAssist())
+                .firstBloodKill(participantDto.isFirstBloodKill())
+                .firstTowerAssist(participantDto.isFirstTowerAssist())
+                .firstTowerKill(participantDto.isFirstTowerKill())
+                .inhibitorKills(participantDto.getInhibitorKills())
+                .inhibitorTakedowns(participantDto.getInhibitorTakedowns())
+                .inhibitorsLost(participantDto.getInhibitorsLost())
+                .nexusKills(participantDto.getNexusKills())
+                .nexusTakedowns(participantDto.getNexusTakedowns())
+                .nexusLost(participantDto.getNexusLost())
+                .turretKills(participantDto.getTurretKills())
+                .turretTakedowns(participantDto.getTurretTakedowns())
+                .turretsLost(participantDto.getTurretsLost())
+                .gameEndedInEarlySurrender(participantDto.isGameEndedInEarlySurrender())
+                .gameEndedInSurrender(participantDto.isGameEndedInSurrender())
+                .teamEarlySurrendered(participantDto.isTeamEarlySurrendered())
+                .teamPosition(participantDto.getTeamPosition())
+                .teamId(participantDto.getTeamId())
+                .win(participantDto.isWin())
+                .timePlayed(participantDto.getTimePlayed())
+                .individualPosition(participantDto.getIndividualPosition())
+                .magicDamageDealt(participantDto.getMagicDamageDealt())
+                .magicDamageDealtToChampions(participantDto.getMagicDamageDealtToChampions())
+                .magicDamageTaken(participantDto.getMagicDamageTaken())
+                .physicalDamageDealt(participantDto.getPhysicalDamageDealt())
+                .physicalDamageDealtToChampions(participantDto.getPhysicalDamageDealtToChampions())
+                .physicalDamageTaken(participantDto.getPhysicalDamageTaken())
+                .damageDealtToBuildings(participantDto.getDamageDealtToBuildings())
+                .damageDealtToObjectives(participantDto.getDamageDealtToObjectives())
+                .damageDealtToTurrets(participantDto.getDamageDealtToTurrets())
+                .damageSelfMitigated(participantDto.getDamageSelfMitigated())
+                .totalDamageDealt(participantDto.getTotalDamageDealt())
+                .totalDamageDealtToChampions(participantDto.getTotalDamageDealtToChampions())
+                .totalDamageShieldedOnTeammates(participantDto.getTotalDamageShieldedOnTeammates())
+                .totalDamageTaken(participantDto.getTotalDamageTaken())
+                .trueDamageDealt(participantDto.getTrueDamageDealt())
+                .trueDamageDealtToChampions(participantDto.getTrueDamageDealtToChampions())
+                .trueDamageTaken(participantDto.getTrueDamageTaken())
+                .totalHeal(participantDto.getTotalHeal())
+                .totalHealsOnTeammates(participantDto.getTotalHealsOnTeammates())
+                .totalTimeCCDealt(participantDto.getTotalTimeCCDealt())
+                .totalTimeSpentDead(participantDto.getTotalTimeSpentDead())
+                .totalUnitsHealed(participantDto.getTotalUnitsHealed())
+                .timeCCingOthers(participantDto.getTimeCCingOthers())
+                .killingSprees(participantDto.getKillingSprees())
+                .largestCriticalStrike(participantDto.getLargestCriticalStrike())
+                .largestKillingSpree(participantDto.getLargestKillingSpree())
+                .largestMultiKill(participantDto.getLargestMultiKill())
+                .longestTimeSpentLiving(participantDto.getLongestTimeSpentLiving())
+                .item(new ItemValue(participantDto))
+                .statValue(new StatValue(participantDto))
+                .styleValue(new StyleValue(participantDto))
+                .allInPings(participantDto.getAllInPings())
+                .assistMePings(participantDto.getAssistMePings())
+                .commandPings(participantDto.getCommandPings())
+                .eligibleForProgression(participantDto.isEligibleForProgression())
+                .enemyMissingPings(participantDto.getEnemyMissingPings())
+                .enemyVisionPings(participantDto.getEnemyVisionPings())
+                .holdPings(participantDto.getHoldPings())
+                .getBackPings(participantDto.getGetBackPings())
+                .needVisionPings(participantDto.getNeedVisionPings())
+                .onMyWayPings(participantDto.getOnMyWayPings())
+                .playerScore0(participantDto.getPlayerScore0())
+                .playerScore1(participantDto.getPlayerScore1())
+                .playerScore2(participantDto.getPlayerScore2())
+                .playerScore3(participantDto.getPlayerScore3())
+                .playerScore4(participantDto.getPlayerScore4())
+                .playerScore5(participantDto.getPlayerScore5())
+                .playerScore6(participantDto.getPlayerScore6())
+                .playerScore7(participantDto.getPlayerScore7())
+                .playerScore8(participantDto.getPlayerScore8())
+                .playerScore9(participantDto.getPlayerScore9())
+                .playerScore10(participantDto.getPlayerScore10())
+                .playerScore11(participantDto.getPlayerScore11())
+                .placement(participantDto.getPlacement())
+                .playerAugment1(participantDto.getPlayerAugment1())
+                .playerAugment2(participantDto.getPlayerAugment2())
+                .playerAugment3(participantDto.getPlayerAugment3())
+                .playerAugment4(participantDto.getPlayerAugment4())
+                .playerSubteamId(participantDto.getPlayerSubteamId())
+                .pushPings(participantDto.getPushPings())
+                .riotIdName(participantDto.getRiotIdName())
+                .subteamPlacement(participantDto.getSubteamPlacement())
+                .totalAllyJungleMinionsKilled(participantDto.getTotalAllyJungleMinionsKilled())
+                .totalEnemyJungleMinionsKilled(participantDto.getTotalEnemyJungleMinionsKilled())
+                .visionClearedPings(participantDto.getVisionClearedPings())
 
-
-        List<PerkStyleDto> styles = participantDto.getPerks().getStyles();
-
-        StringBuffer sb = new StringBuffer();
-        for (PerkStyleDto style : styles) {
-            sb.setLength(0);
-
-            String description = style.getDescription();
-
-            if(description.equalsIgnoreCase("primaryStyle")) {
-                this.primaryRuneId = style.getStyle();
-                List<PerkStyleSelectionDto> selections = style.getSelections();
-                for (PerkStyleSelectionDto selection : selections) {
-                    if(sb.length() != 0) {
-                        sb.append(",");
-                    }
-                    int perk = selection.getPerk();
-                    sb.append(perk);
-                }
-
-                this.primaryRuneIds = sb.toString();
-            }
-
-
-            if(description.equalsIgnoreCase("subStyle")) {
-                this.secondaryRuneId = style.getStyle();
-                List<PerkStyleSelectionDto> selections = style.getSelections();
-                for (PerkStyleSelectionDto selection : selections) {
-                    if(sb.length() != 0) {
-                        sb.append(",");
-                    }
-                    int perk = selection.getPerk();
-                    sb.append(perk);
-                }
-
-                this.secondaryRuneIds = sb.toString();
-
-            }
-        }
+                .build();
     }
-
 
 
 }
