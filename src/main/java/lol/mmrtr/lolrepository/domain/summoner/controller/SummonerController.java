@@ -16,6 +16,13 @@ public class SummonerController {
 
     private final SummonerService summonerService;
 
+    /**
+     * 유저 조회 API With Riot API
+     * @param region   지역명
+     * @param gameName 유저명
+     * @param tagLine  유저 태그
+     * @return 유저 정보      
+     */
     @GetMapping("/{gameName}/{tagLine}")
     public ResponseEntity<SummonerResponse> getSummoner(
             @PathVariable("region") String region,

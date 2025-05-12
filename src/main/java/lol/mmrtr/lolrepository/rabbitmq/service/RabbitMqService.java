@@ -61,8 +61,9 @@ public class RabbitMqService {
     private final MatchTeamRepository matchTeamRepository;
     private final ChallengesRepository challengesRepository;
 
-    @RabbitListener(queues = "mmrtr.match")
+    @RabbitListener(queues = "mmrtr.matchId")
     public void receiveMessage(String matchId) {
+
         asyncRabbitService.processSummonerRefreshAsync(matchId);
     }
 
