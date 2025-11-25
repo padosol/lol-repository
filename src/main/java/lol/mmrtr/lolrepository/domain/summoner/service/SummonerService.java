@@ -1,12 +1,14 @@
 package lol.mmrtr.lolrepository.domain.summoner.service;
 
 import lol.mmrtr.lolrepository.domain.league.entity.League;
-import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
-import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummonerId;
+import lol.mmrtr.lolrepository.domain.league.entity.LeagueSummoner;
+import lol.mmrtr.lolrepository.domain.league.entity.LeagueSummonerDetail;
+import lol.mmrtr.lolrepository.domain.league.entity.id.LeagueSummonerId;
+import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerDetailJpaRepository;
 import lol.mmrtr.lolrepository.domain.summoner.dto.response.SummonerResponse;
 import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueRepository;
-import lol.mmrtr.lolrepository.domain.league_summoner.repository.LeagueSummonerRepository;
+import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerRepository;
 import lol.mmrtr.lolrepository.domain.summoner.repository.SummonerRepository;
 import lol.mmrtr.lolrepository.riot.core.api.RiotAPI;
 import lol.mmrtr.lolrepository.riot.dto.account.AccountDto;
@@ -25,6 +27,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class SummonerService {
 
+    private final LeagueSummonerDetailJpaRepository leagueSummonerDetailJpaRepository;
     private final LeagueSummonerRepository leagueSummonerRepository;
     private final SummonerRepository summonerRepository;
     private final LeagueRepository leagueRepository;
@@ -78,12 +81,17 @@ public class SummonerService {
 
                 league = leagueRepository.save(newLeague);
             }
-            LeagueSummoner leagueSummoner = LeagueSummoner.builder()
-                    .leagueSummonerId(new LeagueSummonerId(
-                        leagueId, puuid, now
-                    ))
-                    .summoner(summoner)
-                    .league(league)
+
+            LeagueSummoner leagueSummoner = leagueSummonerRepository.findBy(puuid, league.getLeagueId());
+            if (leagueSummoner == null) {
+                leagueSummoner = leagueSummonerRepository.save(LeagueSummoner.builder()
+                        .puuid(puuid)
+                        .leagueId(league.getLeagueId())
+                        .build());
+            }
+
+            LeagueSummonerDetail leagueSummonerDetail = LeagueSummonerDetail.builder()
+                    .leagueSummonerId(leagueSummoner.getId())
                     .leaguePoints(leagueEntryDTO.getLeaguePoints())
                     .rank(leagueEntryDTO.getRank())
                     .wins(leagueEntryDTO.getWins())
@@ -94,7 +102,7 @@ public class SummonerService {
                     .hotStreak(leagueEntryDTO.isHotStreak())
                     .build();
 
-            leagueSummonerRepository.save(leagueSummoner);
+            leagueSummonerDetailJpaRepository.save(leagueSummonerDetail);
         }
 
         return SummonerResponse.builder()

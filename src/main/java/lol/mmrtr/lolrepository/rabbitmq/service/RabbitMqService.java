@@ -2,10 +2,12 @@ package lol.mmrtr.lolrepository.rabbitmq.service;
 
 import com.rabbitmq.client.Channel;
 import lol.mmrtr.lolrepository.domain.league.entity.League;
+import lol.mmrtr.lolrepository.domain.league.entity.LeagueSummonerDetail;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueRepository;
-import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
-import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummonerId;
-import lol.mmrtr.lolrepository.domain.league_summoner.repository.LeagueSummonerRepository;
+import lol.mmrtr.lolrepository.domain.league.entity.LeagueSummoner;
+import lol.mmrtr.lolrepository.domain.league.entity.id.LeagueSummonerId;
+import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerDetailJpaRepository;
+import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerRepository;
 import lol.mmrtr.lolrepository.domain.match.entity.Challenges;
 import lol.mmrtr.lolrepository.domain.match.entity.Match;
 import lol.mmrtr.lolrepository.domain.match.entity.MatchSummoner;
@@ -60,6 +62,7 @@ public class RabbitMqService {
     private final MatchSummonerRepository matchSummonerRepository;
     private final MatchTeamRepository matchTeamRepository;
     private final ChallengesRepository challengesRepository;
+    private final LeagueSummonerDetailJpaRepository leagueSummonerDetailJpaRepository;
 
     @RabbitListener(queues = "mmrtr.matchId", containerFactory = "batchRabbitListenerContainerFactory")
     public void receiveMessage(List<String> matchIds) {
@@ -105,12 +108,11 @@ public class RabbitMqService {
                 summonerRedisRepository.delete(renewalSession);
                 log.info("유저 갱신 완료 {}", puuid);
             } else {
-
                 // account, summoner 갱신
                 AccountDto accountDto = RiotAPI.account(platform).byPuuid(puuid);
                 Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
 
-                Summoner saveSummoner = summonerRepository.save(summoner);
+                summonerRepository.save(summoner);
 
                 renewalSession.summonerUpdate();
                 summonerRedisRepository.save(renewalSession);
@@ -129,18 +131,29 @@ public class RabbitMqService {
                             );
                             league = leagueRepository.save(newLeague);
                         }
-                        LeagueSummoner leagueSummoner = new LeagueSummoner(
-                                new LeagueSummonerId(
-                                        league.getLeagueId(),
-                                        puuid,
-                                        now
-                                ),
-                                saveSummoner,
-                                league,
-                                leagueEntryDTO
-                        );
 
-                        leagueSummonerRepository.save(leagueSummoner);
+                        LeagueSummoner leagueSummoner = leagueSummonerRepository.findBy(puuid, league.getLeagueId());
+                        if (leagueSummoner == null) {
+                            leagueSummoner = leagueSummonerRepository.save(LeagueSummoner.builder()
+                                    .puuid(puuid)
+                                    .leagueId(league.getLeagueId())
+                                    .build());
+                        }
+
+                        LeagueSummonerDetail leagueSummonerDetail = LeagueSummonerDetail.builder()
+                                .leagueSummonerId(leagueSummoner.getId())
+                                .leaguePoints(leagueEntryDTO.getLeaguePoints())
+                                .rank(leagueEntryDTO.getRank())
+                                .wins(leagueEntryDTO.getWins())
+                                .losses(leagueEntryDTO.getLosses())
+                                .veteran(leagueEntryDTO.isVeteran())
+                                .inactive(leagueEntryDTO.isInactive())
+                                .freshBlood(leagueEntryDTO.isFreshBlood())
+                                .hotStreak(leagueEntryDTO.isHotStreak())
+                                .build();
+
+                        leagueSummonerDetailJpaRepository.save(leagueSummonerDetail);
+
                     }
 
                     renewalSession.leagueUpdate();
