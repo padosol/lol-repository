@@ -10,6 +10,7 @@ import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -26,13 +27,13 @@ public class TimeLine {
     public static class Builder{
         private Platform platform;
         private String matchId;
-        private List<String> matchIds;
+        private Collection<String> matchIds;
 
         public Builder(String matchId) {
             this.matchId = matchId;
         }
 
-        public Builder(List<String> matchIds) {
+        public Builder(Collection<String> matchIds) {
             this.matchIds = matchIds;
         }
 
@@ -91,7 +92,7 @@ public class TimeLine {
         return new Builder(matchId).platform(this.platform).get();
     }
 
-    public List<TimelineDto> byMatchIds(List<String> matchIds) {
+    public List<TimelineDto> byMatchIds(Collection<String> matchIds) {
         return new Builder(matchIds).platform(this.platform).getAll();
     }
 

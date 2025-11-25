@@ -20,7 +20,7 @@ spring:
           order_inserts: true
           order_updates: true
 
-    show-sql: true
+    show-sql: false
 
   data:
     redis:
