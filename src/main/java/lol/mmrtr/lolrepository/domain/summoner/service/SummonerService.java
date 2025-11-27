@@ -19,6 +19,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Set;
@@ -44,11 +46,11 @@ public class SummonerService {
      */
     @Transactional
     public SummonerResponse getSummonerInfo(String region, String gameName, String tagLine) {
-        LocalDateTime now = LocalDateTime.now();
-
         Platform platform = Platform.valueOfName(region);
 
-        AccountDto accountDto = RiotAPI.account(platform).byRiotId(gameName, tagLine);
+        AccountDto accountDto = RiotAPI
+                .account(platform)
+                .byRiotId(gameName, tagLine);
         String puuid = accountDto.getPuuid();
 
         SummonerDTO summonerDTO = RiotAPI.summoner(platform).byPuuid(puuid);

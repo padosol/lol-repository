@@ -8,6 +8,7 @@ import lol.mmrtr.lolrepository.domain.league.entity.LeagueSummoner;
 import lol.mmrtr.lolrepository.domain.league.entity.id.LeagueSummonerId;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerDetailJpaRepository;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerRepository;
+import lol.mmrtr.lolrepository.domain.league.service.LeagueService;
 import lol.mmrtr.lolrepository.domain.match.entity.Challenges;
 import lol.mmrtr.lolrepository.domain.match.entity.Match;
 import lol.mmrtr.lolrepository.domain.match.entity.MatchSummoner;
@@ -16,6 +17,7 @@ import lol.mmrtr.lolrepository.domain.match.repository.ChallengesRepository;
 import lol.mmrtr.lolrepository.domain.match.repository.MatchRepository;
 import lol.mmrtr.lolrepository.domain.match.repository.MatchSummonerRepository;
 import lol.mmrtr.lolrepository.domain.match.repository.MatchTeamRepository;
+import lol.mmrtr.lolrepository.domain.match.service.MatchService;
 import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
 import lol.mmrtr.lolrepository.domain.summoner.repository.SummonerRepository;
 import lol.mmrtr.lolrepository.rabbitmq.dto.SummonerMessage;
@@ -54,24 +56,24 @@ import java.util.stream.Collectors;
 public class RabbitMqService {
 
     private final SummonerRepository summonerRepository;
-    private final LeagueRepository leagueRepository;
-    private final LeagueSummonerRepository leagueSummonerRepository;
     private final SummonerRedisRepository summonerRedisRepository;
     private final RabbitTemplate rabbitTemplate;
-    private final MatchRepository matchRepository;
-    private final MatchSummonerRepository matchSummonerRepository;
-    private final MatchTeamRepository matchTeamRepository;
-    private final ChallengesRepository challengesRepository;
-    private final LeagueSummonerDetailJpaRepository leagueSummonerDetailJpaRepository;
+
+    private final MatchService matchService;
+    private final LeagueService leagueService;
+
 
     @RabbitListener(queues = "mmrtr.matchId", containerFactory = "batchRabbitListenerContainerFactory")
     public void receiveMessage(List<String> matchIds) {
         log.info("MatchId: {}", matchIds);
-    }
+        String s = matchIds.get(0);
+        String platform = s.substring(0, 2);
 
-    @RabbitListener(queues = "mmrtr.matchId", containerFactory = "batchRabbitListenerContainerFactory")
-    public void receiveMessage2(List<String> matchIds) {
-        log.info("MatchId2: {}", matchIds);
+        List<MatchDto> matchDtos = RiotAPI.match(Platform.valueOf(platform)).byMatchIds(matchIds);
+        List<TimelineDto> timelineDtos = RiotAPI.timeLine(Platform.valueOf(platform)).byMatchIds(matchIds);
+
+        matchService.addAllMatch(matchDtos, timelineDtos);
+
     }
 
     @Transactional
@@ -120,41 +122,7 @@ public class RabbitMqService {
                 // league 갱신
                 if (!renewalSession.isLeagueUpdate()) {
                     Set<LeagueEntryDTO> leagueEntryDTOS = RiotAPI.league(platform).byPuuid(puuid);
-                    for (LeagueEntryDTO leagueEntryDTO : leagueEntryDTOS) {
-                        String leagueId = leagueEntryDTO.getLeagueId();
-                        League league = leagueRepository.findById(leagueId);
-                        if (league == null) {
-                            League newLeague = new League(
-                                    leagueEntryDTO.getLeagueId(),
-                                    leagueEntryDTO.getTier(),
-                                    leagueEntryDTO.getQueueType()
-                            );
-                            league = leagueRepository.save(newLeague);
-                        }
-
-                        LeagueSummoner leagueSummoner = leagueSummonerRepository.findBy(puuid, league.getLeagueId());
-                        if (leagueSummoner == null) {
-                            leagueSummoner = leagueSummonerRepository.save(LeagueSummoner.builder()
-                                    .puuid(puuid)
-                                    .leagueId(league.getLeagueId())
-                                    .build());
-                        }
-
-                        LeagueSummonerDetail leagueSummonerDetail = LeagueSummonerDetail.builder()
-                                .leagueSummonerId(leagueSummoner.getId())
-                                .leaguePoints(leagueEntryDTO.getLeaguePoints())
-                                .rank(leagueEntryDTO.getRank())
-                                .wins(leagueEntryDTO.getWins())
-                                .losses(leagueEntryDTO.getLosses())
-                                .veteran(leagueEntryDTO.isVeteran())
-                                .inactive(leagueEntryDTO.isInactive())
-                                .freshBlood(leagueEntryDTO.isFreshBlood())
-                                .hotStreak(leagueEntryDTO.isHotStreak())
-                                .build();
-
-                        leagueSummonerDetailJpaRepository.save(leagueSummonerDetail);
-
-                    }
+                    leagueService.addAllLeague(puuid, leagueEntryDTOS);
 
                     renewalSession.leagueUpdate();
                     summonerRedisRepository.save(renewalSession);
@@ -166,49 +134,14 @@ public class RabbitMqService {
 
                     // 20 게임에 대해서만 즉시 추가
                     List<String> firstInsertMatchIds = matchAll.subList(0, 20);
-                    List<Match> matches = matchRepository.findAllByIds(firstInsertMatchIds);
+                    List<Match> matches = matchService.findAllMatch(firstInsertMatchIds);
                     Set<String> findMatchIds = matches.stream().map(Match::getMatchId).collect(Collectors.toSet());
 
                     Set<String> insertMatchIds = firstInsertMatchIds.stream().filter(matchId -> !findMatchIds.contains(matchId)).collect(Collectors.toSet());
                     List<MatchDto> matchDtos = RiotAPI.match(platform).byMatchIds(insertMatchIds);
                     List<TimelineDto> timelineDtos = RiotAPI.timeLine(platform).byMatchIds(insertMatchIds);
 
-                    // 중복 등록 방지를 위해 Match 는 Lock 을 거는게 좋아보임
-                    for (MatchDto matchDto : matchDtos) {
-                        Match match = matchRepository.save(new Match(matchDto));
-
-                        List<ParticipantDto> participants = matchDto.getInfo().getParticipants();
-
-                        List<MatchSummoner> matchSummoners = new ArrayList<>();
-                        List<Challenges> challenges = new ArrayList<>();
-                        for (ParticipantDto participant : participants) {
-                            MatchSummoner matchSummoner = MatchSummoner.of(match, participant);
-                            ChallengesDto challengesDto = participant.getChallenges();
-
-                            matchSummoners.add(matchSummoner);
-                            challenges.add(Challenges.of(
-                                    matchSummoner, challengesDto
-                            ));
-                        }
-
-//                        matchSummonerRepository.bulkSave(matchSummoners);
-                        matchSummonerRepository.saveAll(matchSummoners);
-                        challengesRepository.saveAll(challenges);
-
-                        List<TeamDto> teams = matchDto.getInfo().getTeams();
-                        List<MatchTeam> matchTeams = new ArrayList<>();
-                        for (TeamDto team : teams) {
-                            MatchTeam matchTeam = MatchTeam.of(match, team);
-                            matchTeams.add(matchTeam);
-                        }
-
-//                        matchTeamRepository.bulkSave(matchTeams);
-                        matchTeamRepository.saveAll(matchTeams);
-                    }
-
-                    for (TimelineDto timelineDto : timelineDtos) {
-
-                    }
+                    matchService.addAllMatch(matchDtos, timelineDtos);
 
                     // 나머지 게임은 백그라운드로 처리함.
                     List<String> backgroundProgressMatchIds = matchAll.subList(20, matchAll.size());

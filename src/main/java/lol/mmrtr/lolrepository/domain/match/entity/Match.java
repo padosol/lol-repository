@@ -25,11 +25,11 @@ public class Match {
     private String dateVersion;
 
     @BatchSize(size = 100)
-    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY)
     private List<MatchSummoner> matchSummoners;
 
     @BatchSize(size = 20)
-    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY)
     private List<MatchTeam> matchTeams;
 
     // info
