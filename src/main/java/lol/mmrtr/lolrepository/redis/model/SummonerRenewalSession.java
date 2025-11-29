@@ -20,7 +20,7 @@ public class SummonerRenewalSession implements Serializable {
     private boolean leagueUpdate;
     private boolean matchUpdate;
 
-    public SummonerRenewalSession() {};
+    public SummonerRenewalSession() {}
     public SummonerRenewalSession(String puuid) {
         this.puuid = puuid;
         this.summonerUpdate = false;

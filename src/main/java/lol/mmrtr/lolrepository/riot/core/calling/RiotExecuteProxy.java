@@ -20,7 +20,7 @@ public class RiotExecuteProxy implements RiotExecute{
     @Override
     public <T> CompletableFuture<T> execute(Class<T> clazz, URI uri) {
         CompletableFuture<T> result = execute.execute(clazz, uri);
-        log.info("URI: {}", uri);
+//        log.info("URI: {}", uri);
 
         return result;
 
