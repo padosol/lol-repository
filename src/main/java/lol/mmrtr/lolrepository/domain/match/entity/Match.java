@@ -75,7 +75,7 @@ public class Match {
         this.queueId = matchDto.getInfo().getQueueId();
         this.platformId = matchDto.getInfo().getPlatformId();
         this.tournamentCode = matchDto.getInfo().getTournamentCode();
-        this.season = 23;
+        this.season = 25;
         this.gameCreateDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameCreation()), ZoneId.systemDefault());
         this.gameEndDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameEndTimestamp()), ZoneId.systemDefault());
         this.gameStartDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameStartTimestamp()), ZoneId.systemDefault());

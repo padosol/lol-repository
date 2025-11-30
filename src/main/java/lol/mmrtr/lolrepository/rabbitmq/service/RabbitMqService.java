@@ -101,10 +101,13 @@ public class RabbitMqService {
             Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
 
             summonerRepository.save(summoner);
+            log.info("유저 갱신 완료 {}", puuid);
 
             // league 갱신
             Set<LeagueEntryDTO> leagueEntryDTOS = RiotAPI.league(platform).byPuuid(puuid);
             leagueService.addAllLeague(puuid, leagueEntryDTOS);
+
+            log.info("리그 정보 갱신 완료 {}", puuid);
 
             // match 갱신
             List<String> matchAll = RiotAPI.matchList(platform).byPuuid(puuid).getAll();
@@ -119,6 +122,8 @@ public class RabbitMqService {
             List<TimelineDto> timelineDtos = RiotAPI.timeLine(platform).byMatchIds(insertMatchIds);
 
             matchService.addAllMatch(matchDtos, timelineDtos);
+
+            log.info("매치 정보 갱신 완료 {}", puuid);
 
             // 나머지 게임은 백그라운드로 처리함.
             List<String> backgroundProgressMatchIds = matchAll.subList(20, matchAll.size());

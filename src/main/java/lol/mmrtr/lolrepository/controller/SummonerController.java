@@ -1,6 +1,6 @@
-package lol.mmrtr.lolrepository.domain.summoner.controller;
+package lol.mmrtr.lolrepository.controller;
 
-import lol.mmrtr.lolrepository.domain.summoner.dto.response.SummonerResponse;
+import lol.mmrtr.lolrepository.controller.dto.response.SummonerResponse;
 import lol.mmrtr.lolrepository.domain.summoner.service.SummonerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

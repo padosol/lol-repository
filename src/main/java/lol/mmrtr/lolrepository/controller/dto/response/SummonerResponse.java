@@ -1,4 +1,4 @@
-package lol.mmrtr.lolrepository.domain.summoner.dto.response;
+package lol.mmrtr.lolrepository.controller.dto.response;
 
 import lol.mmrtr.lolrepository.riot.dto.league.LeagueEntryDTO;
 import lombok.*;
