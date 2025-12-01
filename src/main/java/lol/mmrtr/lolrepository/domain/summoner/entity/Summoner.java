@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Getter
 @Entity
@@ -41,4 +42,11 @@ public class Summoner{
         this.searchName = (accountDto.getGameName().replace(" ", "") + "#" + accountDto.getTagLine()).toLowerCase();
         this.revisionClickDate = LocalDateTime.now();
     }
+
+    public void initRevisionDate() {
+        LocalDateTime revisionDateTime = LocalDateTime.of(2000, 1, 1, 1, 1, 1);
+        this.revisionDate = revisionDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        this.revisionClickDate = revisionDateTime;
+    }
+
 }

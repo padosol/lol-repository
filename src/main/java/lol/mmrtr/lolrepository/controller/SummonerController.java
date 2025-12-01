@@ -33,4 +33,14 @@ public class SummonerController {
 
         return ResponseEntity.ok(summonerInfo);
     }
+
+    @GetMapping("/{puuid}")
+    public ResponseEntity<SummonerResponse> getSummonerByPuuid(
+            @PathVariable("region") String region,
+            @PathVariable("puuid") String puuid
+    ) {
+        SummonerResponse summonerInfoByPuuid = summonerService.getSummonerInfoByPuuid(region, puuid);
+
+        return ResponseEntity.ok(summonerInfoByPuuid);
+    }
 }

@@ -62,7 +62,9 @@ public class SummonerService {
         SummonerDTO summonerDTO = RiotAPI.summoner(platform).byPuuid(puuid);
         Set<LeagueEntryDTO> leagueEntryDTOS = RiotAPI.league(platform).byPuuid(puuid);
 
+        // 유저 갱신 시간 이슈 TODO
         Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
+        summoner.initRevisionDate();
 
         summonerRepository.save(summoner);
 
@@ -115,4 +117,72 @@ public class SummonerService {
                 .build();
     }
 
+    public SummonerResponse getSummonerInfoByPuuid(String region, String puuid) {
+        Platform platform = Platform.valueOfName(region);
+
+        AccountDto accountDto = RiotAPI
+                .account(platform)
+                .byPuuid(puuid);
+        if(accountDto.isError()) {
+            log.info("존재하지 않는 puuid 입니다. {}", puuid);
+            throw new CoreException(ErrorType.NOT_FOUND_USER, "존재하지 않는 PUUID 입니다.");
+        }
+
+        SummonerDTO summonerDTO = RiotAPI.summoner(platform).byPuuid(puuid);
+        Set<LeagueEntryDTO> leagueEntryDTOS = RiotAPI.league(platform).byPuuid(puuid);
+
+        // 유저 갱신 시간 이슈 TODO
+        Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
+        summoner.initRevisionDate();
+
+        summonerRepository.save(summoner);
+
+        for (LeagueEntryDTO leagueEntryDTO : leagueEntryDTOS) {
+            String leagueId = leagueEntryDTO.getLeagueId();
+            League league = leagueRepository.findById(leagueId);
+            if (league == null) {
+                League newLeague = League.builder()
+                        .leagueId(leagueEntryDTO.getLeagueId())
+                        .queue(leagueEntryDTO.getQueueType())
+                        .tier(leagueEntryDTO.getTier())
+                        .build();
+
+                league = leagueRepository.save(newLeague);
+            }
+
+            LeagueSummoner leagueSummoner = leagueSummonerRepository.findBy(puuid, league.getLeagueId());
+            if (leagueSummoner == null) {
+                leagueSummoner = leagueSummonerRepository.save(LeagueSummoner.builder()
+                        .puuid(puuid)
+                        .leagueId(league.getLeagueId())
+                        .build());
+            }
+
+            LeagueSummonerDetail leagueSummonerDetail = LeagueSummonerDetail.builder()
+                    .leagueSummonerId(leagueSummoner.getId())
+                    .leaguePoints(leagueEntryDTO.getLeaguePoints())
+                    .rank(leagueEntryDTO.getRank())
+                    .wins(leagueEntryDTO.getWins())
+                    .losses(leagueEntryDTO.getLosses())
+                    .veteran(leagueEntryDTO.isVeteran())
+                    .inactive(leagueEntryDTO.isInactive())
+                    .freshBlood(leagueEntryDTO.isFreshBlood())
+                    .hotStreak(leagueEntryDTO.isHotStreak())
+                    .build();
+
+            leagueSummonerDetailJpaRepository.save(leagueSummonerDetail);
+        }
+
+        return SummonerResponse.builder()
+                .puuid(accountDto.getPuuid())
+                .gameName(accountDto.getGameName())
+                .tagLine(accountDto.getTagLine())
+                .id(summonerDTO.getId())
+                .accountId(summonerDTO.getAccountId())
+                .profileIconId(summonerDTO.getProfileIconId())
+                .revisionDate(summonerDTO.getRevisionDate())
+                .summonerLevel(summonerDTO.getSummonerLevel())
+                .leagueEntryDTOS(leagueEntryDTOS)
+                .build();
+    }
 }
