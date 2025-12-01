@@ -1,0 +1,22 @@
+package lol.mmrtr.lolrepository.domain.match.entity.id;
+
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.EmbeddedId;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
+import java.util.Objects;
+
+@Getter
+@NoArgsConstructor
+@AllArgsConstructor
+@Embeddable
+@EqualsAndHashCode
+public class ChallengesId implements Serializable {
+
+    private String puuid;
+    private String matchId;
+}

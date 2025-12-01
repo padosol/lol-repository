@@ -4,13 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import lol.mmrtr.lolrepository.bucket.BucketService;
+import lol.mmrtr.lolrepository.domain.match.service.MatchService;
 import lol.mmrtr.lolrepository.redis.model.MatchRenewalSession;
 import lol.mmrtr.lolrepository.riot.core.api.RiotAPI;
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
 import lol.mmrtr.lolrepository.riot.dto.match_timeline.TimelineDto;
 import lol.mmrtr.lolrepository.riot.type.Platform;
-import lol.mmrtr.lolrepository.service.MatchService;
-import lol.mmrtr.lolrepository.service.TimelineService;
+import lol.mmrtr.lolrepository.domain.service.TimelineService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.Message;
@@ -28,7 +28,7 @@ import java.util.concurrent.ExecutionException;
 
 
 @Slf4j
-@Service
+//@Service
 @RequiredArgsConstructor
 public class RedisSubscriberListener implements MessageListener {
 
@@ -90,7 +90,7 @@ public class RedisSubscriberListener implements MessageListener {
             }
 
             List<MatchDto> matchDtoList = matchDtoFutureList.stream().map(CompletableFuture::join).toList();
-            matchService.bulkSave(matchDtoList);
+//            matchService.bulkSave(matchDtoList);
 
             List<TimelineDto> timelineDtoList = timelineFutureList.stream().map(CompletableFuture::join).toList();
             timelineService.bulkSave(timelineDtoList);
@@ -101,6 +101,5 @@ public class RedisSubscriberListener implements MessageListener {
             //
             e.printStackTrace();
         }
-
     }
 }

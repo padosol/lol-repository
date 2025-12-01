@@ -9,7 +9,7 @@ spring:
     password: 1234
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: create
     properties:
       hibernate:
         format_sql: true
@@ -20,12 +20,19 @@ spring:
           order_inserts: true
           order_updates: true
 
-    show-sql: true
+    show-sql: false
 
   data:
     redis:
       host: localhost
       port: 6379
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
   kafka:
     consumer:
       bootstrap-servers: "localhost:10000,localhost:10001,localhost:10002"
@@ -35,4 +42,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health, metrics
+
+rabbitmq:
+  queue.name: sample.queue
+  exchange.name: sample.exchange
+  routing.key: sample.key
