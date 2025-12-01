@@ -45,19 +45,4 @@ public class RedisConfig {
         return redisTemplate;
     }
 
-
-    /**
-     * Redis pub/sub 메시지 처리 Listener
-     */
-    @Bean
-    public RedisMessageListenerContainer redisMessageListenerContainer(
-            RedisConnectionFactory redisConnectionFactory,
-            RedisSubscriberListener redisSubscriberListener
-    ) {
-        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-        container.setConnectionFactory(redisConnectionFactory);
-        container.addMessageListener(redisSubscriberListener, new ChannelTopic("matchId"));
-
-        return container;
-    }
 }

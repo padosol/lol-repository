@@ -9,6 +9,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -28,8 +29,48 @@ public class RabbitMqConfig {
     private String rabbitmqPassword;
 
     @Bean
+    public Queue summonerQueue() {
+        return QueueBuilder.durable("mmrtr.summoner")
+                .withArgument("x-dead-letter-exchange", "summoner.dlx.exchange")
+                .withArgument("x-dead-letter-routing-key", "deadLetter")
+                .build();
+    }
+
+    @Bean Queue dlxSummonerQueue() {
+        return new Queue("mmrtr.summoner.dlx", true);
+    }
+
+    @Bean
+    public TopicExchange topicExchange() {
+        return new TopicExchange("mmrtr.exchange");
+    }
+
+    @Bean
+    public DirectExchange summonerDlxExchange() {
+        return new DirectExchange("summoner.dlx.exchange");
+    }
+
+    @Bean
+    public Binding summonerBinding() {
+        return BindingBuilder
+                .bind(summonerQueue())
+                .to(topicExchange())
+                .with("mmrtr.key");
+    }
+
+    @Bean
+    public Binding summonerDlxBinding() {
+        return BindingBuilder
+                .bind(dlxSummonerQueue())
+                .to(summonerDlxExchange())
+                .with("deadLetter");
+    }
+
+
+
+    @Bean
     public Queue matchIdQueue() {
-        return new Queue("mmrtr.mathId");
+        return new Queue("mmrtr.matchId");
     }
 
     @Bean
@@ -74,27 +115,38 @@ public class RabbitMqConfig {
     }
 
     /* 리스너 펙토리 */
-//    @Bean
-//    public SimpleRabbitListenerContainerFactory simpleRabbitListenerContainerFactory() {
-//        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-//        factory.setConnectionFactory(connectionFactory());
-//        factory.setMessageConverter(jackson2JsonMessageConverter());
-//
-//        // Prefetch 설정
-//        factory.setPrefetchCount(20);
-//
-//        // 동시 소비자 수 설정
-//        factory.setConcurrentConsumers(2);
-//        factory.setMaxConcurrentConsumers(5);
-//
-//        // 배치 크기 설정
-//        factory.setBatchSize(50);
-//
-//        // 처리 간격 설정
-//        factory.setConsumerBatchEnabled(true);
-//        factory.setReceiveTimeout(1000L);
-//
-//        return factory;
-//    }
+    @Bean
+    public SimpleRabbitListenerContainerFactory simpleRabbitListenerContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            ConnectionFactory factory
+    ) {
+        SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
+        configurer.configure(simpleFactory, factory);
+
+        simpleFactory.setPrefetchCount(10);
+        simpleFactory.setReceiveTimeout(1000L);
+
+        return simpleFactory;
+    }
+
+    @Bean
+    public SimpleRabbitListenerContainerFactory batchRabbitListenerContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            ConnectionFactory factory
+    ) {
+
+        SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
+        configurer.configure(simpleFactory, factory);
+
+        simpleFactory.setPrefetchCount(20);
+        simpleFactory.setReceiveTimeout(5000L);
+
+        simpleFactory.setBatchListener(true);
+        simpleFactory.setBatchSize(20);
+
+        simpleFactory.setConsumerBatchEnabled(true);
+
+        return simpleFactory;
+    }
 
 }

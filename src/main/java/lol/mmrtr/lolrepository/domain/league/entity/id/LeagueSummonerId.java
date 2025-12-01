@@ -1,4 +1,4 @@
-package lol.mmrtr.lolrepository.domain.league_summoner.entity;
+package lol.mmrtr.lolrepository.domain.league.entity.id;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;

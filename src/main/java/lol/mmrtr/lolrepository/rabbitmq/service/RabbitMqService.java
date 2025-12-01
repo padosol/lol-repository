@@ -1,31 +1,20 @@
 package lol.mmrtr.lolrepository.rabbitmq.service;
 
 import com.rabbitmq.client.Channel;
-import lol.mmrtr.lolrepository.domain.league.entity.League;
-import lol.mmrtr.lolrepository.domain.league.repository.LeagueRepository;
-import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummoner;
-import lol.mmrtr.lolrepository.domain.league_summoner.entity.LeagueSummonerId;
-import lol.mmrtr.lolrepository.domain.match.entity.Challenges;
+import lol.mmrtr.lolrepository.domain.league.service.LeagueService;
 import lol.mmrtr.lolrepository.domain.match.entity.Match;
-import lol.mmrtr.lolrepository.domain.match.entity.MatchSummoner;
-import lol.mmrtr.lolrepository.domain.match.entity.MatchTeam;
-import lol.mmrtr.lolrepository.domain.match.repository.MatchSummonerRepository;
-import lol.mmrtr.lolrepository.domain.match.repository.MatchTeamRepository;
+import lol.mmrtr.lolrepository.domain.match.service.MatchService;
 import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
+import lol.mmrtr.lolrepository.domain.summoner.repository.SummonerRepository;
 import lol.mmrtr.lolrepository.rabbitmq.dto.SummonerMessage;
 import lol.mmrtr.lolrepository.redis.model.SummonerRenewalSession;
 import lol.mmrtr.lolrepository.redis.repository.SummonerRedisRepository;
-import lol.mmrtr.lolrepository.domain.league_summoner.repository.LeagueSummonerRepository;
-import lol.mmrtr.lolrepository.domain.match.repository.MatchRepository;
-import lol.mmrtr.lolrepository.domain.summoner.repository.SummonerRepository;
-import lol.mmrtr.lolrepository.domain.match.repository.ChallengesRepository;
+import lol.mmrtr.lolrepository.redis.service.RedisLockHandler;
 import lol.mmrtr.lolrepository.riot.core.api.RiotAPI;
 import lol.mmrtr.lolrepository.riot.dto.account.AccountDto;
 import lol.mmrtr.lolrepository.riot.dto.league.LeagueEntryDTO;
-import lol.mmrtr.lolrepository.riot.dto.match.ChallengesDto;
 import lol.mmrtr.lolrepository.riot.dto.match.MatchDto;
-import lol.mmrtr.lolrepository.riot.dto.match.ParticipantDto;
-import lol.mmrtr.lolrepository.riot.dto.match.TeamDto;
+import lol.mmrtr.lolrepository.riot.dto.match_timeline.TimelineDto;
 import lol.mmrtr.lolrepository.riot.dto.summoner.SummonerDTO;
 import lol.mmrtr.lolrepository.riot.type.Platform;
 import lombok.RequiredArgsConstructor;
@@ -39,8 +28,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -51,34 +40,47 @@ import java.util.stream.Collectors;
 public class RabbitMqService {
 
     private final SummonerRepository summonerRepository;
-    private final AsyncRabbitService asyncRabbitService;
-    private final LeagueRepository leagueRepository;
-    private final LeagueSummonerRepository leagueSummonerRepository;
-    private final SummonerRedisRepository summonerRedisRepository;
     private final RabbitTemplate rabbitTemplate;
-    private final MatchRepository matchRepository;
-    private final MatchSummonerRepository matchSummonerRepository;
-    private final MatchTeamRepository matchTeamRepository;
-    private final ChallengesRepository challengesRepository;
 
-    @RabbitListener(queues = "mmrtr.matchId")
-    public void receiveMessage(String matchId) {
+    private final MatchService matchService;
+    private final LeagueService leagueService;
 
-        asyncRabbitService.processSummonerRefreshAsync(matchId);
+    private final RedisLockHandler redisLockHandler;
+
+
+    @RabbitListener(queues = "mmrtr.matchId", containerFactory = "batchRabbitListenerContainerFactory")
+    public void receiveMessage(List<String> matchIds) {
+        log.info("MatchId: {}", matchIds);
+        String s = matchIds.get(0);
+        String platform = s.substring(0, 2);
+
+        List<MatchDto> matchDtos = RiotAPI.match(Platform.valueOf(platform)).byMatchIds(matchIds);
+        List<TimelineDto> timelineDtos = RiotAPI.timeLine(Platform.valueOf(platform)).byMatchIds(matchIds);
+
+        matchService.addAllMatch(matchDtos, timelineDtos);
+
     }
 
     @Transactional
-    @RabbitListener(queues = "mmrtr.summoner")
+    @RabbitListener(queues = "mmrtr.summoner", containerFactory = "simpleRabbitListenerContainerFactory")
     public void receiveSummonerMessage(
             Channel channel,
             @Header(AmqpHeaders.DELIVERY_TAG) long tag,
             @Payload SummonerMessage summonerMessage
     ) throws IOException {
+        String puuid = summonerMessage.getPuuid();
+
+        // 가장 먼저 락을 휙득 하자.
+        boolean result = redisLockHandler.acquireLock(puuid, Duration.ofMinutes(3L));
+        if (!result) {
+            log.info("이미 전적 갱신 진행 중 입니다. {}", puuid);
+            return;
+        }
 
         try {
             Platform platform = Platform.valueOfName(summonerMessage.getPlatform());
-            String puuid = summonerMessage.getPuuid();
-            LocalDateTime now = LocalDateTime.now();
+            log.info("Lock 휙득 {}, {}", result, puuid);
+            // Lock 을 휙득 했으면 RedisTemplate 로 리그, 유저, 매치에 대한 갱신을 시작함.
 
             log.info("유저 전적 갱신 시도 {} {}", platform, puuid);
 
@@ -87,120 +89,54 @@ public class RabbitMqService {
             SummonerDTO summonerDTO = RiotAPI.summoner(platform).byPuuid(puuid);
             long newRevisionDate = summonerDTO.getRevisionDate();
 
-            SummonerRenewalSession renewalSession = summonerRedisRepository
-                    .findById(puuid).orElse(null);
-
-            if (renewalSession == null) {
-                channel.basicAck(tag, false);
+            // 넘겨 받은 갱신 시간과 기존 갱신 시간이 같다면 갱신을 할 필요가 없음.
+            if (revisionDate == newRevisionDate) {
+                log.info("유저 갱신 완료 {}", puuid);
+                redisLockHandler.releaseLock(puuid);
+                redisLockHandler.deleteSummonerRenewal(puuid);
                 return;
             }
+            // account, summoner 갱신
+            AccountDto accountDto = RiotAPI.account(platform).byPuuid(puuid);
+            Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
 
-            if (revisionDate == newRevisionDate) {
-                // 갱신 완료
+            summonerRepository.save(summoner);
+            log.info("유저 갱신 완료 {}", puuid);
 
-                summonerRedisRepository.delete(renewalSession);
-                log.info("유저 갱신 완료 {}", puuid);
-            } else {
+            // league 갱신
+            Set<LeagueEntryDTO> leagueEntryDTOS = RiotAPI.league(platform).byPuuid(puuid);
+            leagueService.addAllLeague(puuid, leagueEntryDTOS);
 
-                // account, summoner 갱신
-                AccountDto accountDto = RiotAPI.account(platform).byPuuid(puuid);
-                Summoner summoner = new Summoner(accountDto, summonerDTO, platform);
+            log.info("리그 정보 갱신 완료 {}", puuid);
 
-                Summoner saveSummoner = summonerRepository.save(summoner);
+            // match 갱신
+            List<String> matchAll = RiotAPI.matchList(platform).byPuuid(puuid).getAll();
 
-                renewalSession.summonerUpdate();
-                summonerRedisRepository.save(renewalSession);
+            // 20 게임에 대해서만 즉시 추가
+            List<String> firstInsertMatchIds = matchAll.subList(0, 20);
+            List<Match> matches = matchService.findAllMatch(firstInsertMatchIds);
+            Set<String> findMatchIds = matches.stream().map(Match::getMatchId).collect(Collectors.toSet());
 
-                // league 갱신
-                if (!renewalSession.isLeagueUpdate()) {
-                    Set<LeagueEntryDTO> leagueEntryDTOS = RiotAPI.league(platform).byPuuid(puuid);
-                    for (LeagueEntryDTO leagueEntryDTO : leagueEntryDTOS) {
-                        String leagueId = leagueEntryDTO.getLeagueId();
-                        League league = leagueRepository.findById(leagueId);
-                        if (league == null) {
-                            League newLeague = new League(
-                                    leagueEntryDTO.getLeagueId(),
-                                    leagueEntryDTO.getTier(),
-                                    leagueEntryDTO.getQueueType()
-                            );
-                            league = leagueRepository.save(newLeague);
-                        }
-                        LeagueSummoner leagueSummoner = new LeagueSummoner(
-                                new LeagueSummonerId(
-                                        league.getLeagueId(),
-                                        puuid,
-                                        now
-                                ),
-                                saveSummoner,
-                                league,
-                                leagueEntryDTO
-                        );
+            Set<String> insertMatchIds = firstInsertMatchIds.stream().filter(matchId -> !findMatchIds.contains(matchId)).collect(Collectors.toSet());
+            List<MatchDto> matchDtos = RiotAPI.match(platform).byMatchIds(insertMatchIds);
+            List<TimelineDto> timelineDtos = RiotAPI.timeLine(platform).byMatchIds(insertMatchIds);
 
-                        leagueSummonerRepository.save(leagueSummoner);
-                    }
+            matchService.addAllMatch(matchDtos, timelineDtos);
 
-                    renewalSession.leagueUpdate();
-                    summonerRedisRepository.save(renewalSession);
-                }
+            log.info("매치 정보 갱신 완료 {}", puuid);
 
-                // match 갱신
-                if (!renewalSession.isMatchUpdate()) {
-                    List<String> matchAll = RiotAPI.matchList(platform).byPuuid(puuid).getAll();
+            // 나머지 게임은 백그라운드로 처리함.
+            List<String> backgroundProgressMatchIds = matchAll.subList(20, matchAll.size());
 
-                    // 20 게임에 대해서만 즉시 추가
-                    List<String> firstInsertMatchIds = matchAll.subList(0, 20);
-                    List<Match> matches = matchRepository.findAllByIds(firstInsertMatchIds);
-                    Set<String> findMatchIds = matches.stream().map(Match::getMatchId).collect(Collectors.toSet());
-
-                    Set<String> insertMatchIds = firstInsertMatchIds.stream().filter(matchId -> !findMatchIds.contains(matchId)).collect(Collectors.toSet());
-                    List<MatchDto> matchDtos = RiotAPI.match(platform).byMatchIds(insertMatchIds);
-
-                    // 중복 등록 방지를 위해 Match 는 Lock 을 거는게 좋아보임
-                    for (MatchDto matchDto : matchDtos) {
-                        Match match = matchRepository.save(new Match(matchDto));
-
-                        List<ParticipantDto> participants = matchDto.getInfo().getParticipants();
-
-                        List<MatchSummoner> matchSummoners = new ArrayList<>();
-                        List<Challenges> challenges = new ArrayList<>();
-                        for (ParticipantDto participant : participants) {
-                            MatchSummoner matchSummoner = MatchSummoner.of(match, participant);
-                            ChallengesDto challengesDto = participant.getChallenges();
-
-                            matchSummoners.add(matchSummoner);
-                            challenges.add(Challenges.of(
-                                    matchSummoner, challengesDto
-                            ));
-                        }
-
-//                        matchSummonerRepository.bulkSave(matchSummoners);
-                        matchSummonerRepository.saveAll(matchSummoners);
-                        challengesRepository.saveAll(challenges);
-
-                        List<TeamDto> teams = matchDto.getInfo().getTeams();
-                        List<MatchTeam> matchTeams = new ArrayList<>();
-                        for (TeamDto team : teams) {
-                            MatchTeam matchTeam = MatchTeam.of(match, team);
-                            matchTeams.add(matchTeam);
-                        }
-
-//                        matchTeamRepository.bulkSave(matchTeams);
-                        matchTeamRepository.saveAll(matchTeams);
-                    }
-
-                    // 나머지 게임은 백그라운드로 처리함.
-                    List<String> backgroundProgressMatchIds = matchAll.subList(20, matchAll.size());
-                    for (String backgroundProgressMatchId : backgroundProgressMatchIds) {
-                        sendMessageByMatchId(backgroundProgressMatchId);
-                    }
-
-                    renewalSession.matchUpdate();
-                    summonerRedisRepository.save(renewalSession);
-                }
-
-                summonerRedisRepository.delete(renewalSession);
-                log.info("새로운 유저 정보 갱신 시작 {}", puuid);
+            for (String backgroundProgressMatchId : backgroundProgressMatchIds) {
+                sendMessageByMatchId(backgroundProgressMatchId);
             }
+
+            boolean b = redisLockHandler.releaseLock(puuid);
+            redisLockHandler.deleteSummonerRenewal(puuid);
+
+            log.info("Lock 해제 여부: {}, puuid: {}", b, puuid);
+            log.info("새로운 유저 정보 갱신 완료 {}", puuid);
         } catch(Exception e) {
             channel.basicReject(tag, false);
         }

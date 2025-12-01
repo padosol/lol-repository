@@ -25,11 +25,11 @@ public class Match {
     private String dateVersion;
 
     @BatchSize(size = 100)
-    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY)
     private List<MatchSummoner> matchSummoners;
 
     @BatchSize(size = 20)
-    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY)
     private List<MatchTeam> matchTeams;
 
     // info
@@ -75,7 +75,7 @@ public class Match {
         this.queueId = matchDto.getInfo().getQueueId();
         this.platformId = matchDto.getInfo().getPlatformId();
         this.tournamentCode = matchDto.getInfo().getTournamentCode();
-        this.season = 23;
+        this.season = 25;
         this.gameCreateDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameCreation()), ZoneId.systemDefault());
         this.gameEndDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameEndTimestamp()), ZoneId.systemDefault());
         this.gameStartDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameStartTimestamp()), ZoneId.systemDefault());

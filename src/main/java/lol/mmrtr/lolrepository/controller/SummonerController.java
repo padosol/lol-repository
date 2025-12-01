@@ -1,6 +1,6 @@
-package lol.mmrtr.lolrepository.domain.summoner.controller;
+package lol.mmrtr.lolrepository.controller;
 
-import lol.mmrtr.lolrepository.domain.summoner.dto.response.SummonerResponse;
+import lol.mmrtr.lolrepository.controller.dto.response.SummonerResponse;
 import lol.mmrtr.lolrepository.domain.summoner.service.SummonerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -32,5 +32,15 @@ public class SummonerController {
         SummonerResponse summonerInfo = summonerService.getSummonerInfo(region, gameName, tagLine);
 
         return ResponseEntity.ok(summonerInfo);
+    }
+
+    @GetMapping("/{puuid}")
+    public ResponseEntity<SummonerResponse> getSummonerByPuuid(
+            @PathVariable("region") String region,
+            @PathVariable("puuid") String puuid
+    ) {
+        SummonerResponse summonerInfoByPuuid = summonerService.getSummonerInfoByPuuid(region, puuid);
+
+        return ResponseEntity.ok(summonerInfoByPuuid);
     }
 }
