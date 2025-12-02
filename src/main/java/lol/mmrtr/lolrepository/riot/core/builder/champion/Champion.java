@@ -26,7 +26,7 @@ public class Champion {
 
             try {
                 UriComponentsBuilder builder = UriComponentsBuilder.newInstance();
-                builder.scheme("https").host(this.platform.getPlatform() + ".api.riotgames.com");
+                builder.scheme("https").host(this.platform.getRegion() + ".api.riotgames.com");
                 builder.path("/lol/platform/v3/champion-rotations");
 
                 return RiotAPI.getExecute().execute(ChampionInfo.class, builder.build().toUri()).get();

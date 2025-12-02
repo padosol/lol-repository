@@ -11,7 +11,7 @@ import java.util.List;
 public class ChampionInfo extends ErrorDTO {
 
     private int maxNewPlayerLevel;
-    private List<Integer>  freeChampionIdsForNewPlayers;
-    private List<Integer>  freeChampionIds;
+    private List<Integer> freeChampionIdsForNewPlayers;
+    private List<Integer> freeChampionIds;
 
 }

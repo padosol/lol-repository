@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 @RequiredArgsConstructor
 public class LeagueSummonerRepository {
@@ -19,5 +21,10 @@ public class LeagueSummonerRepository {
     public LeagueSummoner findBy(String puuid, String leagueId) {
         return leagueSummonerJpaRepository.findByPuuidAndLeagueId(puuid, leagueId).orElse(null);
     }
+
+    public LeagueSummoner findAllByPuuid(String puuid, String queue) {
+        return leagueSummonerJpaRepository.findAllByPuuidAndQueue(puuid, queue).orElse(null);
+    }
+
 
 }
