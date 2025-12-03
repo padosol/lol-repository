@@ -4,7 +4,7 @@ import lol.mmrtr.lolrepository.domain.league.entity.League;
 import lol.mmrtr.lolrepository.domain.league.entity.LeagueSummoner;
 import lol.mmrtr.lolrepository.domain.league.entity.LeagueSummonerDetail;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerDetailJpaRepository;
-import lol.mmrtr.lolrepository.controller.dto.response.SummonerResponse;
+import lol.mmrtr.lolrepository.controller.summoner.dto.response.SummonerResponse;
 import lol.mmrtr.lolrepository.domain.summoner.entity.Summoner;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueRepository;
 import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerRepository;
@@ -21,8 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
 import java.util.Set;
 
 @Slf4j
@@ -150,11 +148,12 @@ public class SummonerService {
                 league = leagueRepository.save(newLeague);
             }
 
-            LeagueSummoner leagueSummoner = leagueSummonerRepository.findBy(puuid, league.getLeagueId());
+            LeagueSummoner leagueSummoner = leagueSummonerRepository.findAllByPuuid(puuid, league.getQueue());
             if (leagueSummoner == null) {
                 leagueSummoner = leagueSummonerRepository.save(LeagueSummoner.builder()
                         .puuid(puuid)
                         .leagueId(league.getLeagueId())
+                        .queue(league.getQueue())
                         .build());
             }
 

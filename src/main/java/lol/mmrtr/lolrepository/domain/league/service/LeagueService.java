@@ -9,6 +9,7 @@ import lol.mmrtr.lolrepository.domain.league.repository.LeagueSummonerRepository
 import lol.mmrtr.lolrepository.riot.dto.league.LeagueEntryDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Set;
@@ -21,6 +22,7 @@ public class LeagueService {
     private final LeagueSummonerRepository leagueSummonerRepository;
     private final LeagueSummonerDetailJpaRepository leagueSummonerDetailJpaRepository;
 
+    @Transactional
     public void addAllLeague(String puuid, Set<LeagueEntryDTO> leagueEntryDTOS) {
         for (LeagueEntryDTO leagueEntryDTO : leagueEntryDTOS) {
             String leagueId = leagueEntryDTO.getLeagueId();
@@ -34,12 +36,19 @@ public class LeagueService {
                 league = leagueRepository.save(newLeague);
             }
 
-            LeagueSummoner leagueSummoner = leagueSummonerRepository.findBy(puuid, league.getLeagueId());
+            LeagueSummoner leagueSummoner = leagueSummonerRepository.findAllByPuuid(puuid, league.getQueue());
             if (leagueSummoner == null) {
                 leagueSummoner = leagueSummonerRepository.save(LeagueSummoner.builder()
                         .puuid(puuid)
                         .leagueId(league.getLeagueId())
+                        .queue(league.getQueue())
                         .build());
+            }
+
+            // 리그 아이디가 다르면 업데이트 함
+            if (!leagueSummoner.getLeagueId().equals(league.getLeagueId())) {
+                leagueSummoner.changeLeague(league);
+                leagueSummonerRepository.save(leagueSummoner);
             }
 
             LeagueSummonerDetail leagueSummonerDetail = LeagueSummonerDetail.builder()

@@ -23,10 +23,6 @@ public class LeagueSummonerDetail {
 
     private Long leagueSummonerId;
 
-//    @ManyToOne
-//    @JoinColumn(name = "league_summoner_id")
-//    private LeagueSummoner leagueSummoner;
-
     private int leaguePoints;
     private String rank;
     private int wins;
