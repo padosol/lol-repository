@@ -36,13 +36,12 @@ public class LeagueService {
                 league = leagueRepository.save(newLeague);
             }
 
-            // 리그는 솔로랭크와 자유랭크로 나눌 수 있다.
-            // 유저는 솔로랭크 1개 자유랭크 1개를 가질 수 있다.
             LeagueSummoner leagueSummoner = leagueSummonerRepository.findAllByPuuid(puuid, league.getQueue());
             if (leagueSummoner == null) {
                 leagueSummoner = leagueSummonerRepository.save(LeagueSummoner.builder()
                         .puuid(puuid)
                         .leagueId(league.getLeagueId())
+                        .queue(league.getQueue())
                         .build());
             }
 

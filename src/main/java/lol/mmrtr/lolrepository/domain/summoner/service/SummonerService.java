@@ -148,11 +148,12 @@ public class SummonerService {
                 league = leagueRepository.save(newLeague);
             }
 
-            LeagueSummoner leagueSummoner = leagueSummonerRepository.findBy(puuid, league.getLeagueId());
+            LeagueSummoner leagueSummoner = leagueSummonerRepository.findAllByPuuid(puuid, league.getQueue());
             if (leagueSummoner == null) {
                 leagueSummoner = leagueSummonerRepository.save(LeagueSummoner.builder()
                         .puuid(puuid)
                         .leagueId(league.getLeagueId())
+                        .queue(league.getQueue())
                         .build());
             }
 

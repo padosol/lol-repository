@@ -123,7 +123,7 @@ public class RabbitMqConfig {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
 
-        simpleFactory.setPrefetchCount(10);
+        simpleFactory.setPrefetchCount(20);
         simpleFactory.setReceiveTimeout(1000L);
 
         return simpleFactory;

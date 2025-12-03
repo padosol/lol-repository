@@ -3,7 +3,6 @@ package lol.mmrtr.lolrepository.controller.champion;
 import lol.mmrtr.lolrepository.domain.champion.service.ChampionRotateService;
 import lol.mmrtr.lolrepository.riot.dto.champion.ChampionInfo;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
