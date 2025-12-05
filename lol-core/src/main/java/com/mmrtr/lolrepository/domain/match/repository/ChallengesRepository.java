@@ -1,0 +1,269 @@
+package com.mmrtr.lolrepository.domain.match.repository;
+
+import com.mmrtr.lolrepository.domain.match.entity.Challenges;
+import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+@RequiredArgsConstructor
+public class ChallengesRepository {
+
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final ChallengesJpaRepository challengesJpaRepository;
+
+    public List<Challenges> saveAll(List<Challenges> challenges) {
+        return challengesJpaRepository.saveAll(challenges);
+    }
+
+
+    public void bulkSave(List<Challenges> challenges) {
+        String sql = " INSERT INTO challenges (" +
+                "puuid," +
+                "match_id," +
+                "assist_streak_count12," +
+                "infernal_scale_pickup," +
+                "ability_uses," +
+                "aces_before15minutes," +
+                "allied_jungle_monster_kills," +
+                "baron_takedowns," +
+                "blast_cone_opposite_opponent_count," +
+                "bounty_gold," +
+                "buffs_stolen," +
+                "complete_support_quest_in_time," +
+                "control_ward_time_coverage_in_river_or_enemy_half," +
+                "control_wards_placed," +
+                "damage_per_minute," +
+                "damage_taken_on_team_percentage," +
+                "danced_with_rift_herald," +
+                "deaths_by_enemy_champs," +
+                "dodge_skill_shots_small_window," +
+                "double_aces," +
+                "dragon_takedowns," +
+                "early_laning_phase_gold_exp_advantage," +
+                "effective_heal_and_shielding," +
+                "elder_dragon_kills_with_opposing_soul," +
+                "elder_dragon_multikills," +
+                "enemy_champion_immobilizations," +
+                "enemy_jungle_monster_kills," +
+                "epic_monster_kills_near_enemy_jungler," +
+                "epic_monster_kills_within30seconds_of_spawn," +
+                "epic_monster_steals," +
+                "epic_monster_stolen_without_smite," +
+                "first_turret_killed," +
+                "first_turret_killed_time," +
+                "fist_bump_participation," +
+                "flawless_aces," +
+                "full_team_takedown," +
+                "game_length," +
+                "get_takedowns_in_all_lanes_early_jungle_as_laner," +
+                "gold_per_minute," +
+                "had_open_nexus," +
+                "immobilize_and_kill_with_ally," +
+                "initial_buff_count," +
+                "initial_crab_count," +
+                "jungle_cs_before10minutes," +
+                "jungler_takedowns_near_damaged_epic_monster," +
+                "k_turrets_destroyed_before_plates_fall," +
+                "kda," +
+                "kill_after_hidden_with_ally," +
+                "kill_participation," +
+                "killed_champ_took_full_team_damage_survived," +
+                "killing_sprees," +
+                "kills_near_enemy_turret," +
+                "kills_on_other_lanes_early_jungle_as_laner," +
+                "kills_on_recently_healed_by_aram_pack," +
+                "kills_under_own_turret," +
+                "kills_with_help_from_epic_monster," +
+                "knock_enemy_into_team_and_kill," +
+                "land_skill_shots_early_game," +
+                "lane_minions_first10minutes," +
+                "laning_phase_gold_exp_advantage," +
+                "legendary_count," +
+                "legendary_item_used," +
+                "lost_an_inhibitor," +
+                "max_cs_advantage_on_lane_opponent," +
+                "max_kill_deficit," +
+                "max_level_lead_lane_opponent," +
+                "mejais_full_stack_in_time," +
+                "more_enemy_jungle_than_opponent," +
+                "multi_kill_one_spell," +
+                "multi_turret_rift_herald_count," +
+                "multikills," +
+                "multikills_after_aggressive_flash," +
+                "outer_turret_executes_before10minutes," +
+                "outnumbered_kills," +
+                "outnumbered_nexus_kill," +
+                "perfect_dragon_souls_taken," +
+                "perfect_game," +
+                "pick_kill_with_ally," +
+                "played_champ_select_position," +
+                "poro_explosions," +
+                "quick_cleanse," +
+                "quick_first_turret," +
+                "quick_solo_kills," +
+                "rift_herald_takedowns," +
+                "save_ally_from_death," +
+                "scuttle_crab_kills," +
+                "skillshots_dodged," +
+                "skillshots_hit," +
+                "snowballs_hit," +
+                "solo_baron_kills," +
+                "solo_kills," +
+                "stealth_wards_placed," +
+                "survived_single_digit_hp_count," +
+                "survived_three_immobilizes_in_fight," +
+                "takedown_on_first_turret," +
+                "takedowns," +
+                "takedowns_after_gaining_level_advantage," +
+                "takedowns_before_jungle_minion_spawn," +
+                "takedowns_firstxminutes," +
+                "takedowns_in_alcove," +
+                "takedowns_in_enemy_fountain," +
+                "team_baron_kills," +
+                "team_damage_percentage," +
+                "team_elder_dragon_kills," +
+                "team_rift_herald_kills," +
+                "took_large_damage_survived," +
+                "turret_plates_taken," +
+                "turret_takedowns," +
+                "turrets_taken_with_rift_herald," +
+                "twenty_minions_in3seconds_count," +
+                "two_wards_one_sweeper_count," +
+                "unseen_recalls," +
+                "vision_score_advantage_lane_opponent," +
+                "vision_score_per_minute," +
+                "void_monster_kill," +
+                "ward_takedowns," +
+                "ward_takedowns_before20m," +
+                "wards_guarded" +
+                ") VALUES (" +
+                ":puuid," +
+                ":matchId," +
+                ":assistStreakCount12," +
+                ":infernalScalePickup," +
+                ":abilityUses," +
+                ":acesBefore15Minutes," +
+                ":alliedJungleMonsterKills," +
+                ":baronTakedowns," +
+                ":blastConeOppositeOpponentCount," +
+                ":bountyGold," +
+                ":buffsStolen," +
+                ":completeSupportQuestInTime," +
+                ":controlWardTimeCoverageInRiverOrEnemyHalf," +
+                ":controlWardsPlaced," +
+                ":damagePerMinute," +
+                ":damageTakenOnTeamPercentage," +
+                ":dancedWithRiftHerald," +
+                ":deathsByEnemyChamps," +
+                ":dodgeSkillShotsSmallWindow," +
+                ":doubleAces," +
+                ":dragonTakedowns," +
+                ":earlyLaningPhaseGoldExpAdvantage," +
+                ":effectiveHealAndShielding," +
+                ":elderDragonKillsWithOpposingSoul," +
+                ":elderDragonMultikills," +
+                ":enemyChampionImmobilizations," +
+                ":enemyJungleMonsterKills," +
+                ":epicMonsterKillsNearEnemyJungler," +
+                ":epicMonsterKillsWithin30SecondsOfSpawn," +
+                ":epicMonsterSteals," +
+                ":epicMonsterStolenWithoutSmite," +
+                ":firstTurretKilled," +
+                ":firstTurretKilledTime," +
+                ":fistBumpParticipation," +
+                ":flawlessAces," +
+                ":fullTeamTakedown," +
+                ":gameLength," +
+                ":getTakedownsInAllLanesEarlyJungleAsLaner," +
+                ":goldPerMinute," +
+                ":hadOpenNexus," +
+                ":immobilizeAndKillWithAlly," +
+                ":initialBuffCount," +
+                ":initialCrabCount," +
+                ":jungleCsBefore10Minutes," +
+                ":junglerTakedownsNearDamagedEpicMonster," +
+                ":kTurretsDestroyedBeforePlatesFall," +
+                ":kda," +
+                ":killAfterHiddenWithAlly," +
+                ":killParticipation," +
+                ":killedChampTookFullTeamDamageSurvived," +
+                ":killingSprees," +
+                ":killsNearEnemyTurret," +
+                ":killsOnOtherLanesEarlyJungleAsLaner," +
+                ":killsOnRecentlyHealedByAramPack," +
+                ":killsUnderOwnTurret," +
+                ":killsWithHelpFromEpicMonster," +
+                ":knockEnemyIntoTeamAndKill," +
+                ":landSkillShotsEarlyGame," +
+                ":laneMinionsFirst10Minutes," +
+                ":laningPhaseGoldExpAdvantage," +
+                ":legendaryCount," +
+                ":legendaryItemUsed," +
+                ":lostAnInhibitor," +
+                ":maxCsAdvantageOnLaneOpponent," +
+                ":maxKillDeficit," +
+                ":maxLevelLeadLaneOpponent," +
+                ":mejaisFullStackInTime," +
+                ":moreEnemyJungleThanOpponent," +
+                ":multiKillOneSpell," +
+                ":multiTurretRiftHeraldCount," +
+                ":multikills," +
+                ":multikillsAfterAggressiveFlash," +
+                ":outerTurretExecutesBefore10Minutes," +
+                ":outnumberedKills," +
+                ":outnumberedNexusKill," +
+                ":perfectDragonSoulsTaken," +
+                ":perfectGame," +
+                ":pickKillWithAlly," +
+                ":playedChampSelectPosition," +
+                ":poroExplosions," +
+                ":quickCleanse," +
+                ":quickFirstTurret," +
+                ":quickSoloKills," +
+                ":riftHeraldTakedowns," +
+                ":saveAllyFromDeath," +
+                ":scuttleCrabKills," +
+                ":skillshotsDodged," +
+                ":skillshotsHit," +
+                ":snowballsHit," +
+                ":soloBaronKills," +
+                ":soloKills," +
+                ":stealthWardsPlaced," +
+                ":survivedSingleDigitHpCount," +
+                ":survivedThreeImmobilizesInFight," +
+                ":takedownOnFirstTurret," +
+                ":takedowns," +
+                ":takedownsAfterGainingLevelAdvantage," +
+                ":takedownsBeforeJungleMinionSpawn," +
+                ":takedownsFirstXMinutes," +
+                ":takedownsInAlcove," +
+                ":takedownsInEnemyFountain," +
+                ":teamBaronKills," +
+                ":teamDamagePercentage," +
+                ":teamElderDragonKills," +
+                ":teamRiftHeraldKills," +
+                ":tookLargeDamageSurvived," +
+                ":turretPlatesTaken," +
+                ":turretTakedowns," +
+                ":turretsTakenWithRiftHerald," +
+                ":twentyMinionsIn3SecondsCount," +
+                ":twoWardsOneSweeperCount," +
+                ":unseenRecalls," +
+                ":visionScoreAdvantageLaneOpponent," +
+                ":visionScorePerMinute," +
+                ":voidMonsterKill," +
+                ":wardTakedowns," +
+                ":wardTakedownsBefore20M," +
+                ":wardsGuarded "+
+                ") ON CONFLICT (puuid, match_id) DO NOTHING";
+
+        SqlParameterSource[] params = SqlParameterSourceUtils.createBatch(challenges);
+
+        jdbcTemplate.batchUpdate(sql, params);
+    }
+}

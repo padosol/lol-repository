@@ -1,0 +1,43 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://host.docker.internal:5432/postgres
+    driver-class-name: org.postgresql.Driver
+    username: ${USERNAME}
+    password: ${PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        use_sql_comments: true
+        jdbc:
+          batch_size: 1000
+          order_inserts: true
+          order_updates: true
+
+    show-sql: true
+
+  data:
+    redis:
+      host: host.docker.internal
+      port: 6379
+  kafka:
+    consumer:
+      bootstrap-servers: host.docker.internal:9094
+
+logging:
+  level:
+    com.mmrtr.lolrepository.riot: INFO
+
+riot.api.key: ${API_KEY}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
