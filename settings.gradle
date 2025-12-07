@@ -1,8 +1,6 @@
 rootProject.name = 'lol-repository'
 
 include(
-        "lol-client:riot",
         "lol-api",
         "lol-core",
-        "lol-storage"
 )

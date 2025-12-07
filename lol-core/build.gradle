@@ -1,37 +1,21 @@
-bootJar.enabled = true
-jar.enabled = false
-
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    compileOnly 'org.projectlombok:lombok'
-    runtimeOnly 'org.postgresql:postgresql'
-    annotationProcessor 'org.projectlombok:lombok'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
+    // WebClient (나가는 요청 처리, 리액티브 스택)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'org.postgresql:postgresql'
 
     // actuator
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
     // redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-
-    implementation 'com.bucket4j:bucket4j_jdk17-redis-common:8.12.1'
-    implementation 'com.bucket4j:bucket4j_jdk17-lettuce:8.12.1'
+    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
 
     // rabbitmq
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
-
-    // webClient
-    implementation 'org.springframework.boot:spring-boot-starter-webflux'
-
-    implementation 'org.springframework.retry:spring-retry'
-    implementation 'org.springframework:spring-aspects'
-
-    // configuration-processor
-    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 }
 
 

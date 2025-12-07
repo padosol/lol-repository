@@ -1,13 +1,9 @@
+bootJar.enabled = true
+jar.enabled = false
+
 dependencies {
+    implementation project(":lol-core")
+
     // 1. Spring WebMVC (들어오는 요청 처리, 서블릿 스택)
     implementation 'org.springframework.boot:spring-boot-starter-web'
-
-    // 2. WebClient (나가는 요청 처리, 리액티브 스택)
-    implementation 'org.springframework.boot:spring-boot-starter-webflux'
-
-    // 3. HttpInterface (선언적 클라이언트)
-    // webflux starter에 포함되어 있으나, 명시적으로 추가해도 좋음
-
-    // 4. Redisson (분산 Rate Limit 관리)
-    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0' // 최신 버전 확인
 }
