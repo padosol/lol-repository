@@ -1,6 +1,7 @@
 package com.mmrtr.lol.controller.summoner;
 
 import com.mmrtr.lol.controller.summoner.dto.response.SummonerResponse;
+import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.service.SummonerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -29,9 +30,9 @@ public class SummonerController {
             @PathVariable("gameName") String gameName,
             @PathVariable("tagLine") String tagLine
     ) {
-        SummonerResponse summonerInfo = summonerService.getSummonerInfo(region, gameName, tagLine);
+        Summoner summonerInfo = summonerService.getSummonerInfo(region, gameName, tagLine);
 
-        return ResponseEntity.ok(summonerInfo);
+        return ResponseEntity.ok(SummonerResponse.of(summonerInfo));
     }
 
     @GetMapping("/{puuid}")
@@ -39,8 +40,8 @@ public class SummonerController {
             @PathVariable("region") String region,
             @PathVariable("puuid") String puuid
     ) {
-        SummonerResponse summonerInfoByPuuid = summonerService.getSummonerInfoByPuuid(region, puuid);
+        Summoner summoner = summonerService.getSummonerInfoByPuuid(region, puuid);
 
-        return ResponseEntity.ok(summonerInfoByPuuid);
+        return ResponseEntity.ok(SummonerResponse.of(summoner));
     }
 }

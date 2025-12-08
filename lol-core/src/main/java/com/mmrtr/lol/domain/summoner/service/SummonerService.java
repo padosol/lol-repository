@@ -6,6 +6,7 @@ import com.mmrtr.lol.domain.league.entity.LeagueSummoner;
 import com.mmrtr.lol.domain.league.repository.LeagueRepository;
 import com.mmrtr.lol.domain.league.repository.LeagueSummonerRepository;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
+import com.mmrtr.lol.domain.summoner.domain.vo.Region;
 import com.mmrtr.lol.domain.summoner.entity.SummonerEntity;
 import com.mmrtr.lol.domain.summoner.repository.SummonerRepository;
 import com.mmrtr.lol.riot.core.api.RiotAPI;
@@ -36,14 +37,15 @@ public class SummonerService {
      * RIOT API 를 통해 SummonerDTO, AccountDTO 에 대한 정보를 가져온다.
      * RIOT API 를 통해 LeagueDTO 정보를 가져온다.
      * 최조 조회시 revisionDate 는 최소값이 세팅된다.
-     * @param region   지역
+     * @param regionType   지역
      * @param gameName 유저명
      * @param tagLine  유저 태그
      * @return 유저 정보
      */
     @Transactional
-    public Summoner getSummonerInfo(String region, String gameName, String tagLine) {
-        Platform platform = Platform.valueOfName(region);
+    public Summoner getSummonerInfo(String regionType, String gameName, String tagLine) {
+        Platform platform = Platform.valueOfName(regionType);
+        Region region = Region.valueOf(regionType);
 
         AccountDto accountDto = RiotAPI
                 .account(platform)
@@ -83,11 +85,12 @@ public class SummonerService {
             }
         }
 
-        return Summoner.of(accountDto, summonerDTO, leagueEntryDTOS);
+        return Summoner.of(accountDto, summonerDTO, region, leagueEntryDTOS);
     }
 
-    public Summoner getSummonerInfoByPuuid(String region, String puuid) {
-        Platform platform = Platform.valueOfName(region);
+    public Summoner getSummonerInfoByPuuid(String regionType, String puuid) {
+        Platform platform = Platform.valueOfName(regionType);
+        Region region = Region.valueOf(regionType);
 
         AccountDto accountDto = RiotAPI
                 .account(platform)
@@ -128,6 +131,6 @@ public class SummonerService {
             }
         }
 
-        return Summoner.of(accountDto, summonerDTO, leagueEntryDTOS);
+        return Summoner.of(accountDto, summonerDTO, region, leagueEntryDTOS);
     }
 }

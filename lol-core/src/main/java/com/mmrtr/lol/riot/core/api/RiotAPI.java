@@ -1,7 +1,6 @@
 package com.mmrtr.lol.riot.core.api;
 
 
-import com.mmrtr.lol.bucket.BucketService;
 import com.mmrtr.lol.riot.core.builder.account.Account;
 import com.mmrtr.lol.riot.core.builder.champion.Champion;
 import com.mmrtr.lol.riot.core.builder.league.League;
@@ -30,13 +29,11 @@ public class RiotAPI {
     private static Platform platform = Platform.KR;
     public final String API_KEY;
     private static RedisTemplate<String, Object> REDISTEMPLATE;
-    private static BucketService BUCKET_SERVICE;
 
-    public RiotAPI(String apiKey, RiotExecute execute, RedisTemplate<String, Object> redisTemplate, BucketService bucketService) {
+    public RiotAPI(String apiKey, RiotExecute execute, RedisTemplate<String, Object> redisTemplate) {
         API_KEY = apiKey;
         defaultRiotExecute = execute;
         REDISTEMPLATE = redisTemplate;
-        BUCKET_SERVICE = bucketService;
     }
 
 
@@ -52,7 +49,6 @@ public class RiotAPI {
 
         private RedisTemplate<String, Object> redisTemplate;
         private RiotExecute execute;
-        private BucketService bucketService;
         private String apiKey;
 
         public RiotApiBuilder apiKey(String apiKey) {
@@ -75,11 +71,6 @@ public class RiotAPI {
             return this;
         }
 
-        public RiotApiBuilder bucket(BucketService bucketService) {
-            this.bucketService = bucketService;
-            return this;
-        }
-
         public RiotAPI build()  {
 
             UriComponentsBuilder builder = UriComponentsBuilder.newInstance();
@@ -96,7 +87,7 @@ public class RiotAPI {
                 throw new RuntimeException();
             }
 
-            return new RiotAPI(this.apiKey, execute, this.redisTemplate, this.bucketService);
+            return new RiotAPI(this.apiKey, execute, this.redisTemplate);
         }
     }
 
