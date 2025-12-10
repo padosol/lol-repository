@@ -39,6 +39,6 @@ public class RedissonConfig {
         rateLimiter.trySetRate(RateType.OVERALL, 490, Duration.ofSeconds(10));
 
         return rateLimiter;
-    };
+    }
 
 }
