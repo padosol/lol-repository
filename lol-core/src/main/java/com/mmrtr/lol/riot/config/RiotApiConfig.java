@@ -5,6 +5,7 @@ import com.mmrtr.lol.support.error.RiotServerException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.logging.LogLevel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatusCode;
@@ -39,7 +40,8 @@ public class RiotApiConfig {
                 .requestInterceptor(distributedRateLimitInterceptor)
                 .requestInterceptor(logRequest())
                 .defaultStatusHandler(HttpStatusCode::is4xxClientError, (request, response) -> {
-                    throw new RiotClientException(response.getStatusCode(), response.getStatusText());
+                    throw new RiotClientException(
+                            response.getStatusCode(), response.getStatusText(), LogLevel.WARN);
                 })
                 .defaultStatusHandler(HttpStatusCode::is5xxServerError, (request, response) -> {
                     throw new RiotServerException(response.getStatusCode(), response.getStatusText());

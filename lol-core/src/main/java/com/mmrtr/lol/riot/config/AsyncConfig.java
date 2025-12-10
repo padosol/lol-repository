@@ -12,7 +12,7 @@ public class AsyncConfig {
     @Bean
     public Executor asyncExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(40);
+        executor.setCorePoolSize(20);
         executor.setThreadNamePrefix("Riot API Thread-");
         executor.initialize();
         return executor;

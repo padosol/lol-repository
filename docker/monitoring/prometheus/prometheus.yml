@@ -12,4 +12,4 @@ scrape_configs:
     metrics_path: '/actuator/prometheus'
     static_configs:
       # 'host.docker.internal'은 Docker 컨테이너에서 호스트 머신에 접근할 때 사용되는 특수 DNS 이름입니다.
-      - targets: ['host.docker.internal:8111']
+      - targets: ['host.docker.internal:8111', 'host.docker.internal:8100']

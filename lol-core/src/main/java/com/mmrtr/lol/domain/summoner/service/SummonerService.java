@@ -1,10 +1,9 @@
 package com.mmrtr.lol.domain.summoner.service;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
-import com.mmrtr.lol.riot.dto.account.AccountDto;
 import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.riot.dto.summoner.SummonerDto;
-import com.mmrtr.lol.riot.service.RiotApiServiceV2;
+import com.mmrtr.lol.riot.service.RiotApiService;
 import com.mmrtr.lol.riot.type.Platform;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
@@ -20,26 +19,27 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class SummonerService {
 
-    private final RiotApiServiceV2 riotApiServiceV2;
+    private final RiotApiService riotApiService;
     private final SummonerWriter summonerWriter;
 
     @Transactional
     public Summoner getSummonerInfoV2(String regionType, String gameName, String tagLine) {
-        log.info("getSummonerInfoV2 region type {} and gameName {}", regionType, gameName);
         Platform platform = Platform.valueOfName(regionType);
-
         try {
-            CompletableFuture<Summoner> summonerFuture = riotApiServiceV2.getAccountByRiotId(gameName, tagLine, platform)
+            CompletableFuture<Summoner> summonerFuture = riotApiService.getAccountByRiotId(gameName, tagLine, platform)
                     .thenCompose(accountDto -> {
+                        log.info("getSummonerInfoV2 region type {} and gameName {}", regionType, gameName);
                         String puuid = accountDto.getPuuid();
 
-                        CompletableFuture<SummonerDto> summonerDtoFuture = riotApiServiceV2.getSummonerByPuuid(puuid, platform);
-                        CompletableFuture<Set<LeagueEntryDto>> leagueEntriesFuture = riotApiServiceV2.getLeagueEntriesByPuuid(puuid, platform);
+                        CompletableFuture<SummonerDto> summonerDtoFuture = riotApiService.getSummonerByPuuid(puuid, platform);
+                        CompletableFuture<Set<LeagueEntryDto>> leagueEntriesFuture = riotApiService.getLeagueEntriesByPuuid(puuid, platform);
 
-                        return summonerDtoFuture.thenCombine(leagueEntriesFuture, (summonerDto, leagueEntryDtos) -> {
-                            summonerWriter.saveSummonerData(accountDto, summonerDto, leagueEntryDtos, platform);
-                            return Summoner.of(accountDto, summonerDto, platform.getPlatformId(), leagueEntryDtos);
-                        });
+                        return summonerDtoFuture
+                                .thenCombine(
+                                    leagueEntriesFuture,
+                                    (summonerDto, leagueEntryDtos) ->
+                            Summoner.of(accountDto, summonerDto, platform.getPlatformId(), leagueEntryDtos)
+                        );
                     });
 
             Summoner summoner = summonerFuture.join();

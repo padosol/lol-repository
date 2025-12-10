@@ -26,7 +26,7 @@ import java.util.function.Supplier;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class RiotApiServiceV2 {
+public class RiotApiService {
 
     private final RestClient riotRestClient;
     private final RiotAPIProperties riotAPIProperties;

@@ -4,7 +4,7 @@ import com.mmrtr.lol.domain.match.entity.Match;
 import com.mmrtr.lol.domain.match.service.MatchService;
 import com.mmrtr.lol.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.rabbitmq.service.MessageSender;
-import com.mmrtr.lol.riot.service.RiotApiServiceV2;
+import com.mmrtr.lol.riot.service.RiotApiService;
 import com.mmrtr.lol.riot.type.Platform;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +24,7 @@ public class MatchFindListener {
 
     private final MessageSender messageSender;
     private final MatchService matchService;
-    private final RiotApiServiceV2 riotApiServiceV2;
+    private final RiotApiService riotApiService;
 
     @RabbitListener(queues = "renewal.match.find.queue", containerFactory = "findQueueSimpleRabbitListenerContainerFactory")
     public void findMatchIdsListener(@Payload SummonerRenewalMessage summonerRenewalMessage) {
@@ -39,7 +39,7 @@ public class MatchFindListener {
         int count = 100;
 
         while (true) {
-            List<String> fetchedMatchIds = riotApiServiceV2.getMatchListByPuuid(puuid, platform, revisionDate, offset, count).join();
+            List<String> fetchedMatchIds = riotApiService.getMatchListByPuuid(puuid, platform, revisionDate, offset, count).join();
 
             if (fetchedMatchIds == null || fetchedMatchIds.isEmpty()) {
                 log.info("No more match IDs found for puuid: {} at offset: {}. Ending search.", puuid, offset);
