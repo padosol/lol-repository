@@ -4,7 +4,7 @@ package com.mmrtr.lol.riot.core.builder.league;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mmrtr.lol.riot.core.api.RiotAPI;
-import com.mmrtr.lol.riot.dto.league.LeagueEntryDTO;
+import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.riot.dto.league.LeagueListDTO;
 import com.mmrtr.lol.riot.type.Division;
 import com.mmrtr.lol.riot.type.Platform;
@@ -58,22 +58,22 @@ public class League {
             return this;
         }
 
-        public Set<LeagueEntryDTO> getLeagueEntry()  {
+        public Set<LeagueEntryDto> getLeagueEntry()  {
 
             URI uri = UriComponentsBuilder.newInstance()
                     .scheme("https")
-                    .host(RiotAPI.createRegionPath(this.platform))
+//                    .host(RiotAPI.createRegionPath(this.platform))
                     .path("/lol/league/v4/entries/by-summoner/" + this.summonerId)
                     .build()
                     .toUri();
             try {
                 ObjectMapper mapper = new ObjectMapper();
                 Object[] objects = RiotAPI.getExecute().execute(Object[].class, uri).get();
-                Set<LeagueEntryDTO> result = new HashSet<>();
+                Set<LeagueEntryDto> result = new HashSet<>();
                 for (Object object : objects) {
 
                     String objectToJson = mapper.writeValueAsString(object);
-                    LeagueEntryDTO leagueEntryDTO = mapper.readValue(objectToJson, LeagueEntryDTO.class);
+                    LeagueEntryDto leagueEntryDTO = mapper.readValue(objectToJson, LeagueEntryDto.class);
 
                     result.add(leagueEntryDTO);
                 }
@@ -85,22 +85,22 @@ public class League {
             }
         }
 
-        public Set<LeagueEntryDTO> getLeagueEntryByPuuid()  {
+        public Set<LeagueEntryDto> getLeagueEntryByPuuid()  {
 
             URI uri = UriComponentsBuilder.newInstance()
                     .scheme("https")
-                    .host(RiotAPI.createRegionPath(this.platform))
+//                    .host(RiotAPI.createRegionPath(this.platform))
                     .path("/lol/league/v4/entries/by-puuid/" + this.puuid)
                     .build()
                     .toUri();
             try {
                 ObjectMapper mapper = new ObjectMapper();
                 Object[] objects = RiotAPI.getExecute().execute(Object[].class, uri).get();
-                Set<LeagueEntryDTO> result = new HashSet<>();
+                Set<LeagueEntryDto> result = new HashSet<>();
                 for (Object object : objects) {
 
                     String objectToJson = mapper.writeValueAsString(object);
-                    LeagueEntryDTO leagueEntryDTO = mapper.readValue(objectToJson, LeagueEntryDTO.class);
+                    LeagueEntryDto leagueEntryDTO = mapper.readValue(objectToJson, LeagueEntryDto.class);
 
                     result.add(leagueEntryDTO);
                 }
@@ -116,7 +116,7 @@ public class League {
 
             URI uri = UriComponentsBuilder.newInstance()
                     .scheme("https")
-                    .host(RiotAPI.createRegionPath(this.platform))
+//                    .host(RiotAPI.createRegionPath(this.platform))
                     .path("/lol/league/v4/leagues/" + this.leagueId)
                     .build()
                     .toUri();
@@ -130,11 +130,11 @@ public class League {
 
     }
 
-    public Set<LeagueEntryDTO> bySummonerId(String summonerId) {
+    public Set<LeagueEntryDto> bySummonerId(String summonerId) {
         return new Builder().summonerId(summonerId).platform(this.platform).getLeagueEntry();
     }
 
-    public Set<LeagueEntryDTO> byPuuid(String puuid) {
+    public Set<LeagueEntryDto> byPuuid(String puuid) {
         return new Builder().puuid(puuid).platform(this.platform).getLeagueEntryByPuuid();
     }
 

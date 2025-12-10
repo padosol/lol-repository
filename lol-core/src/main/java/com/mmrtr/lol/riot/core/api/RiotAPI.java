@@ -74,7 +74,7 @@ public class RiotAPI {
         public RiotAPI build()  {
 
             UriComponentsBuilder builder = UriComponentsBuilder.newInstance();
-            builder.scheme("https").host(Platform.KR.getRegion() + ".api.riotgames.com");
+//            builder.scheme("https").host(Platform.KR.getRegion() + ".api.riotgames.com");
             builder.path("/lol/platform/v3/champion-rotations");
 
             try {
@@ -115,13 +115,13 @@ public class RiotAPI {
 
     public static RedisTemplate<String, Object> getRedistemplate() {return REDISTEMPLATE;}
 
-    public static String createRegionPath(Platform platform) {
-        return platform.getRegion() + DEFAULT_HOST;
-    }
+//    public static String createRegionPath(Platform platform) {
+//        return platform.getRegion() + DEFAULT_HOST;
+//    }
 
-    public static String createCountryPath(Platform platform) {
-        return platform.getPlatform() + DEFAULT_HOST;
-    }
+//    public static String createCountryPath(Platform platform) {
+//        return platform.getPlatform() + DEFAULT_HOST;
+//    }
 
 
 }

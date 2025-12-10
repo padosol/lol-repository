@@ -1,9 +1,7 @@
 package com.mmrtr.lol.controller.summoner.dto.response;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
-import com.mmrtr.lol.riot.dto.account.AccountDto;
-import com.mmrtr.lol.riot.dto.league.LeagueEntryDTO;
-import com.mmrtr.lol.riot.dto.summoner.SummonerDTO;
+import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -24,7 +22,7 @@ public class SummonerResponse {
     private long summonerLevel;
     private LocalDateTime revisionDate;
 
-    private Set<LeagueEntryDTO> leagueEntryDTOS;
+    private Set<LeagueEntryDto> leagueEntryDTOS;
 
 //    public static SummonerResponse of(AccountDto accountDto, SummonerDTO summonerDTO, Set<LeagueEntryDTO> leagueEntryDTOS) {
 //        return SummonerResponse.builder()
@@ -48,7 +46,7 @@ public class SummonerResponse {
                 .profileIconId(summoner.getStatusInfo().profileIconId())
                 .revisionDate(summoner.getRevisionInfo().revisionDate())
                 .summonerLevel(summoner.getStatusInfo().summonerLevel())
-                .leagueEntryDTOS(summoner.getLeagueEntryDTOS())
+                .leagueEntryDTOS(summoner.getLeagueEntryDtos())
                 .build();
     }
 }

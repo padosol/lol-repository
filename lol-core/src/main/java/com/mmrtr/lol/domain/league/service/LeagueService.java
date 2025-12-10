@@ -6,7 +6,7 @@ import com.mmrtr.lol.domain.league.entity.LeagueSummonerHistory;
 import com.mmrtr.lol.domain.league.repository.LeagueRepository;
 import com.mmrtr.lol.domain.league.repository.LeagueSummonerHistoryRepository;
 import com.mmrtr.lol.domain.league.repository.LeagueSummonerRepository;
-import com.mmrtr.lol.riot.dto.league.LeagueEntryDTO;
+import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,8 +22,8 @@ public class LeagueService {
     private final LeagueSummonerHistoryRepository leagueSummonerHistoryRepository;
 
     @Transactional
-    public void addAllLeague(String puuid, Set<LeagueEntryDTO> leagueEntryDTOS) {
-        for (LeagueEntryDTO leagueEntryDTO : leagueEntryDTOS) {
+    public void addAllLeague(String puuid, Set<LeagueEntryDto> leagueEntryDtos) {
+        for (LeagueEntryDto leagueEntryDTO : leagueEntryDtos) {
             String leagueId = leagueEntryDTO.getLeagueId();
             League league = leagueRepository.findById(leagueId);
             if (league == null) {

@@ -30,18 +30,18 @@ public class SummonerController {
             @PathVariable("gameName") String gameName,
             @PathVariable("tagLine") String tagLine
     ) {
-        Summoner summonerInfo = summonerService.getSummonerInfo(region, gameName, tagLine);
-
-        return ResponseEntity.ok(SummonerResponse.of(summonerInfo));
-    }
-
-    @GetMapping("/{puuid}")
-    public ResponseEntity<SummonerResponse> getSummonerByPuuid(
-            @PathVariable("region") String region,
-            @PathVariable("puuid") String puuid
-    ) {
-        Summoner summoner = summonerService.getSummonerInfoByPuuid(region, puuid);
+        Summoner summoner = summonerService.getSummonerInfoV2(region, gameName, tagLine);
 
         return ResponseEntity.ok(SummonerResponse.of(summoner));
     }
+
+//    @GetMapping("/{puuid}")
+//    public ResponseEntity<SummonerResponse> getSummonerByPuuid(
+//            @PathVariable("region") String region,
+//            @PathVariable("puuid") String puuid
+//    ) {
+//        Summoner summoner = summonerService.get(region, puuid);
+//
+//        return ResponseEntity.ok(SummonerResponse.of(summoner));
+//    }
 }

@@ -1,6 +1,3 @@
-server:
-  port: 8111
-
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/postgres
@@ -32,12 +29,8 @@ spring:
     username: guest
     password: guest
 
-riot.api.key: ${API_KEY}
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health, metrics
+riot:
+  api-key: ${API_KEY}
 
 rabbitmq:
   queue.name: sample.queue

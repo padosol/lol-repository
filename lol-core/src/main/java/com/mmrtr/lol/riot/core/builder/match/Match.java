@@ -61,7 +61,7 @@ public class Match {
         private CompletableFuture<MatchDto> get(String matchId) {
 
             UriComponentsBuilder builder = UriComponentsBuilder.newInstance();
-            builder.scheme("https").host(this.platform.getPlatform() + ".api.riotgames.com");
+//            builder.scheme("https").host(this.platform.getPlatform() + ".api.riotgames.com");
             builder.path("/lol/match/v5/matches/" + matchId);
 
             return RiotAPI.getExecute().execute(MatchDto.class, builder.build().toUri());

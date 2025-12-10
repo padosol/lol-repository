@@ -1,4 +1,4 @@
-package com.mmrtr.lol.config;
+package com.mmrtr.lol.riot.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -7,22 +7,14 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.util.concurrent.Executor;
 
 @Configuration
-public class ExecutorConfig {
+public class AsyncConfig {
 
-    @Bean(name = "taskExecutor")
-    public Executor taskExecutor() {
+    @Bean
+    public Executor asyncExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-
-        executor.setCorePoolSize(10);
-        executor.setMaxPoolSize(20);
-        executor.setQueueCapacity(30);
-        executor.setThreadNamePrefix("task-executor-");
-        executor.setThreadGroupName("task-thread-group");
-
+        executor.setCorePoolSize(40);
+        executor.setThreadNamePrefix("Riot API Thread-");
         executor.initialize();
-
         return executor;
     }
-
-
 }

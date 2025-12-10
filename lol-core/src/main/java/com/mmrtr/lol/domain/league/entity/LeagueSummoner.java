@@ -3,7 +3,7 @@ package com.mmrtr.lol.domain.league.entity;
 import com.mmrtr.lol.riot.type.Division;
 import com.mmrtr.lol.riot.type.Tier;
 import jakarta.persistence.*;
-import com.mmrtr.lol.riot.dto.league.LeagueEntryDTO;
+import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -76,7 +76,7 @@ public class LeagueSummoner {
         this.absolutePoints = calculatePoints();
     }
 
-    public static LeagueSummoner of(String puuid, League league, LeagueEntryDTO leagueEntryDTO) {
+    public static LeagueSummoner of(String puuid, League league, LeagueEntryDto leagueEntryDTO) {
         return new LeagueSummoner(
                 puuid,
                 league.getQueue(),
@@ -93,7 +93,7 @@ public class LeagueSummoner {
         );
     }
 
-    public void changeLeague(League league, LeagueEntryDTO leagueEntryDTO) {
+    public void changeLeague(League league, LeagueEntryDto leagueEntryDTO) {
         this.queue = league.getQueue();
         this.leagueId = league.getLeagueId();
         this.wins = leagueEntryDTO.getWins();

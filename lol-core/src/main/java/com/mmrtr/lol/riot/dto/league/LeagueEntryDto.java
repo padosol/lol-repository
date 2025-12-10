@@ -6,7 +6,7 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class LeagueEntryDTO extends ErrorDTO {
+public class LeagueEntryDto extends ErrorDTO {
 
     private String leagueId;
     private String summonerId;

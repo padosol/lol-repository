@@ -3,7 +3,7 @@ package com.mmrtr.lol.riot.core.builder.summoner;
 
 
 import com.mmrtr.lol.riot.core.api.RiotAPI;
-import com.mmrtr.lol.riot.dto.summoner.SummonerDTO;
+import com.mmrtr.lol.riot.dto.summoner.SummonerDto;
 import com.mmrtr.lol.riot.type.Platform;
 import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -49,7 +49,7 @@ public class Summoner {
         }
 
 
-        public SummonerDTO get() {
+        public SummonerDto get() {
             try {
                 return getLazy().get();
             } catch(ExecutionException | InterruptedException e) {
@@ -57,9 +57,9 @@ public class Summoner {
             }
         }
 
-        public CompletableFuture<SummonerDTO> getLazy() {
+        public CompletableFuture<SummonerDto> getLazy() {
 
-            String host = this.platform.getRegion() + RiotAPI.DEFAULT_HOST;
+//            String host = this.platform.getRegion() + RiotAPI.DEFAULT_HOST;
             String path = null;
 
             if(StringUtils.hasText(this.puuid)) {
@@ -77,23 +77,23 @@ public class Summoner {
             assert path != null;
             URI uri = UriComponentsBuilder.newInstance()
                     .scheme("https")
-                    .host(host)
+//                    .host(host)
                     .path(path).build().toUri();
 
-            return RiotAPI.getExecute().execute(SummonerDTO.class, uri);
+            return RiotAPI.getExecute().execute(SummonerDto.class, uri);
         }
 
     }
 
-    public SummonerDTO byAccount(String accountId) {
+    public SummonerDto byAccount(String accountId) {
         return new Builder().platform(this.platform).accountId(accountId).get();
     }
 
-    public SummonerDTO byPuuid(String puuid) {
+    public SummonerDto byPuuid(String puuid) {
         return new Builder().platform(this.platform).puuid(puuid).get();
     }
 
-    public CompletableFuture<SummonerDTO> byPuuidLazy(String puuid) {
+    public CompletableFuture<SummonerDto> byPuuidLazy(String puuid) {
         return new Builder().platform(this.platform).puuid(puuid).getLazy();
     }
 

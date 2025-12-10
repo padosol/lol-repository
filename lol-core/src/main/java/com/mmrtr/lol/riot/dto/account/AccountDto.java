@@ -9,5 +9,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 public class AccountDto extends ErrorDTO {
-    private String puuid, gameName, tagLine;
+    private String puuid;
+    private String gameName;
+    private String tagLine;
 }

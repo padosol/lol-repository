@@ -22,7 +22,7 @@ public class MatchSummoner {
 
     @MapsId("matchId")                  // EmbeddedId 필드명과 일치해야함
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "match_id")
+    @JoinColumn(name = "match_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private Match match;
 
     private String summonerId;
@@ -30,8 +30,8 @@ public class MatchSummoner {
     // match 정보 필요
     // summoner 정보 필요
 
-    @OneToOne(mappedBy = "matchSummoner")
-    private Challenges challenges;
+//    @OneToOne(mappedBy = "matchSummoner")
+//    private Challenges challenges;
 
     // 유저 정보
     private String riotIdGameName;

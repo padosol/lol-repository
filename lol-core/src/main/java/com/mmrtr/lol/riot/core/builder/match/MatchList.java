@@ -97,7 +97,7 @@ public class MatchList {
 
             UriComponentsBuilder builder = UriComponentsBuilder.newInstance()
                     .scheme("https")
-                    .host(platform.getPlatform() + ".api.riotgames.com")
+//                    .host(platform.getPlatform() + ".api.riotgames.com")
                     .path("/lol/match/v5/matches/by-puuid/" + this.puuid + "/ids");
 
             if(this.query != null) {
@@ -130,7 +130,7 @@ public class MatchList {
         private void getAll(MatchQuery query, List<String> matchList) {
             UriComponentsBuilder builder = UriComponentsBuilder.newInstance()
                     .scheme("https")
-                    .host(platform.getPlatform() + ".api.riotgames.com")
+//                    .host(platform.getPlatform() + ".api.riotgames.com")
                     .path("/lol/match/v5/matches/by-puuid/" + this.puuid + "/ids");
 
             builder.queryParams(query.getParams());

@@ -5,8 +5,8 @@ import com.mmrtr.lol.domain.summoner.domain.vo.Region;
 import com.mmrtr.lol.domain.summoner.domain.vo.RevisionInfo;
 import com.mmrtr.lol.domain.summoner.domain.vo.StatusInfo;
 import com.mmrtr.lol.riot.dto.account.AccountDto;
-import com.mmrtr.lol.riot.dto.league.LeagueEntryDTO;
-import com.mmrtr.lol.riot.dto.summoner.SummonerDTO;
+import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
+import com.mmrtr.lol.riot.dto.summoner.SummonerDto;
 import lombok.*;
 
 import java.time.Instant;
@@ -21,29 +21,29 @@ import java.util.Set;
 public class Summoner {
     private String puuid;
     private GameIdentity gameIdentity;
-    private Region region;
+    private String platformId;
     private StatusInfo statusInfo;
     private RevisionInfo revisionInfo;
-    private Set<LeagueEntryDTO> leagueEntryDTOS;
+    private Set<LeagueEntryDto> leagueEntryDtos;
 
     public static Summoner of(AccountDto accountDto,
-                              SummonerDTO summonerDTO,
-                              Region region,
-                              Set<LeagueEntryDTO> leagueEntryDTOS) {
+                              SummonerDto summonerDTO,
+                              String platformId,
+                              Set<LeagueEntryDto> leagueEntryDtos) {
         return Summoner.builder()
                 .puuid(accountDto.getPuuid())
                 .gameIdentity(new GameIdentity(accountDto.getGameName(), accountDto.getTagLine()))
-                .region(region)
+                .platformId(platformId)
                 .statusInfo(new StatusInfo(summonerDTO.getProfileIconId(), summonerDTO.getSummonerLevel()))
                 .revisionInfo(new RevisionInfo(
                         LocalDateTime.ofInstant(
-                                Instant.ofEpochSecond(summonerDTO.getRevisionDate()), ZoneId.systemDefault()
+                                Instant.ofEpochMilli(summonerDTO.getRevisionDate()), ZoneId.systemDefault()
                         ),
                         LocalDateTime.ofInstant(
-                                Instant.ofEpochSecond(summonerDTO.getRevisionDate()), ZoneId.systemDefault()
+                                Instant.ofEpochMilli(summonerDTO.getRevisionDate()), ZoneId.systemDefault()
                         )
                 ))
-                .leagueEntryDTOS(leagueEntryDTOS)
+                .leagueEntryDtos(leagueEntryDtos)
                 .build();
     }
 }

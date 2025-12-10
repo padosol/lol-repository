@@ -1,0 +1,42 @@
+version: '3.7'
+
+services:
+  # 1. Prometheus 서비스 정의
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090" # Prometheus 웹 UI 포트
+    volumes:
+      # 로컬 prometheus.yml 파일을 컨테이너 설정 파일 경로로 마운트
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - monitoring_network
+
+  # 2. Grafana 서비스 정의
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3010:3000" # Grafana 웹 UI 포트
+    volumes:
+      # Grafana 데이터 영속성을 위한 볼륨 (선택 사항이지만 권장)
+      - grafana_data:/var/lib/grafana
+    environment:
+      # 기본 관리자 계정 설정
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - monitoring_network
+    restart: unless-stopped # 컨테이너가 멈추지 않는 한 재시작
+
+# 네트워크 설정
+networks:
+  monitoring_network:
+    driver: bridge
+
+# 볼륨 설정
+volumes:
+  grafana_data:

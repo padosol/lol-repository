@@ -6,12 +6,10 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class SummonerDTO extends ErrorDTO {
+public class SummonerDto extends ErrorDTO {
 
-    private String accountId;
     private int profileIconId;
     private long revisionDate;
-    private String id;
     private String puuid;
     private long summonerLevel;
 

@@ -1,5 +1,17 @@
-spring:
-  data:
-    redis:
-      host: localhost
-      port: 6379
+server:
+  port: 8111
+
+management:
+  server:
+    port: 8111
+  endpoints:
+    web:
+      exposure:
+        include: "health, info, metrics, prometheus"
+  endpoint:
+    prometheus:
+      enabled: true
+
+logging:
+  level:
+    io.micrometer: DEBUG

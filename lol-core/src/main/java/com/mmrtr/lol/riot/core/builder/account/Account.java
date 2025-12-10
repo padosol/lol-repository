@@ -61,7 +61,7 @@ public class Account {
             }
 
             UriComponentsBuilder builder = UriComponentsBuilder.newInstance();
-            builder.scheme("https").host(this.platform.getPlatform() + ".api.riotgames.com");
+//            builder.scheme("https").host(this.platform.getPlatform() + ".api.riotgames.com");
 
             if(StringUtils.hasText(this.puuid)) {
                 builder.path("riot/account/v1/accounts/by-puuid/" + this.puuid);

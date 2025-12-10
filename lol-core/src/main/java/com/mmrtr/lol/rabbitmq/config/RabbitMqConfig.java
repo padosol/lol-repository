@@ -36,7 +36,8 @@ public class RabbitMqConfig {
                 .build();
     }
 
-    @Bean Queue dlxSummonerQueue() {
+    @Bean
+    public Queue dlxSummonerQueue() {
         return new Queue("mmrtr.summoner.dlx", true);
     }
 
@@ -66,8 +67,6 @@ public class RabbitMqConfig {
                 .with("deadLetter");
     }
 
-
-
     @Bean
     public Queue matchIdQueue() {
         return new Queue("mmrtr.matchId");
@@ -84,7 +83,23 @@ public class RabbitMqConfig {
                 .bind(matchIdQueue())
                 .to(matchIdExchange())
                 .with("mmrtr.routingkey.matchId");
+    }
 
+    @Bean
+    public TopicExchange renewalExchange() {
+        return new TopicExchange("renewal.topic.exchange", true, false);
+    }
+
+    @Bean
+    public Queue matchFind() {
+        return new Queue("renewal.match.find.queue", true);
+    }
+
+    @Bean
+    public Binding matchFindBinding() {
+        return BindingBuilder.bind(matchFind())
+                .to(renewalExchange())
+                .with("renewal.match.find");
     }
 
     /* RabbitMQ 연결 설정 */
@@ -123,7 +138,29 @@ public class RabbitMqConfig {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
 
-        simpleFactory.setPrefetchCount(20);
+        simpleFactory.setChannelTransacted(true);
+
+        simpleFactory.setConcurrentConsumers(10);
+        simpleFactory.setMaxConcurrentConsumers(10);
+
+        simpleFactory.setPrefetchCount(1);
+        simpleFactory.setReceiveTimeout(1000L);
+
+        return simpleFactory;
+    }
+
+    @Bean
+    public SimpleRabbitListenerContainerFactory findQueueSimpleRabbitListenerContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            ConnectionFactory factory
+    ) {
+        SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
+        configurer.configure(simpleFactory, factory);
+
+        simpleFactory.setConcurrentConsumers(5);
+        simpleFactory.setMaxConcurrentConsumers(5);
+
+        simpleFactory.setPrefetchCount(1);
         simpleFactory.setReceiveTimeout(1000L);
 
         return simpleFactory;
@@ -138,8 +175,12 @@ public class RabbitMqConfig {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
 
+        simpleFactory.setChannelTransacted(true);
+        simpleFactory.setConcurrentConsumers(1);
+        simpleFactory.setMaxConcurrentConsumers(1);
+
         simpleFactory.setPrefetchCount(20);
-        simpleFactory.setReceiveTimeout(5000L);
+        simpleFactory.setReceiveTimeout(2000L);
 
         simpleFactory.setBatchListener(true);
         simpleFactory.setBatchSize(20);

@@ -28,10 +28,6 @@ public class Match {
     @OneToMany(mappedBy = "match", fetch = FetchType.LAZY)
     private List<MatchSummoner> matchSummoners;
 
-    @BatchSize(size = 20)
-    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY)
-    private List<MatchTeam> matchTeams;
-
     // info
     private String endOfGameResult;
     private	long gameCreation;

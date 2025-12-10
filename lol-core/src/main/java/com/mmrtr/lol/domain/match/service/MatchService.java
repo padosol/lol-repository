@@ -55,8 +55,8 @@ public class MatchService {
                 ));
             }
 
-            matchSummonerRepository.saveAll(matchSummoners);
-            challengesRepository.saveAll(challenges);
+            matchSummonerRepository.bulkSave(matchSummoners);
+            challengesRepository.bulkSave(challenges);
 
             List<TeamDto> teams = matchDto.getInfo().getTeams();
             List<MatchTeam> matchTeams = new ArrayList<>();
@@ -65,7 +65,7 @@ public class MatchService {
                 matchTeams.add(matchTeam);
             }
 
-            matchTeamRepository.saveAll(matchTeams);
+            matchTeamRepository.bulkSave(matchTeams);
         }
 
         for (TimelineDto timelineDto : timelineDtos) {
@@ -77,5 +77,4 @@ public class MatchService {
     public List<Match> findAllMatch(List<String> matchIds) {
         return  matchRepository.findAllByIds(matchIds);
     }
-
 }

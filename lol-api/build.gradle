@@ -4,6 +4,8 @@ jar.enabled = false
 dependencies {
     implementation project(":lol-core")
 
-    // 1. Spring WebMVC (들어오는 요청 처리, 서블릿 스택)
     implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
 }
