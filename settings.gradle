@@ -1,1 +1,6 @@
 rootProject.name = 'lol-repository'
+
+include(
+        "lol-api",
+        "lol-core",
+)
