@@ -22,7 +22,8 @@ public class Match {
     @Column(name = "match_id")
     private String matchId;
 
-    private String dateVersion;
+    @Column(name = "data_version")
+    private String dataVersion;
 
     @BatchSize(size = 100)
     @OneToMany(mappedBy = "match", fetch = FetchType.LAZY)
@@ -56,7 +57,7 @@ public class Match {
 
     public Match(MatchDto matchDto) {
         this.matchId = matchDto.getMetadata().getMatchId();
-        this.dateVersion = matchDto.getMetadata().getDataVersion();
+        this.dataVersion = matchDto.getMetadata().getDataVersion();
         this.endOfGameResult = matchDto.getInfo().getEndOfGameResult();
         this.gameCreation = matchDto.getInfo().getGameCreation();
         this.gameDuration = matchDto.getInfo().getGameDuration();

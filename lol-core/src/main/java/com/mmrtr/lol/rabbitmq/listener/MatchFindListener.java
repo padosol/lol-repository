@@ -12,9 +12,13 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -22,9 +26,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MatchFindListener {
 
-    private final MessageSender messageSender;
     private final MatchService matchService;
+    private final MessageSender messageSender;
     private final RiotApiService riotApiService;
+    private final Executor requestExecutor;
+
 
     @RabbitListener(queues = "renewal.match.find.queue", containerFactory = "findQueueSimpleRabbitListenerContainerFactory")
     public void findMatchIdsListener(@Payload SummonerRenewalMessage summonerRenewalMessage) {
@@ -32,28 +38,34 @@ public class MatchFindListener {
         Platform platform = Platform.valueOfName(summonerRenewalMessage.platform());
         long revisionDate = summonerRenewalMessage.revisionDate();
 
-        log.info("Starting renewal match ID search for puuid: {} on platform: {} with revisionDate: {}", puuid, platform, revisionDate);
+        log.info("Starting renewal match ID search for puuid: {} on platform: {} with revisionDate: {}",
+                puuid, platform, revisionDate);
+        log.info("LocalDateTime: {}", LocalDateTime.ofInstant(Instant.ofEpochSecond(revisionDate), ZoneId.systemDefault()));
 
         List<String> allFetchedMatchIds = new ArrayList<>();
         int offset = 20;
         int count = 100;
 
-        while (true) {
-            List<String> fetchedMatchIds = riotApiService.getMatchListByPuuid(puuid, platform, revisionDate, offset, count).join();
+        int retry = 0;
+        boolean hasMoreMatches = true;
+        while (retry < 10 && hasMoreMatches) {
+            List<String> fetchedMatchIds = riotApiService
+                    .getMatchListByPuuid(puuid, platform, revisionDate, offset, count, requestExecutor).join();
 
             if (fetchedMatchIds == null || fetchedMatchIds.isEmpty()) {
                 log.info("No more match IDs found for puuid: {} at offset: {}. Ending search.", puuid, offset);
-                break;
+                hasMoreMatches = false;
+            } else {
+                allFetchedMatchIds.addAll(fetchedMatchIds);
+
+                if (fetchedMatchIds.size() < count) {
+                    log.info("Fewer than {} match IDs found ({}). Reached end of available matches for puuid: {}. Ending search.", count, fetchedMatchIds.size(), puuid);
+                    hasMoreMatches = false;
+                } else {
+                    offset += count;
+                    retry += 1;
+                }
             }
-
-            allFetchedMatchIds.addAll(fetchedMatchIds);
-
-            if (fetchedMatchIds.size() < count) {
-                log.info("Fewer than {} match IDs found ({}). Reached end of available matches for puuid: {}. Ending search.", count, fetchedMatchIds.size(), puuid);
-                break;
-            }
-
-            offset += count;
         }
 
         if (allFetchedMatchIds.isEmpty()) {

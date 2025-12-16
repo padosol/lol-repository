@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 @Slf4j
 @Service
@@ -38,6 +39,7 @@ public class SummonerRenewalListener {
     private final RiotApiService riotApiService;
     private final MatchService matchService;
     private final SummonerRepository summonerRepository;
+    private final Executor requestExecutor;
 
     @RabbitListener(queues = "mmrtr.summoner", containerFactory = "simpleRabbitListenerContainerFactory")
     @Transactional
@@ -52,7 +54,7 @@ public class SummonerRenewalListener {
         log.info("Lock 획득, 유저 전적 갱신 시작: {}", puuid);
         Platform platform = Platform.valueOfName(summonerMessage.getPlatform());
 
-        CompletableFuture<SummonerDto> summonerDtoFuture = riotApiService.getSummonerByPuuid(puuid, platform);
+        CompletableFuture<SummonerDto> summonerDtoFuture = riotApiService.getSummonerByPuuid(puuid, platform, requestExecutor);
         SummonerDto summonerDto = summonerDtoFuture.join();
         assert summonerDto != null;
         if (summonerMessage.getRevisionDate() == summonerDto.getRevisionDate()) {
@@ -62,9 +64,12 @@ public class SummonerRenewalListener {
             return;
         }
 
-        CompletableFuture<AccountDto> accountDtoFuture = riotApiService.getAccountByPuuid(puuid, platform);
-        CompletableFuture<Set<LeagueEntryDto>> leagueEntryDtoFuture = riotApiService.getLeagueEntriesByPuuid(puuid, platform);
-        CompletableFuture<List<String>> matchIdListFuture = riotApiService.getMatchListByPuuid(puuid, platform, summonerMessage.getRevisionDate(), 0, 20);
+        CompletableFuture<AccountDto> accountDtoFuture = riotApiService
+                .getAccountByPuuid(puuid, platform, requestExecutor);
+        CompletableFuture<Set<LeagueEntryDto>> leagueEntryDtoFuture = riotApiService
+                .getLeagueEntriesByPuuid(puuid, platform, requestExecutor);
+        CompletableFuture<List<String>> matchIdListFuture = riotApiService.getMatchListByPuuid(
+                puuid, platform, summonerMessage.getRevisionDate(), 0, 20, requestExecutor);
 
         CompletableFuture<List<MatchDto>> matchListFuture = matchIdListFuture.thenCompose(matchIds -> {
             if (matchIds.size() == 20) {
@@ -82,7 +87,7 @@ public class SummonerRenewalListener {
             List<String> filteredMatchIds = matchIds.stream().filter(matchId -> !existMatchIds.contains(matchId)).toList();
 
             List<CompletableFuture<MatchDto>> matchAllOfFuture = filteredMatchIds.stream()
-                    .map(mathId -> riotApiService.getMatchById(mathId, platform))
+                    .map(mathId -> riotApiService.getMatchById(mathId, platform, requestExecutor))
                     .toList();
 
             CompletableFuture<Void> allOfFuture = CompletableFuture.allOf(matchAllOfFuture.toArray(new CompletableFuture[0]));

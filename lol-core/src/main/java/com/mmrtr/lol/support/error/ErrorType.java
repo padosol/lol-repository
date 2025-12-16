@@ -7,7 +7,8 @@ import org.springframework.http.HttpStatus;
 @Getter
 public enum ErrorType {
     DEFAULT_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.E500, "알 수 없는 오류가 발생했습니다.", LogLevel.ERROR),
-    NOT_FOUND_USER(HttpStatus.NOT_FOUND, ErrorCode.E404, "존재하지 않는 유저 입니다.", LogLevel.INFO)
+    NOT_FOUND_USER(HttpStatus.NOT_FOUND, ErrorCode.E404, "존재하지 않는 유저 입니다.", LogLevel.INFO),
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, ErrorCode.E429, "잠시 후 다시 실행해주세요.", LogLevel.WARN)
     ;
 
     private HttpStatus httpStatus;

@@ -140,8 +140,8 @@ public class RabbitMqConfig {
 
         simpleFactory.setChannelTransacted(true);
 
-        simpleFactory.setConcurrentConsumers(10);
-        simpleFactory.setMaxConcurrentConsumers(10);
+        simpleFactory.setConcurrentConsumers(1);
+        simpleFactory.setMaxConcurrentConsumers(1);
 
         simpleFactory.setPrefetchCount(1);
         simpleFactory.setReceiveTimeout(1000L);
@@ -175,17 +175,12 @@ public class RabbitMqConfig {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
 
-        simpleFactory.setChannelTransacted(true);
-        simpleFactory.setConcurrentConsumers(1);
-        simpleFactory.setMaxConcurrentConsumers(1);
+        // 컨슈머 스레드 수
+        simpleFactory.setConcurrentConsumers(10);
+        simpleFactory.setMaxConcurrentConsumers(10);
 
-        simpleFactory.setPrefetchCount(20);
-        simpleFactory.setReceiveTimeout(2000L);
-
-        simpleFactory.setBatchListener(true);
-        simpleFactory.setBatchSize(20);
-
-        simpleFactory.setConsumerBatchEnabled(true);
+        // 미리 메모리에 로드해두는 사이즈
+        simpleFactory.setPrefetchCount(1);
 
         return simpleFactory;
     }

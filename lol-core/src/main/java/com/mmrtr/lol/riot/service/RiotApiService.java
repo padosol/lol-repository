@@ -1,6 +1,7 @@
 package com.mmrtr.lol.riot.service;
 
-import com.mmrtr.lol.riot.config.RiotAPIProperties;
+import com.mmrtr.lol.riot.aspect.RateLimitType;
+import com.mmrtr.lol.riot.aspect.RateLimited;
 import com.mmrtr.lol.riot.dto.account.AccountDto;
 import com.mmrtr.lol.riot.dto.champion.ChampionInfo;
 import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
@@ -8,11 +9,9 @@ import com.mmrtr.lol.riot.dto.match.MatchDto;
 import com.mmrtr.lol.riot.dto.match_timeline.TimelineDto;
 import com.mmrtr.lol.riot.dto.summoner.SummonerDto;
 import com.mmrtr.lol.riot.type.Platform;
-import com.mmrtr.lol.support.error.RiotServerException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -21,7 +20,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.Supplier;
 
 @Service
 @RequiredArgsConstructor
@@ -29,149 +27,130 @@ import java.util.function.Supplier;
 public class RiotApiService {
 
     private final RestClient riotRestClient;
-    private final RiotAPIProperties riotAPIProperties;
-    private final Executor asyncExecutor;
 
-    public CompletableFuture<AccountDto> getAccountByRiotId(String gameName, String tagLine, Platform platform) {
+    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
+    public CompletableFuture<AccountDto> getAccountByRiotId(
+            String gameName, String tagLine, Platform platform, Executor executor) {
         log.info("getAccountByRiotId gameName {} tagLine {}", gameName, tagLine);
         String path = String.format("/riot/account/v1/accounts/by-riot-id/%s/%s", gameName, tagLine);
-        return CompletableFuture.supplyAsync(() -> {
-                    return executeWithRetry(() ->
-                            riotRestClient.get()
-                                    .uri(platform.getRegionalHost() + path)
-                                    .retrieve()
-                                    .body(AccountDto.class)
-                    );
-                }, asyncExecutor
+        return CompletableFuture.supplyAsync(() ->
+                    riotRestClient.get()
+                            .uri(platform.getRegionalHost() + path)
+                            .retrieve()
+                            .body(AccountDto.class)
+                    , executor
         );
     }
 
-    public CompletableFuture<AccountDto> getAccountByPuuid(String puuid, Platform platform) {
+    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
+    public CompletableFuture<AccountDto> getAccountByPuuid(String puuid, Platform platform, Executor executor) {
         String path = String.format("/riot/account/v1/accounts/by-puuid/%s", puuid);
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(platform.getRegionalHost() + path)
-                                .retrieve()
-                                .body(AccountDto.class)
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(platform.getRegionalHost() + path)
+                        .retrieve()
+                        .body(AccountDto.class)
+                , executor
         );
     }
 
-    public CompletableFuture<SummonerDto> getSummonerByPuuid(String puuid, Platform platform) {
+    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
+    public CompletableFuture<SummonerDto> getSummonerByPuuid(String puuid, Platform platform, Executor executor) {
         String path = String.format("/lol/summoner/v4/summoners/by-puuid/%s", puuid);
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(platform.getPlatformHost() + path)
-                                .retrieve()
-                                .body(SummonerDto.class)
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(platform.getPlatformHost() + path)
+                        .retrieve()
+                        .body(SummonerDto.class)
+                , executor
         );
     }
 
-    public CompletableFuture<Set<LeagueEntryDto>> getLeagueEntriesByPuuid(String puuid, Platform platform) {
+    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
+    public CompletableFuture<Set<LeagueEntryDto>> getLeagueEntriesByPuuid(String puuid, Platform platform, Executor executor) {
         String path = String.format("/lol/league/v4/entries/by-puuid/%s", puuid);
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(platform.getPlatformHost() + path)
-                                .retrieve()
-                                .body(new ParameterizedTypeReference<Set<LeagueEntryDto>>() {})
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(platform.getPlatformHost() + path)
+                        .retrieve()
+                        .body(new ParameterizedTypeReference<Set<LeagueEntryDto>>() {})
+                , executor
         );
     }
 
-    public CompletableFuture<SummonerDto> getSummonerByName(String summonerName, Platform platform) {
+    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
+    public CompletableFuture<SummonerDto> getSummonerByName(String summonerName, Platform platform, Executor executor) {
         String path = String.format("/lol/summoner/v4/summoners/by-name/%s", summonerName);
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(platform.getPlatformHost() + path)
-                                .retrieve()
-                                .body(SummonerDto.class)
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(platform.getPlatformHost() + path)
+                        .retrieve()
+                        .body(SummonerDto.class)
+                , executor
         );
     }
 
-    public CompletableFuture<List<String>> getMatchListByPuuid(String puuid, Platform platform) {
+    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
+    public CompletableFuture<List<String>> getMatchListByPuuid(String puuid, Platform platform, Executor executor) {
         String path = String.format("/lol/match/v5/matches/by-puuid/%s/ids", puuid);
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(platform.getRegionalHost() + path)
-                                .retrieve()
-                                .body(new ParameterizedTypeReference<List<String>>() {})
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(platform.getRegionalHost() + path)
+                        .retrieve()
+                        .body(new ParameterizedTypeReference<List<String>>() {})
+                , executor
         );
     }
 
+    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
     public CompletableFuture<List<String>> getMatchListByPuuid(
-            String puuid, Platform platform, long startTime, int start, int count) {
+            String puuid, Platform platform, long startTime, int start, int count, Executor executor) {
         String path = String.format("/lol/match/v5/matches/by-puuid/%s/ids", puuid);
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(platform.getRegionalHost() + path, uriBuilder -> uriBuilder
-                                        .queryParam("startTime", startTime)
-                                        .queryParam("start", start)
-                                        .queryParam("count", count).build())
-                                .retrieve()
-                                .body(new ParameterizedTypeReference<List<String>>() {})
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(platform.getRegionalHost() + path, uriBuilder -> uriBuilder
+                                .queryParam("startTime", startTime)
+                                .queryParam("start", start)
+                                .queryParam("count", count).build())
+                        .retrieve()
+                        .body(new ParameterizedTypeReference<List<String>>() {})
+                , executor
         );
     }
 
-    public CompletableFuture<MatchDto> getMatchById(String matchId, Platform platform) {
+    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
+    public CompletableFuture<MatchDto> getMatchById(String matchId, Platform platform, Executor executor) {
         URI uri = URI.create(platform.getRegionalHost() + "/lol/match/v5/matches/" + matchId);
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(uri)
-                                .retrieve()
-                                .body(MatchDto.class)
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(uri)
+                        .retrieve()
+                        .body(MatchDto.class)
+                , executor
         );
     }
 
-    public CompletableFuture<TimelineDto> getTimelineById(String matchId, Platform platform) {
+    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
+    public CompletableFuture<TimelineDto> getTimelineById(String matchId, Platform platform, Executor executor) {
         String path = String.format("/lol/match/v5/matches/%s/timeline", matchId);
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(platform.getRegionalHost() + path)
-                                .retrieve()
-                                .body(TimelineDto.class)
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(platform.getRegionalHost() + path)
+                        .retrieve()
+                        .body(TimelineDto.class)
+                , executor
         );
     }
 
-    public CompletableFuture<ChampionInfo> getChampionRotation(Platform platform) {
+    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
+    public CompletableFuture<ChampionInfo> getChampionRotation(Platform platform, Executor executor) {
         String path = "/lol/platform/v3/champion-rotations";
         return CompletableFuture.supplyAsync(() ->
-                executeWithRetry(() ->
-                        riotRestClient.get()
-                                .uri(platform.getPlatformHost() + path)
-                                .retrieve()
-                                .body(ChampionInfo.class)
-                ), asyncExecutor
+                riotRestClient.get()
+                        .uri(platform.getPlatformHost() + path)
+                        .retrieve()
+                        .body(ChampionInfo.class)
+                , executor
         );
-    }
-
-    private <T> T executeWithRetry(Supplier<T> supplier) {
-        for (int i = 0; i < riotAPIProperties.getRetryAttempts(); i++) {
-            try {
-                return supplier.get();
-            } catch (RiotServerException e) {
-                log.warn("Riot API server error. Retrying... ({}/{})", i + 1, riotAPIProperties.getRetryAttempts());
-                try {
-                    Thread.sleep(riotAPIProperties.getRetryDelay() * 1000L);
-                } catch (InterruptedException interruptedException) {
-                    Thread.currentThread().interrupt();
-                    throw new RiotServerException(HttpStatus.SERVICE_UNAVAILABLE, "Retry interrupted.");
-                }
-            }
-        }
-        throw new RiotServerException(HttpStatus.SERVICE_UNAVAILABLE, "Riot API server is not responding after " + riotAPIProperties.getRetryAttempts() + " retries.");
     }
 }

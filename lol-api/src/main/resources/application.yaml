@@ -2,8 +2,6 @@ server:
   port: 8111
 
 management:
-  server:
-    port: 8111
   endpoints:
     web:
       exposure:

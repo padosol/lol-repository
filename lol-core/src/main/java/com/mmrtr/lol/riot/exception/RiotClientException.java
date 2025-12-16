@@ -1,4 +1,4 @@
-package com.mmrtr.lol.support.error;
+package com.mmrtr.lol.riot.exception;
 
 import lombok.Getter;
 import org.springframework.boot.logging.LogLevel;
@@ -11,7 +11,7 @@ public class RiotClientException extends RuntimeException {
     private final LogLevel logLevel;
 
     public RiotClientException(HttpStatusCode status, String errorBody, LogLevel logLevel) {
-        super(String.format("Riot API client error: %s, Body: %s", status, errorBody));
+        super(errorBody);
         this.status = status;
         this.errorBody = errorBody;
         this.logLevel = logLevel;

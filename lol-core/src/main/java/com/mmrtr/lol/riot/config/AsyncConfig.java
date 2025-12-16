@@ -10,9 +10,27 @@ import java.util.concurrent.Executor;
 public class AsyncConfig {
 
     @Bean
-    public Executor asyncExecutor() {
+    public Executor requestExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(20);
+        executor.setMaxPoolSize(40);
+        executor.setQueueCapacity(100);
+        executor.setKeepAliveSeconds(60);
+
+        executor.setThreadNamePrefix("Request Thread-");
+        executor.initialize();
+
+        return executor;
+    }
+
+    @Bean
+    public Executor riotApiExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(20);
+        executor.setMaxPoolSize(40);
+        executor.setQueueCapacity(40);
+
+        executor.setKeepAliveSeconds(60);
         executor.setThreadNamePrefix("Riot API Thread-");
         executor.initialize();
         return executor;

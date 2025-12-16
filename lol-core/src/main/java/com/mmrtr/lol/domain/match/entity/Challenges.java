@@ -33,17 +33,6 @@ public class Challenges {
     @Column(name = "match_id")
     private String matchId;
 
-//        @EmbeddedId
-//        private MatchSummonerId matchSummonerId;
-
-//        @MapsId
-//        @OneToOne
-//        @JoinColumns({
-//                @JoinColumn(name = "puuid", referencedColumnName = "puuid"),
-//                @JoinColumn(name = "match_id", referencedColumnName = "match_id")
-//        })
-//        private MatchSummoner matchSummoner;
-
     private int assistStreakCount12;
     private int infernalScalePickup;
     private int abilityUses;
@@ -169,16 +158,18 @@ public class Challenges {
     private int wardsGuarded;
 
     public static Challenges of(MatchSummoner matchSummoner, ChallengesDto challengesDto) {
-            StringBuffer sb = new StringBuffer();
-            for (Integer integer : challengesDto.getLegendaryItemUsed()) {
-                    if(!sb.isEmpty()) {
-                            sb.append(",");
-                    }
+            StringBuilder sb = new StringBuilder();
+            if (challengesDto.getLegendaryItemUsed() != null && !challengesDto.getLegendaryItemUsed().isEmpty()) {
+                for (Integer integer : challengesDto.getLegendaryItemUsed()) {
+                        if(!sb.isEmpty()) {
+                                sb.append(",");
+                        }
 
-                    sb.append(integer);
+                        sb.append(integer);
+                }
             }
 
-            return Challenges.builder()
+        return Challenges.builder()
                     .puuid(matchSummoner.getMatchSummonerId().getPuuid())
                     .matchId(matchSummoner.getMatchSummonerId().getMatchId())
                     .assistStreakCount12(challengesDto.getAssistStreakCount12())

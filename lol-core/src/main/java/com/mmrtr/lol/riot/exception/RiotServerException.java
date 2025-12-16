@@ -1,4 +1,4 @@
-package com.mmrtr.lol.support.error;
+package com.mmrtr.lol.riot.exception;
 
 import lombok.Getter;
 import org.springframework.http.HttpStatusCode;
