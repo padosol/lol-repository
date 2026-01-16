@@ -1,37 +1,43 @@
 package com.mmrtr.lol.domain.match.entity;
 
 
-import jakarta.persistence.*;
-import com.mmrtr.lol.domain.match.entity.id.MatchSummonerId;
 import com.mmrtr.lol.domain.match.entity.value.matchsummoner.ItemValue;
 import com.mmrtr.lol.domain.match.entity.value.matchsummoner.StatValue;
 import com.mmrtr.lol.domain.match.entity.value.matchsummoner.StyleValue;
 import com.mmrtr.lol.riot.dto.match.ParticipantDto;
-import lombok.*;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "match_summoner")
 @Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class MatchSummoner {
+@Table(
+        name = "match_summoner",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "unique_index_match_id_and_puuid",
+                        columnNames = {"puuid", "match_id"}
+                )
+        }
+)
+public class MatchSummonerEntity {
 
-    @EmbeddedId
-    private MatchSummonerId matchSummonerId;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "match_sumoner_id")
+    private Long id;
 
-    @MapsId("matchId")                  // EmbeddedId 필드명과 일치해야함
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "match_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
-    private Match match;
+    private String puuid;
+
+    @Column(name = "match_id")
+    private String matchId;
 
     private String summonerId;
-
-    // match 정보 필요
-    // summoner 정보 필요
-
-//    @OneToOne(mappedBy = "matchSummoner")
-//    private Challenges challenges;
 
     // 유저 정보
     private String riotIdGameName;
@@ -194,10 +200,10 @@ public class MatchSummoner {
     @Embedded
     private StyleValue styleValue;
 
-    public static MatchSummoner of(Match match, ParticipantDto participantDto) {
-        return MatchSummoner.builder()
-                .matchSummonerId(new MatchSummonerId(participantDto.getPuuid(), match.getMatchId()))
-                .match(match)
+    public static MatchSummonerEntity of(MatchEntity match, ParticipantDto participantDto) {
+        return MatchSummonerEntity.builder()
+                .puuid(participantDto.getPuuid())
+                .matchId(match.getMatchId())
                 .summonerId(participantDto.getSummonerId())
                 .riotIdGameName(participantDto.getRiotIdGameName())
                 .riotIdTagline(participantDto.getRiotIdTagline())
@@ -334,6 +340,4 @@ public class MatchSummoner {
 
                 .build();
     }
-
-
 }

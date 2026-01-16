@@ -3,10 +3,10 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://host.docker.internal:5432/postgres
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
-    username: ${USERNAME}
-    password: ${PASSWORD}
   jpa:
     hibernate:
       ddl-auto: update
@@ -19,25 +19,35 @@ spring:
           batch_size: 1000
           order_inserts: true
           order_updates: true
-
-    show-sql: true
+    show-sql: false
 
   data:
     redis:
-      host: host.docker.internal
+      host: ${SPRING_DATA_REDIS_HOST}
       port: 6379
-  kafka:
-    consumer:
-      bootstrap-servers: host.docker.internal:9094
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST}
+    port: 5671
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    ssl:
+      enabled: true
 
 logging:
   level:
     com.mmrtr.lolrepository.riot: INFO
 
-riot.api.key: ${API_KEY}
+riot:
+  api-key: ${API_KEY}
+
+rabbitmq:
+  queue.name: sample.queue
+  exchange.name: sample.exchange
+  routing.key: sample.key
+
 management:
   endpoints:
     web:
       exposure:
-        include: health
-
+        include: health, info, metrics, prometheus

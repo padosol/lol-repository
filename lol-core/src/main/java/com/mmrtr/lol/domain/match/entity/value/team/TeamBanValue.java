@@ -3,6 +3,9 @@ package com.mmrtr.lol.domain.match.entity.value.team;
 import jakarta.persistence.Embeddable;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Getter
 @Setter
 @Builder

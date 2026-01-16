@@ -1,10 +1,13 @@
 package com.mmrtr.lol.domain.league.entity;
 
+import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.riot.type.Division;
 import com.mmrtr.lol.riot.type.Tier;
 import jakarta.persistence.*;
-import com.mmrtr.lol.riot.dto.league.LeagueEntryDto;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -26,7 +29,7 @@ import java.time.LocalDateTime;
         }
 )
 @EntityListeners(AuditingEntityListener.class)
-public class LeagueSummoner {
+public class LeagueSummonerEntity {
 
     @Id
     @Column(name = "league_summoner_id")
@@ -34,7 +37,6 @@ public class LeagueSummoner {
     private Long id;
 
     private String puuid;
-
     @Column(name = "queue")
     private String queue;
 
@@ -60,7 +62,7 @@ public class LeagueSummoner {
     @LastModifiedBy
     private LocalDateTime updateAt;
 
-    public LeagueSummoner(String puuid, String queue, String leagueId, int wins, int losses, String tier, String rank, int leaguePoints, boolean veteran, boolean inactive, boolean freshBlood, boolean hotStreak) {
+    public LeagueSummonerEntity(String puuid, String queue, String leagueId, int wins, int losses, String tier, String rank, int leaguePoints, boolean veteran, boolean inactive, boolean freshBlood, boolean hotStreak) {
         this.puuid = puuid;
         this.queue = queue;
         this.leagueId = leagueId;
@@ -76,8 +78,8 @@ public class LeagueSummoner {
         this.absolutePoints = calculatePoints();
     }
 
-    public static LeagueSummoner of(String puuid, League league, LeagueEntryDto leagueEntryDTO) {
-        return new LeagueSummoner(
+    public static LeagueSummonerEntity of(String puuid, LeagueEntity league, LeagueEntryDto leagueEntryDTO) {
+        return new LeagueSummonerEntity(
                 puuid,
                 league.getQueue(),
                 league.getLeagueId(),
@@ -93,7 +95,7 @@ public class LeagueSummoner {
         );
     }
 
-    public void changeLeague(League league, LeagueEntryDto leagueEntryDTO) {
+    public void changeLeague(LeagueEntity league, LeagueEntryDto leagueEntryDTO) {
         this.queue = league.getQueue();
         this.leagueId = league.getLeagueId();
         this.wins = leagueEntryDTO.getWins();

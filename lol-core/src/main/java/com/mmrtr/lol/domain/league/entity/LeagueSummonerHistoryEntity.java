@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
                 @Index(name = "idx_puuid_queue", columnList = "puuid, queue")
         }
 )
-public class LeagueSummonerHistory {
+public class LeagueSummonerHistoryEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -48,23 +48,4 @@ public class LeagueSummonerHistory {
 
     @CreatedDate
     private LocalDateTime createdAt;
-
-    public static LeagueSummonerHistory create(LeagueSummoner leagueSummoner) {
-        return LeagueSummonerHistory.builder()
-                .leagueSummonerId(leagueSummoner.getId())
-                .puuid(leagueSummoner.getPuuid())
-                .queue(leagueSummoner.getQueue())
-                .leagueId(leagueSummoner.getLeagueId())
-                .wins(leagueSummoner.getWins())
-                .losses(leagueSummoner.getLosses())
-                .tier(leagueSummoner.getTier())
-                .rank(leagueSummoner.getRank())
-                .leaguePoints(leagueSummoner.getLeaguePoints())
-                .absolutePoints(leagueSummoner.getAbsolutePoints())
-                .veteran(leagueSummoner.isVeteran())
-                .inactive(leagueSummoner.isInactive())
-                .freshBlood(leagueSummoner.isFreshBlood())
-                .hotStreak(leagueSummoner.isHotStreak())
-                .build();
-    }
 }

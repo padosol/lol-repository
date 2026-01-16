@@ -1,7 +1,7 @@
 package com.mmrtr.lol.domain.match.repository;
 
 
-import com.mmrtr.lol.domain.match.entity.MatchTeam;
+import com.mmrtr.lol.domain.match.entity.MatchTeamEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -17,12 +17,12 @@ public class MatchTeamRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final MatchTeamJpaRepository matchTeamJpaRepository;
 
-    public List<MatchTeam> saveAll(List<MatchTeam> matchTeams) {
+    public List<MatchTeamEntity> saveAll(List<MatchTeamEntity> matchTeams) {
         return matchTeamJpaRepository.saveAll(matchTeams);
     }
 
 
-    public void bulkSave(List<MatchTeam> matchTeams) {
+    public void bulkSave(List<MatchTeamEntity> matchTeams) {
 
         String sql = " INSERT INTO match_team (" +
                 "team_id," +
@@ -84,28 +84,28 @@ public class MatchTeamRepository {
                             .addValue("teamId", param.getTeamId())
                             .addValue("matchId", param.getMatchId())
                             .addValue("win", param.isWin())
-                            .addValue("baronFirst", param.isBaronFirst())
-                            .addValue("baronKills", param.getBaronKills())
-                            .addValue("championFirst", param.isChampionFirst())
-                            .addValue("championKills", param.getChampionKills())
-                            .addValue("dragonFirst", param.isDragonFirst())
-                            .addValue("dragonKills", param.getDragonKills())
-                            .addValue("inhibitorFirst", param.isInhibitorFirst())
-                            .addValue("inhibitorKills", param.getInhibitorKills())
-                            .addValue("riftHeraldFirst", param.isRiftHeraldFirst())
-                            .addValue("riftHeraldKills", param.getRiftHeraldKills())
-                            .addValue("towerFirst", param.isTowerFirst())
-                            .addValue("towerKills", param.getTowerKills())
-                            .addValue("champion1Id", param.getChampion1Id())
-                            .addValue("pick1Turn", param.getPick1Turn())
-                            .addValue("champion2Id", param.getChampion2Id())
-                            .addValue("pick2Turn", param.getPick2Turn())
-                            .addValue("champion3Id", param.getChampion3Id())
-                            .addValue("pick3Turn", param.getPick3Turn())
-                            .addValue("champion4Id", param.getChampion4Id())
-                            .addValue("pick4Turn", param.getPick4Turn())
-                            .addValue("champion5Id", param.getChampion5Id())
-                            .addValue("pick5Turn", param.getPick5Turn())
+                            .addValue("baronFirst", param.getTeamObject().isBaronFirst())
+                            .addValue("baronKills", param.getTeamObject().getBaronKills())
+                            .addValue("championFirst", param.getTeamObject().isChampionFirst())
+                            .addValue("championKills", param.getTeamObject().getChampionKills())
+                            .addValue("dragonFirst", param.getTeamObject().isDragonFirst())
+                            .addValue("dragonKills", param.getTeamObject().getDragonKills())
+                            .addValue("inhibitorFirst", param.getTeamObject().isInhibitorFirst())
+                            .addValue("inhibitorKills", param.getTeamObject().getInhibitorKills())
+                            .addValue("riftHeraldFirst", param.getTeamObject().isRiftHeraldFirst())
+                            .addValue("riftHeraldKills", param.getTeamObject().getRiftHeraldKills())
+                            .addValue("towerFirst", param.getTeamObject().isTowerFirst())
+                            .addValue("towerKills", param.getTeamObject().getTowerKills())
+                            .addValue("champion1Id", param.getTeamBan().getChampion1Id())
+                            .addValue("pick1Turn", param.getTeamBan().getPick1Turn())
+                            .addValue("champion2Id", param.getTeamBan().getChampion2Id())
+                            .addValue("pick2Turn", param.getTeamBan().getPick2Turn())
+                            .addValue("champion3Id", param.getTeamBan().getChampion3Id())
+                            .addValue("pick3Turn", param.getTeamBan().getPick3Turn())
+                            .addValue("champion4Id", param.getTeamBan().getChampion4Id())
+                            .addValue("pick4Turn", param.getTeamBan().getPick4Turn())
+                            .addValue("champion5Id", param.getTeamBan().getChampion5Id())
+                            .addValue("pick5Turn", param.getTeamBan().getPick5Turn())
                             ;
                 })
                 .toArray(SqlParameterSource[]::new);

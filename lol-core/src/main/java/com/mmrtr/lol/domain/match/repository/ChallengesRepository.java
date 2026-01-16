@@ -1,6 +1,6 @@
 package com.mmrtr.lol.domain.match.repository;
 
-import com.mmrtr.lol.domain.match.entity.Challenges;
+import com.mmrtr.lol.domain.match.entity.ChallengesEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
@@ -16,12 +16,12 @@ public class ChallengesRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ChallengesJpaRepository challengesJpaRepository;
 
-    public List<Challenges> saveAll(List<Challenges> challenges) {
+    public List<ChallengesEntity> saveAll(List<ChallengesEntity> challenges) {
         return challengesJpaRepository.saveAll(challenges);
     }
 
 
-    public void bulkSave(List<Challenges> challenges) {
+    public void bulkSave(List<ChallengesEntity> challenges) {
         String sql = " INSERT INTO challenges (" +
                 "puuid," +
                 "match_id," +

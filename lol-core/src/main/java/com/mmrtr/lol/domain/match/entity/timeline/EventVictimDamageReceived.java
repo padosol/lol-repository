@@ -26,7 +26,7 @@ public class EventVictimDamageReceived {
             @JoinColumn(name = "timestamp", referencedColumnName = "timestamp"),
             @JoinColumn(name = "timeLineEventId", referencedColumnName = "time_line_event_id")
     })
-    private TimeLineEvent timeLineEvent;
+    private TimeLineEventEntity timeLineEvent;
 
     private boolean basic;
     private int magicDamage;

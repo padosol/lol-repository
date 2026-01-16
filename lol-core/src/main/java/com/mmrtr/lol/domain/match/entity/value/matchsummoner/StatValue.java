@@ -1,8 +1,8 @@
 package com.mmrtr.lol.domain.match.entity.value.matchsummoner;
 
 
-import jakarta.persistence.Embeddable;
 import com.mmrtr.lol.riot.dto.match.ParticipantDto;
+import jakarta.persistence.Embeddable;
 import lombok.*;
 
 @Getter

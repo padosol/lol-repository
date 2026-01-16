@@ -10,7 +10,7 @@ import java.util.Objects;
 @AllArgsConstructor
 public class ParticipantFrameId implements Serializable {
 
-    private String match;
+    private String matchEntity;
     private Long timestamp;
     private int participantId;
 
@@ -19,13 +19,13 @@ public class ParticipantFrameId implements Serializable {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         ParticipantFrameId participantFrameId = (ParticipantFrameId) obj;
-        return Objects.equals(this.match, participantFrameId.match)
+        return Objects.equals(this.matchEntity, participantFrameId.matchEntity)
             && Objects.equals(this.timestamp, participantFrameId.timestamp)
             && Objects.equals(this.participantId, participantFrameId.participantId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(match, timestamp, participantId);
+        return Objects.hash(matchEntity, timestamp, participantId);
     }
 }

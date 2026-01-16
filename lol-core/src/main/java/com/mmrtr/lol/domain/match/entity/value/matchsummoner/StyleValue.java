@@ -1,14 +1,13 @@
 package com.mmrtr.lol.domain.match.entity.value.matchsummoner;
 
 
-import jakarta.persistence.Embeddable;
 import com.mmrtr.lol.riot.dto.match.ParticipantDto;
 import com.mmrtr.lol.riot.dto.match.PerkStyleDto;
 import com.mmrtr.lol.riot.dto.match.PerkStyleSelectionDto;
+import jakarta.persistence.Embeddable;
 import lombok.*;
 
 import java.util.List;
-
 
 @Getter
 @Setter

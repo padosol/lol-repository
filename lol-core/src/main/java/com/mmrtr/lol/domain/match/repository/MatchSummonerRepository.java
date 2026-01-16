@@ -1,7 +1,7 @@
 package com.mmrtr.lol.domain.match.repository;
 
 
-import com.mmrtr.lol.domain.match.entity.MatchSummoner;
+import com.mmrtr.lol.domain.match.entity.MatchSummonerEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -18,12 +18,12 @@ public class MatchSummonerRepository {
     private final MatchSummonerJpaRepository matchSummonerJpaRepository;
 
 
-    public List<MatchSummoner> saveAll(List<MatchSummoner> matchSummoners) {
+    public List<MatchSummonerEntity> saveAll(List<MatchSummonerEntity> matchSummoners) {
         return matchSummonerJpaRepository.saveAll(matchSummoners);
     }
 
 
-    public void bulkSave(List<MatchSummoner> matchSummoners) {
+    public void bulkSave(List<MatchSummonerEntity> matchSummoners) {
 
         String sql = " INSERT INTO match_summoner (" +
                 "summoner_id," +
@@ -325,10 +325,10 @@ public class MatchSummonerRepository {
                 .map(comment -> {
                     return new MapSqlParameterSource()
                             .addValue("summonerId", comment.getSummonerId())
-                            .addValue("matchId", comment.getMatch().getMatchId())
+                            .addValue("matchId", comment.getMatchId())
                             .addValue("riotIdGameName", comment.getRiotIdGameName())
                             .addValue("riotIdTagline", comment.getRiotIdTagline())
-                            .addValue("puuid", comment.getMatchSummonerId().getPuuid())
+                            .addValue("puuid", comment.getPuuid())
                             .addValue("profileIcon", comment.getProfileIcon())
                             .addValue("summonerName", comment.getSummonerName())
                             .addValue("participantId", comment.getParticipantId())

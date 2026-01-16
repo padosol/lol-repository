@@ -1,9 +1,10 @@
 package com.mmrtr.lol.domain.league.entity.id;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
-import lombok.*;
-import org.springframework.data.annotation.CreatedDate;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -15,11 +16,9 @@ import java.time.LocalDateTime;
 @EqualsAndHashCode
 public class LeagueSummonerId implements Serializable {
 
-    @Column(name = "league_id")
     private String leagueId;
-    @Column(name = "puuid")
     private String puuid;
-    @CreatedDate
-    @Column(name = "create_at")
     private LocalDateTime createAt;
+
 }
+

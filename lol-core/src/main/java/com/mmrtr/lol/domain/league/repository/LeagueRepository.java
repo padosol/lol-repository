@@ -1,6 +1,6 @@
 package com.mmrtr.lol.domain.league.repository;
 
-import com.mmrtr.lol.domain.league.entity.League;
+import com.mmrtr.lol.domain.league.entity.LeagueEntity;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -20,11 +20,11 @@ public class LeagueRepository {
         this.leagueJpaRepository = leagueJpaRepository;
     }
 
-    public League save(League league ){
+    public LeagueEntity save(LeagueEntity league ){
         return leagueJpaRepository.save(league);
     }
 
-    public League findById(String leagueId) {
+    public LeagueEntity findById(String leagueId) {
         return leagueJpaRepository.findById(leagueId).orElse(null);
     }
 

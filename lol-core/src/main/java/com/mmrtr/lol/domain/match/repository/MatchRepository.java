@@ -1,6 +1,6 @@
 package com.mmrtr.lol.domain.match.repository;
 
-import com.mmrtr.lol.domain.match.entity.Match;
+import com.mmrtr.lol.domain.match.entity.MatchEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
@@ -19,28 +19,28 @@ public class MatchRepository {
     private final MatchJpaRepository matchJpaRepository;
 
     public List<String> findAllMatchIdByIdsNotIn(Collection<String> matchIds) {
-        List<Match> allByMatchIdIsNotIn = matchJpaRepository.findAllByMatchIdIsNotIn(matchIds);
+        List<MatchEntity> allByMatchIdIsNotIn = matchJpaRepository.findAllByMatchIdIsNotIn(matchIds);
 
         if (allByMatchIdIsNotIn.isEmpty()) {
             return new ArrayList<>();
         }
 
-        return matchJpaRepository.findAllByMatchIdIsNotIn(matchIds).stream().map(Match::getMatchId).toList();
+        return matchJpaRepository.findAllByMatchIdIsNotIn(matchIds).stream().map(MatchEntity::getMatchId).toList();
     }
 
-    public List<Match> findAllByIds(Collection<String> matchIds) {
+    public List<MatchEntity> findAllByIds(Collection<String> matchIds) {
         return matchJpaRepository.findAllById(matchIds);
     }
 
-    public Match save(Match match){
+    public MatchEntity save(MatchEntity match){
         return matchJpaRepository.save(match);
     }
 
-    public List<Match> saveAll(List<Match> matches) {
+    public List<MatchEntity> saveAll(List<MatchEntity> matches) {
         return matchJpaRepository.saveAll(matches);
     }
 
-    public void bulkSave(List<Match> matches) {
+    public void bulkSave(List<MatchEntity> matches) {
         String sql = insertSql();
 
         SqlParameterSource[] params = SqlParameterSourceUtils.createBatch(matches);

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew:*)",
+      "Bash(cat:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: 헥사고날 아키텍처 모듈 구조 개선\n\n- 도메인 계층 리팩토링 \\(match, summoner, rank, league, champion, queue_type\\)\n- 포트 인터페이스 추가 \\(application/port\\)\n- 인프라 어댑터 및 매퍼 구현 \\(postgresql, redis, client\\)\n- RestDocs 컨트롤러 테스트 추가\n- Claude Code 설정 및 스킬 파일 추가\n- 불필요한 문서 파일 정리\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(echo \" \\(none\\)\" echo \"Test coverage:\" ls -1 \"C:\\\\Users\\\\hzyan\\\\Desktop\\\\lol\\\\lol-server\\\\module\\\\core\\\\lol-server-domain\\\\src\\\\test\\\\java\\\\com\\\\example\\\\lolserver\\\\domain$domain\\\\application\")",
+      "Bash(tree:*)",
+      "Bash(done)",
+      "Bash(python3:*)",
+      "Bash(find:*)",
+      "Bash(for f in ./module/core/lol-server-domain/build/reports/jacoco/test/jacocoTestReport.xml ./module/infra/api/build/reports/jacoco/test/jacocoTestReport.xml ./module/infra/client/lol-repository/build/reports/jacoco/test/jacocoTestReport.xml ./module/infra/persistence/postgresql/build/reports/jacoco/test/jacocoTestReport.xml ./module/infra/persistence/redis/build/reports/jacoco/test/jacocoTestReport.xml)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(dir /s \"C:\\\\Users\\\\hzyan\\\\Desktop\\\\lol\\\\lol-server\\\\.claude\")",
+      "Bash(dir \"C:\\\\Users\\\\hzyan\\\\Desktop\\\\lol\\\\lol-repository\" /b)",
+      "Bash(dir:*)"
+    ]
+  }
+}

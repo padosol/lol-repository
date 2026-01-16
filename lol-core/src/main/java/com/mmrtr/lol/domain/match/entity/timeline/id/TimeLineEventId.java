@@ -10,7 +10,7 @@ import java.util.Objects;
 @AllArgsConstructor
 public class TimeLineEventId implements Serializable {
 
-    private String match;
+    private String matchEntity;
     private int timestamp;
 
     @Override
@@ -18,12 +18,12 @@ public class TimeLineEventId implements Serializable {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         TimeLineEventId timeLineEventId = (TimeLineEventId) obj;
-        return Objects.equals(this.match, timeLineEventId.match)
+        return Objects.equals(this.matchEntity, timeLineEventId.matchEntity)
                 && Objects.equals(this.timestamp, timeLineEventId.timestamp);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(match, timestamp);
+        return Objects.hash(matchEntity, timestamp);
     }
 }

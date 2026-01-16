@@ -1,8 +1,12 @@
 package com.mmrtr.lol.domain.match.entity;
 
-import jakarta.persistence.*;
+
 import com.mmrtr.lol.riot.dto.match.MatchDto;
-import lombok.*;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.hibernate.annotations.BatchSize;
 
 import java.time.Instant;
@@ -10,13 +14,13 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 
-@Getter
-@Setter
 @Entity
+@Getter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class Match {
+@Table(name = "match")
+public class MatchEntity {
 
     @Id
     @Column(name = "match_id")
@@ -25,9 +29,9 @@ public class Match {
     @Column(name = "data_version")
     private String dataVersion;
 
-    @BatchSize(size = 100)
-    @OneToMany(mappedBy = "match", fetch = FetchType.LAZY)
-    private List<MatchSummoner> matchSummoners;
+//    @BatchSize(size = 100)
+//    @OneToMany(mappedBy = "matchEntity", fetch = FetchType.LAZY)
+//    private List<MatchSummonerEntity> matchSummonerEntities;
 
     // info
     private String endOfGameResult;
@@ -55,7 +59,7 @@ public class Match {
     private LocalDateTime gameEndDatetime;
     private LocalDateTime gameStartDatetime;
 
-    public Match(MatchDto matchDto) {
+    public MatchEntity(MatchDto matchDto, int season) {
         this.matchId = matchDto.getMetadata().getMatchId();
         this.dataVersion = matchDto.getMetadata().getDataVersion();
         this.endOfGameResult = matchDto.getInfo().getEndOfGameResult();
@@ -72,7 +76,7 @@ public class Match {
         this.queueId = matchDto.getInfo().getQueueId();
         this.platformId = matchDto.getInfo().getPlatformId();
         this.tournamentCode = matchDto.getInfo().getTournamentCode();
-        this.season = 25;
+        this.season = season;
         this.gameCreateDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameCreation()), ZoneId.systemDefault());
         this.gameEndDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameEndTimestamp()), ZoneId.systemDefault());
         this.gameStartDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameStartTimestamp()), ZoneId.systemDefault());

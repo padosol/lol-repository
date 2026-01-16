@@ -1,15 +1,12 @@
 global:
-  scrape_interval: 15s # 메트릭을 수집할 주기 설정
+  scrape_interval: 15s
 
 scrape_configs:
   - job_name: 'prometheus'
-    # Prometheus 자체의 메트릭 수집
     static_configs:
       - targets: ['localhost:9090']
 
   - job_name: 'spring-boot-app'
-    # Spring Boot 애플리케이션의 메트릭 수집
     metrics_path: '/actuator/prometheus'
     static_configs:
-      # 'host.docker.internal'은 Docker 컨테이너에서 호스트 머신에 접근할 때 사용되는 특수 DNS 이름입니다.
-      - targets: ['host.docker.internal:8111', 'host.docker.internal:8100']
+      - targets: ['lol-api:8080']

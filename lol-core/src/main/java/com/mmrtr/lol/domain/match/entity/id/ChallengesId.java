@@ -1,20 +1,29 @@
 package com.mmrtr.lol.domain.match.entity.id;
 
-import jakarta.persistence.Embeddable;
 import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.Objects;
 
-@Getter
 @NoArgsConstructor
 @AllArgsConstructor
-@Embeddable
-@EqualsAndHashCode
 public class ChallengesId implements Serializable {
 
-    private String puuid;
-    private String matchId;
+    private String summonerId;
+    private String match;
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ChallengesId challengesId = (ChallengesId) obj;
+        return Objects.equals(this.match, challengesId.match) && Objects.equals(this.summonerId, challengesId.summonerId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(match, summonerId);
+    }
+
 }

@@ -1,6 +1,6 @@
 package com.mmrtr.lol.domain.league.repository;
 
-import com.mmrtr.lol.domain.league.entity.LeagueSummoner;
+import com.mmrtr.lol.domain.league.entity.LeagueSummonerEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -13,19 +13,19 @@ public class LeagueSummonerRepository {
     private final LeagueSummonerJpaRepository leagueSummonerJpaRepository;
 
 
-    public LeagueSummoner save(LeagueSummoner leagueSummoner) {
+    public LeagueSummonerEntity save(LeagueSummonerEntity leagueSummoner) {
         return leagueSummonerJpaRepository.save(leagueSummoner);
     }
 
-    public LeagueSummoner findBy(String puuid, String leagueId) {
+    public LeagueSummonerEntity findBy(String puuid, String leagueId) {
         return leagueSummonerJpaRepository.findByPuuidAndLeagueId(puuid, leagueId).orElse(null);
     }
 
-    public LeagueSummoner findAllByPuuid(String puuid, String queue) {
+    public LeagueSummonerEntity findAllByPuuid(String puuid, String queue) {
         return leagueSummonerJpaRepository.findAllByPuuidAndQueue(puuid, queue).orElse(null);
     }
 
-    public Optional<LeagueSummoner> findAllByPuuidAndQueueOptional(String puuid, String queue) {
+    public Optional<LeagueSummonerEntity> findAllByPuuidAndQueueOptional(String puuid, String queue) {
         return leagueSummonerJpaRepository.findAllByPuuidAndQueue(puuid, queue);
     }
 

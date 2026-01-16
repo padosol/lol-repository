@@ -1,9 +1,9 @@
 package com.mmrtr.lol.domain.match.service;
 
-import com.mmrtr.lol.domain.match.entity.Challenges;
-import com.mmrtr.lol.domain.match.entity.Match;
-import com.mmrtr.lol.domain.match.entity.MatchSummoner;
-import com.mmrtr.lol.domain.match.entity.MatchTeam;
+import com.mmrtr.lol.domain.match.entity.ChallengesEntity;
+import com.mmrtr.lol.domain.match.entity.MatchEntity;
+import com.mmrtr.lol.domain.match.entity.MatchSummonerEntity;
+import com.mmrtr.lol.domain.match.entity.MatchTeamEntity;
 import com.mmrtr.lol.domain.match.repository.ChallengesRepository;
 import com.mmrtr.lol.domain.match.repository.MatchRepository;
 import com.mmrtr.lol.domain.match.repository.MatchSummonerRepository;
@@ -35,14 +35,14 @@ public class MatchService {
     public void addAllMatch(List<MatchDto> matchDtos, List<TimelineDto> timelineDtos) {
 
         for (MatchDto matchDto : matchDtos) {
-            Match match = matchRepository.save(new Match(matchDto));
+            MatchEntity match = matchRepository.save(new MatchEntity(matchDto, 26));
 
             List<ParticipantDto> participants = matchDto.getInfo().getParticipants();
 
-            List<MatchSummoner> matchSummoners = new ArrayList<>();
-            List<Challenges> challenges = new ArrayList<>();
+            List<MatchSummonerEntity> matchSummoners = new ArrayList<>();
+            List<ChallengesEntity> challenges = new ArrayList<>();
             for (ParticipantDto participant : participants) {
-                MatchSummoner matchSummoner = MatchSummoner.of(match, participant);
+                MatchSummonerEntity matchSummoner = MatchSummonerEntity.of(match, participant);
                 ChallengesDto challengesDto = participant.getChallenges();
 
                 if (challengesDto == null) {
@@ -50,7 +50,7 @@ public class MatchService {
                 }
 
                 matchSummoners.add(matchSummoner);
-                challenges.add(Challenges.of(
+                challenges.add(ChallengesEntity.of(
                         matchSummoner, challengesDto
                 ));
             }
@@ -59,9 +59,9 @@ public class MatchService {
             challengesRepository.bulkSave(challenges);
 
             List<TeamDto> teams = matchDto.getInfo().getTeams();
-            List<MatchTeam> matchTeams = new ArrayList<>();
+            List<MatchTeamEntity> matchTeams = new ArrayList<>();
             for (TeamDto team : teams) {
-                MatchTeam matchTeam = MatchTeam.of(match, team);
+                MatchTeamEntity matchTeam = MatchTeamEntity.of(match, team);
                 matchTeams.add(matchTeam);
             }
 
@@ -74,7 +74,7 @@ public class MatchService {
 
     }
 
-    public List<Match> findAllMatch(List<String> matchIds) {
+    public List<MatchEntity> findAllMatch(List<String> matchIds) {
         return  matchRepository.findAllByIds(matchIds);
     }
 }

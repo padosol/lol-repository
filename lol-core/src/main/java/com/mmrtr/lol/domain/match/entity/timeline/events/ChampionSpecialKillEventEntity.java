@@ -1,8 +1,8 @@
 package com.mmrtr.lol.domain.match.entity.timeline.events;
 
-import jakarta.persistence.*;
-import com.mmrtr.lol.domain.match.entity.timeline.TimeLineEvent;
+import com.mmrtr.lol.domain.match.entity.timeline.TimeLineEventEntity;
 import com.mmrtr.lol.domain.match.entity.timeline.value.PositionValue;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -13,19 +13,18 @@ import lombok.Setter;
 @Entity
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChampionSpecialKillEvent {
+@Table(name = "champion_special_kill_event")
+public class ChampionSpecialKillEventEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "building_event_id")
+    @Column(name = "champion_special_kill_event_id")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-            @JoinColumn(name = "match_id", referencedColumnName = "match_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT)),
-            @JoinColumn(name = "timeline_timestamp", referencedColumnName = "timestamp", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
-    })
-    private TimeLineEvent timeLineEvent;
+    @JoinColumn(name = "match_id", referencedColumnName = "match_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    @JoinColumn(name = "timeline_timestamp", referencedColumnName = "timestamp", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    private TimeLineEventEntity timeLineEvent;
 
     private String killType;
     private int killerId;

@@ -1,6 +1,6 @@
 package com.mmrtr.lol.rabbitmq.listener;
 
-import com.mmrtr.lol.domain.match.entity.Match;
+import com.mmrtr.lol.domain.match.entity.MatchEntity;
 import com.mmrtr.lol.domain.match.service.MatchService;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.entity.SummonerEntity;
@@ -81,8 +81,8 @@ public class SummonerRenewalListener {
                 );
             }
 
-            List<Match> matchList = matchService.findAllMatch(matchIds);
-            List<String> existMatchIds = matchList.stream().map(Match::getMatchId).toList();
+            List<MatchEntity> matchList = matchService.findAllMatch(matchIds);
+            List<String> existMatchIds = matchList.stream().map(MatchEntity::getMatchId).toList();
 
             List<String> filteredMatchIds = matchIds.stream().filter(matchId -> !existMatchIds.contains(matchId)).toList();
 

@@ -1,11 +1,11 @@
 package com.mmrtr.lol.domain.match.entity.timeline;
 
-import jakarta.persistence.*;
-import com.mmrtr.lol.domain.match.entity.Match;
+import com.mmrtr.lol.domain.match.entity.MatchEntity;
 import com.mmrtr.lol.domain.match.entity.timeline.id.ParticipantFrameId;
 import com.mmrtr.lol.domain.match.entity.timeline.value.ChampionStatsValue;
 import com.mmrtr.lol.domain.match.entity.timeline.value.DamageStatsValue;
 import com.mmrtr.lol.domain.match.entity.timeline.value.PositionValue;
+import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
@@ -15,7 +15,8 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 @IdClass(ParticipantFrameId.class)
-public class ParticipantFrame {
+@Table(name = "participant_frame")
+public class ParticipantFrameEntity {
 
     @Id
     private int timestamp;
@@ -26,7 +27,7 @@ public class ParticipantFrame {
     @Id
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "matchId", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
-    private Match match;
+    private MatchEntity matchEntity;
 
     @Embedded
     private ChampionStatsValue championStats;

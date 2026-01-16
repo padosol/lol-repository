@@ -1,6 +1,6 @@
 package com.mmrtr.lol.rabbitmq.listener;
 
-import com.mmrtr.lol.domain.match.entity.Match;
+import com.mmrtr.lol.domain.match.entity.MatchEntity;
 import com.mmrtr.lol.domain.match.service.MatchService;
 import com.mmrtr.lol.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.rabbitmq.service.MessageSender;
@@ -73,8 +73,8 @@ public class MatchFindListener {
             return;
         }
 
-        List<Match> existingMatches = matchService.findAllMatch(allFetchedMatchIds);
-        Set<String> existingMatchIds = existingMatches.stream().map(Match::getMatchId).collect(Collectors.toSet());
+        List<MatchEntity> existingMatches = matchService.findAllMatch(allFetchedMatchIds);
+        Set<String> existingMatchIds = existingMatches.stream().map(MatchEntity::getMatchId).collect(Collectors.toSet());
 
         List<String> newMatchIds = allFetchedMatchIds.stream()
                 .filter(matchId -> !existingMatchIds.contains(matchId))

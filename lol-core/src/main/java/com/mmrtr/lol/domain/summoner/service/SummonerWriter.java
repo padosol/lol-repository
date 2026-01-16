@@ -1,7 +1,7 @@
 package com.mmrtr.lol.domain.summoner.service;
 
-import com.mmrtr.lol.domain.league.entity.League;
-import com.mmrtr.lol.domain.league.entity.LeagueSummoner;
+import com.mmrtr.lol.domain.league.entity.LeagueEntity;
+import com.mmrtr.lol.domain.league.entity.LeagueSummonerEntity;
 import com.mmrtr.lol.domain.league.repository.LeagueRepository;
 import com.mmrtr.lol.domain.league.repository.LeagueSummonerRepository;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
@@ -34,18 +34,18 @@ public class SummonerWriter {
 
         for (LeagueEntryDto leagueEntryDTO : leagueEntryDtos) {
             String leagueId = leagueEntryDTO.getLeagueId();
-            League league = leagueRepository.findById(leagueId);
+            LeagueEntity league = leagueRepository.findById(leagueId);
             if (league == null) {
-                league = leagueRepository.save(League.builder()
+                league = leagueRepository.save(LeagueEntity.builder()
                         .leagueId(leagueEntryDTO.getLeagueId())
                         .queue(leagueEntryDTO.getQueueType())
                         .tier(leagueEntryDTO.getTier())
                         .build());
             }
 
-            LeagueSummoner savedLeagueSummoner = leagueSummonerRepository.findBy(accountDto.getPuuid(), league.getLeagueId());
+            LeagueSummonerEntity savedLeagueSummoner = leagueSummonerRepository.findBy(accountDto.getPuuid(), league.getLeagueId());
             if (savedLeagueSummoner == null) {
-                LeagueSummoner leagueSummoner = LeagueSummoner.of(accountDto.getPuuid(), league, leagueEntryDTO);
+                LeagueSummonerEntity leagueSummoner = LeagueSummonerEntity.of(accountDto.getPuuid(), league, leagueEntryDTO);
                 leagueSummonerRepository.save(leagueSummoner);
             }
         }
@@ -59,18 +59,18 @@ public class SummonerWriter {
 
         for (LeagueEntryDto leagueEntryDTO : summoner.getLeagueEntryDtos()) {
             String leagueId = leagueEntryDTO.getLeagueId();
-            League league = leagueRepository.findById(leagueId);
+            LeagueEntity league = leagueRepository.findById(leagueId);
             if (league == null) {
-                league = leagueRepository.save(League.builder()
+                league = leagueRepository.save(LeagueEntity.builder()
                         .leagueId(leagueEntryDTO.getLeagueId())
                         .queue(leagueEntryDTO.getQueueType())
                         .tier(leagueEntryDTO.getTier())
                         .build());
             }
 
-            LeagueSummoner savedLeagueSummoner = leagueSummonerRepository.findBy(summoner.getPuuid(), league.getLeagueId());
+            LeagueSummonerEntity savedLeagueSummoner = leagueSummonerRepository.findBy(summoner.getPuuid(), league.getLeagueId());
             if (savedLeagueSummoner == null) {
-                LeagueSummoner leagueSummoner = LeagueSummoner.of(summoner.getPuuid(), league, leagueEntryDTO);
+                LeagueSummonerEntity leagueSummoner = LeagueSummonerEntity.of(summoner.getPuuid(), league, leagueEntryDTO);
                 leagueSummonerRepository.save(leagueSummoner);
             }
         }
