@@ -1,74 +1,63 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.3.1'
-    id 'io.spring.dependency-management' version '1.1.5'
+    id 'java-library'
+    id 'org.springframework.boot' version '3.3.1' apply(false)
+    id 'io.spring.dependency-management' version '1.1.5' apply(false)
 }
 
-group = 'lol.mmrtr'
-version = '0.0.1-SNAPSHOT'
+allprojects {
+    group = 'lol.mmrtr'
+    version = '0.0.1-SNAPSHOT'
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+    repositories {
+        mavenCentral()
     }
 }
 
-configurations {
-    compileOnly {
-        extendsFrom annotationProcessor
+subprojects {
+
+    apply plugin: 'java'
+    apply plugin: 'java-library'
+    apply plugin: 'org.springframework.boot'
+    apply plugin: 'io.spring.dependency-management'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
     }
+
+    tasks.getByName("bootJar") {
+        enabled = false
+    }
+
+    tasks.getByName("jar") {
+        enabled = true
+    }
+
+    dependencies {
+        compileOnly 'org.projectlombok:lombok'
+        annotationProcessor 'org.projectlombok:lombok'
+
+        // configuration-processor
+        annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+
+    tasks.withType(Test).configureEach {
+        enabled = false
+    }
+
+    bootRun {
+        String activeProfile = System.properties['spring.profiles.active']
+        systemProperty "spring.profiles.active", activeProfile
+    }
+
 }
 
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    compileOnly 'org.projectlombok:lombok'
-    runtimeOnly 'org.postgresql:postgresql'
-    annotationProcessor 'org.projectlombok:lombok'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-
-    // actuator
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-
-    // redis
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-
-    implementation 'com.bucket4j:bucket4j_jdk17-redis-common:8.12.1'
-    implementation 'com.bucket4j:bucket4j_jdk17-lettuce:8.12.1'
-
-    // rabbitmq
-    implementation 'org.springframework.boot:spring-boot-starter-amqp'
-
-    // webClient
-    implementation 'org.springframework.boot:spring-boot-starter-webflux'
-
-    implementation 'org.springframework.retry:spring-retry'
-    implementation 'org.springframework:spring-aspects'
-
-    // configuration-processor
-    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-}
-
-tasks.named('test') {
-    useJUnitPlatform()
-}
-
-tasks.withType(Test).configureEach {
-    enabled = false
-}
-
-jar {
-    enabled = false
-}
-
-bootRun {
-    String activeProfile = System.properties['spring.profiles.active']
-    systemProperty "spring.profiles.active", activeProfile
-}

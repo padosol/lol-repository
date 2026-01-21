@@ -1,0 +1,12 @@
+package com.mmrtr.lol.infra.riot.aspect;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+public @interface RateLimited {
+    RateLimitType type();
+}

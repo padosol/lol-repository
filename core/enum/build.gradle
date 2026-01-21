@@ -1,0 +1,4 @@
+// core:enum - 공유 enum 타입들 (의존성 없음)
+dependencies {
+    // Lombok만 사용
+}

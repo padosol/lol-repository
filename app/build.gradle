@@ -1,0 +1,18 @@
+bootJar.enabled = true
+jar.enabled = false
+
+dependencies {
+    implementation project(':core:domain')
+    implementation project(':core:enum')
+    implementation project(':support')
+    implementation project(':infra:api')
+    implementation project(':infra:persistence')
+    implementation project(':infra:redis')
+    implementation project(':infra:rabbitmq')
+    implementation project(':infra:riot-client')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+}

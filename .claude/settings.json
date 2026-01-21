@@ -1,0 +1,7 @@
+{
+  "plansDirectory": "./plans",
+  "enabledPlugins": {
+    "code-review@claude-plugins-official": true,
+    "jdtls-lsp@claude-plugins-official": true
+  }
+}

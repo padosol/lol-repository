@@ -1,0 +1,25 @@
+# 공통 RabbitMQ 큐 설정
+rabbitmq:
+  queue.name: sample.queue
+  exchange.name: sample.exchange
+  routing.key: sample.key
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  rabbitmq:
+    host: host.docker.internal
+    port: 5672
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}

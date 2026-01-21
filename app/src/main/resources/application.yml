@@ -1,0 +1,17 @@
+spring:
+  config:
+    import:
+      - classpath:application-api.yml
+      - classpath:application-persistence.yml
+      - classpath:application-redis.yml
+      - classpath:application-rabbitmq.yml
+      - classpath:application-riot.yml
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, metrics

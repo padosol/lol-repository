@@ -1,0 +1,13 @@
+dependencies {
+    implementation project(':core:domain')
+    implementation project(':core:enum')
+    implementation project(':infra:redis')
+    implementation project(':infra:riot-client')
+    implementation project(':infra:persistence')  // MatchService 사용
+
+    // RabbitMQ
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
+    // Redisson
+    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+}

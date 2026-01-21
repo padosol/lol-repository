@@ -1,0 +1,14 @@
+dependencies {
+    implementation project(':core:domain')
+    implementation project(':core:enum')
+    implementation project(':support')
+    implementation project(':infra:redis')
+
+    // Web & AOP
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+
+    // Redisson (for rate limiting)
+    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+}
