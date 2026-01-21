@@ -1,8 +1,6 @@
 package com.mmrtr.lol.infra.persistence.match.entity;
 
 
-import com.mmrtr.lol.infra.persistence.match.entity.value.team.TeamBanValue;
-import com.mmrtr.lol.infra.persistence.match.entity.value.team.TeamObjectValue;
 import com.mmrtr.lol.infra.riot.dto.match.BanDto;
 import com.mmrtr.lol.infra.riot.dto.match.ObjectivesDto;
 import com.mmrtr.lol.infra.riot.dto.match.TeamDto;
@@ -41,34 +39,66 @@ public class MatchTeamEntity {
 
     private	boolean win;
 
-    @Embedded
-    private TeamObjectValue teamObject;
+    // Team Objective fields
+    private	boolean baronFirst;
+    private	int baronKills;
 
-    @Embedded
-    private TeamBanValue teamBan;
+    private	boolean championFirst;
+    private	int championKills;
+
+    private	boolean dragonFirst;
+    private	int dragonKills;
+
+    private	boolean inhibitorFirst;
+    private	int inhibitorKills;
+
+    private	boolean riftHeraldFirst;
+    private	int riftHeraldKills;
+
+    private	boolean towerFirst;
+    private	int towerKills;
+
+    // Team Ban fields
+    private	int champion1Id;
+    private	int pick1Turn;
+
+    private	int champion2Id;
+    private	int pick2Turn;
+
+    private	int champion3Id;
+    private	int pick3Turn;
+
+    private	int champion4Id;
+    private	int pick4Turn;
+
+    private	int champion5Id;
+    private	int pick5Turn;
 
     public static MatchTeamEntity of(MatchEntity match, TeamDto teamDto) {
 
         ObjectivesDto objectives = teamDto.getObjectives();
-        TeamObjectValue teamObjectValue = TeamObjectValue.builder()
-                .baronKills(objectives.getBaron().getKills())
-                .baronFirst(objectives.getBaron().isFirst())
-                .championKills(objectives.getChampion().getKills())
-                .championFirst(objectives.getChampion().isFirst())
-                .dragonKills(objectives.getDragon().getKills())
-                .dragonFirst(objectives.getDragon().isFirst())
-                .inhibitorKills(objectives.getInhibitor().getKills())
-                .inhibitorFirst(objectives.getInhibitor().isFirst())
-                .riftHeraldKills(objectives.getRiftHerald().getKills())
-                .riftHeraldFirst(objectives.getRiftHerald().isFirst())
-                .build();
-
         List<BanDto> bans = teamDto.getBans();
 
-        TeamBanValue.TeamBanValueBuilder builder = TeamBanValue.builder();
+        MatchTeamEntityBuilder builder = MatchTeamEntity.builder()
+                .matchId(match.getMatchId())
+                .teamId(teamDto.getTeamId())
+                .win(teamDto.isWin())
+                // Team Objective fields
+                .baronFirst(objectives.getBaron().isFirst())
+                .baronKills(objectives.getBaron().getKills())
+                .championFirst(objectives.getChampion().isFirst())
+                .championKills(objectives.getChampion().getKills())
+                .dragonFirst(objectives.getDragon().isFirst())
+                .dragonKills(objectives.getDragon().getKills())
+                .inhibitorFirst(objectives.getInhibitor().isFirst())
+                .inhibitorKills(objectives.getInhibitor().getKills())
+                .riftHeraldFirst(objectives.getRiftHerald().isFirst())
+                .riftHeraldKills(objectives.getRiftHerald().getKills())
+                .towerFirst(objectives.getTower().isFirst())
+                .towerKills(objectives.getTower().getKills());
 
         if(!bans.isEmpty()) {
-            TeamBanValue.builder()
+            builder
                     .champion1Id(bans.get(0).getChampionId())
                     .pick1Turn(bans.get(0).getPickTurn())
                     .champion2Id(bans.get(1).getChampionId())
@@ -81,11 +111,6 @@ public class MatchTeamEntity {
                     .pick5Turn(bans.get(4).getPickTurn());
         }
 
-        return MatchTeamEntity.builder()
-                .matchId(match.getMatchId())
-                .teamId(teamDto.getTeamId())
-                .win(teamDto.isWin())
-                .teamObject(teamObjectValue)
-                .build();
+        return builder.build();
     }
 }
