@@ -14,7 +14,12 @@
       "Bash(do echo \"=== $f ===\")",
       "Bash(dir /s \"C:\\\\Users\\\\hzyan\\\\Desktop\\\\lol\\\\lol-server\\\\.claude\")",
       "Bash(dir \"C:\\\\Users\\\\hzyan\\\\Desktop\\\\lol\\\\lol-repository\" /b)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(Remove-Item -Recurse -Force lol-api, lol-core, lol-infra)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "WebFetch(domain:developer.riotgames.com)"
     ]
   }
 }

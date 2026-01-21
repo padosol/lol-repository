@@ -1,6 +1,11 @@
 rootProject.name = 'lol-repository'
 
-include(
-        "lol-api",
-        "lol-core",
-)
+include 'app'
+include 'core:domain'
+include 'core:enum'
+include 'infra:api'
+include 'infra:persistence'
+include 'infra:redis'
+include 'infra:rabbitmq'
+include 'infra:riot-client'
+include 'support'
