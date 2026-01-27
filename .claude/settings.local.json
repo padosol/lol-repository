@@ -19,7 +19,8 @@
       "Bash(Remove-Item -Recurse -Force lol-api, lol-core, lol-infra)",
       "mcp__plugin_context7_context7__resolve-library-id",
       "mcp__plugin_context7_context7__query-docs",
-      "WebFetch(domain:developer.riotgames.com)"
+      "WebFetch(domain:developer.riotgames.com)",
+      "Bash(git checkout:*)"
     ]
   }
 }

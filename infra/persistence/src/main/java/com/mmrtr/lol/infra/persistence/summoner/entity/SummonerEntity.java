@@ -45,7 +45,7 @@ public class SummonerEntity {
                 .gameName(summoner.getGameIdentity().gameName())
                 .tagLine(summoner.getGameIdentity().tagLine())
                 .searchName((summoner.getGameIdentity().gameName().replace(" ", "") + "#" + summoner.getGameIdentity().tagLine()).toLowerCase())
-                .revisionClickDate(LocalDateTime.now())
+                .revisionClickDate(summoner.getRevisionInfo().revisionClickDate())
                 .build();
     }
 

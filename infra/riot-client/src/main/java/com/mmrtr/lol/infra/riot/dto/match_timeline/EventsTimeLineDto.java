@@ -16,7 +16,7 @@ public class EventsTimeLineDto {
     private int beforeId;
     private int goldGain;
     private int skillSlot;
-    private int levelUpType;
+    private String levelUpType;
     private String wardType;
     private int creatorId;
     private int killerId;
