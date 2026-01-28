@@ -50,4 +50,16 @@ public class Summoner {
                 .leagueInfos(leagueInfos)
                 .build();
     }
+
+    public void resetClickDate() {
+        revisionInfo = new RevisionInfo(
+                revisionInfo.revisionDate(), LocalDateTime.now());
+    }
+
+    public void initSummoner() {
+        revisionInfo = new RevisionInfo(
+                LocalDateTime.of(2020, 1, 1, 0, 0),
+                LocalDateTime.of(2020, 1, 1, 0, 0)
+        );
+    }
 }

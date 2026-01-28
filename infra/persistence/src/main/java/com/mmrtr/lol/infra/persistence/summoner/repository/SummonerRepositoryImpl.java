@@ -16,9 +16,7 @@ public class SummonerRepositoryImpl implements SummonerRepositoryPort {
 
     @Override
     public void save(Summoner summoner) {
-        SummonerEntity entity = SummonerEntity.fromDomain(summoner);
-        entity.initRevisionDate();
-        jpaRepository.save(entity);
+        jpaRepository.save(SummonerEntity.fromDomain(summoner));
     }
 
     @Override

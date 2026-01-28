@@ -4,7 +4,7 @@ import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
 import com.mmrtr.lol.infra.persistence.match.service.MatchService;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
-import com.mmrtr.lol.infra.persistence.summoner.repository.SummonerRepositoryImpl;
+import com.mmrtr.lol.domain.summoner.service.usecase.SaveSummonerDataUseCase;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.redis.service.RedisLockHandler;
@@ -39,7 +39,7 @@ public class SummonerRenewalListener {
     private final RedisLockHandler redisLockHandler;
     private final RiotApiService riotApiService;
     private final MatchService matchService;
-    private final SummonerRepositoryImpl summonerRepository;
+    private final SaveSummonerDataUseCase saveSummonerDataUseCase;
     private final Executor requestExecutor;
 
     @RabbitListener(queues = "mmrtr.summoner", containerFactory = "simpleRabbitListenerContainerFactory")
@@ -51,6 +51,9 @@ public class SummonerRenewalListener {
             log.info("이미 전적 갱신 진행 중 입니다. {}", puuid);
             return;
         }
+
+        // clickDate 갱신
+
 
         long start = System.currentTimeMillis();
         log.info("Lock 획득, 유저 전적 갱신 시작: {}", puuid);
@@ -85,7 +88,6 @@ public class SummonerRenewalListener {
 
             List<MatchEntity> matchList = matchService.findAllMatch(matchIds);
             List<String> existMatchIds = matchList.stream().map(MatchEntity::getMatchId).toList();
-
             List<String> filteredMatchIds = matchIds.stream().filter(matchId -> !existMatchIds.contains(matchId)).toList();
 
             List<CompletableFuture<MatchDto>> matchAllOfFuture = filteredMatchIds.stream()
@@ -134,7 +136,8 @@ public class SummonerRenewalListener {
         long middle = System.currentTimeMillis();
         log.info("middle {} ms", middle - start);
 
-        summonerRepository.save(summoner);
+        summoner.resetClickDate();
+        saveSummonerDataUseCase.execute(summoner);
         matchService.addAllMatch(matchDtos, new ArrayList<>());
 
         redisLockHandler.deleteSummonerRenewal(puuid);
