@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Getter
 @Builder
@@ -19,7 +18,6 @@ public class SummonerRanking {
     private String queue;
 
     private int currentRank;
-    private int previousRank;
     private int rankChange;
 
     private String gameName;
@@ -36,6 +34,4 @@ public class SummonerRanking {
     private String tier;
     private String rank;
     private int leaguePoints;
-
-    private LocalDateTime snapshotAt;
 }

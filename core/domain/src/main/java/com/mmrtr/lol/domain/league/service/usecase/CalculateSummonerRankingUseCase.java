@@ -17,13 +17,14 @@ public class CalculateSummonerRankingUseCase {
     private final SummonerRankingRepositoryPort summonerRankingRepositoryPort;
 
     @Transactional
-    public void execute(List<SummonerRanking> rankings) {
+    public void execute(String queue, List<SummonerRanking> rankings) {
         if (rankings.isEmpty()) {
-            log.warn("저장할 랭킹 데이터가 없습니다.");
+            log.warn("저장할 랭킹 데이터가 없습니다. queue={}", queue);
             return;
         }
 
+        summonerRankingRepositoryPort.deleteByQueue(queue);
         summonerRankingRepositoryPort.saveAll(rankings);
-        log.info("소환사 랭킹 {} 건 저장 완료", rankings.size());
+        log.info("소환사 랭킹 {} 건 저장 완료. queue={}", rankings.size(), queue);
     }
 }

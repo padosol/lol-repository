@@ -40,7 +40,6 @@ public class MatchListener {
     public void queueDataInsert() {
         List<Pair<MatchDto, TimelineDto>> pairs = new ArrayList<>();
         int count = queue.drainTo(pairs);
-        log.info("{}", count);
         if (count > 0) {
             log.debug("데이터 갯수: {}", count);
 

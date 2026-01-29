@@ -28,8 +28,8 @@ import java.time.LocalDateTime;
         name = "summoner_ranking",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "unique_puuid_queue_snapshot",
-                        columnNames = {"puuid", "queue", "snapshot_at"}
+                        name = "unique_puuid_queue",
+                        columnNames = {"puuid", "queue"}
                 )
         }
 )
@@ -49,9 +49,6 @@ public class SummonerRankingEntity {
 
     @Column(name = "current_rank", nullable = false)
     private int currentRank;
-
-    @Column(name = "previous_rank")
-    private int previousRank;
 
     @Column(name = "rank_change")
     private int rankChange;
@@ -89,9 +86,6 @@ public class SummonerRankingEntity {
     @Column(name = "league_points", nullable = false)
     private int leaguePoints;
 
-    @Column(name = "snapshot_at", nullable = false)
-    private LocalDateTime snapshotAt;
-
     @CreatedDate
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -102,7 +96,6 @@ public class SummonerRankingEntity {
                 .puuid(domain.getPuuid())
                 .queue(domain.getQueue())
                 .currentRank(domain.getCurrentRank())
-                .previousRank(domain.getPreviousRank())
                 .rankChange(domain.getRankChange())
                 .gameName(domain.getGameName())
                 .tagLine(domain.getTagLine())
@@ -115,7 +108,6 @@ public class SummonerRankingEntity {
                 .tier(domain.getTier())
                 .rank(domain.getRank())
                 .leaguePoints(domain.getLeaguePoints())
-                .snapshotAt(domain.getSnapshotAt())
                 .build();
     }
 
@@ -125,7 +117,6 @@ public class SummonerRankingEntity {
                 .puuid(this.puuid)
                 .queue(this.queue)
                 .currentRank(this.currentRank)
-                .previousRank(this.previousRank)
                 .rankChange(this.rankChange)
                 .gameName(this.gameName)
                 .tagLine(this.tagLine)
@@ -138,7 +129,6 @@ public class SummonerRankingEntity {
                 .tier(this.tier)
                 .rank(this.rank)
                 .leaguePoints(this.leaguePoints)
-                .snapshotAt(this.snapshotAt)
                 .build();
     }
 }
