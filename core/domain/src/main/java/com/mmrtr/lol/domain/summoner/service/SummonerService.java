@@ -39,4 +39,23 @@ public class SummonerService {
             throw new CoreException(ErrorType.NOT_FOUND_USER, "유저 정보 조회 중 오류가 발생했습니다.");
         }
     }
+
+    @Transactional
+    public Summoner getSummonerByPuuid(String regionType, String puuid) {
+        try {
+            Summoner summoner = summonerApiPort
+                    .fetchSummonerByPuuid(puuid, regionType, requestExecutor)
+                    .join();
+
+            log.info("getSummonerByPuuid region type {} and puuid {}", regionType, puuid);
+            summoner.initSummoner();
+            saveSummonerDataUseCase.execute(summoner);
+
+            return summoner;
+
+        } catch (RuntimeException e) {
+            log.error("Error fetching summoner info by puuid: {}", e.getMessage());
+            throw new CoreException(ErrorType.NOT_FOUND_USER, "유저 정보 조회 중 오류가 발생했습니다.");
+        }
+    }
 }
