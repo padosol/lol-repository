@@ -75,9 +75,9 @@ public class SummonerRankingScheduler implements TriggerSummonerRankingCalculati
         int totalPages = (int) Math.ceil((double) totalCount / PAGE_SIZE);
         int currentRank = 1;
 
-        // 티어 커트라인 계산을 위한 데이터 수집
-        Integer minChallengerLP = null;
-        Integer minGrandmasterLP = null;
+        // 티어 커트라인 계산을 위한 데이터 수집 (region별)
+        Map<String, Integer> minChallengerLPByRegion = new HashMap<>();
+        Map<String, Integer> minGrandmasterLPByRegion = new HashMap<>();
 
         for (int page = 0; page < totalPages; page++) {
             Page<SummonerRankingProjection> projectionPage =
@@ -103,9 +103,12 @@ public class SummonerRankingScheduler implements TriggerSummonerRankingCalculati
                         .divide(BigDecimal.valueOf(totalGames), 2, RoundingMode.HALF_UP)
                         : BigDecimal.ZERO;
 
+                String region = projection.getRegion();
+
                 SummonerRanking ranking = SummonerRanking.builder()
                         .puuid(projection.getPuuid())
                         .queue(queue)
+                        .region(region)
                         .currentRank(currentRank++)
                         .rankChange(0)  // 임시로 0, 나중에 DB에서 일괄 업데이트
                         .gameName(projection.getGameName())
@@ -123,17 +126,13 @@ public class SummonerRankingScheduler implements TriggerSummonerRankingCalculati
 
                 rankings.add(ranking);
 
-                // 티어 커트라인 계산
+                // 티어 커트라인 계산 (region별)
                 String tier = projection.getTier();
                 int lp = projection.getLeaguePoints();
                 if ("CHALLENGER".equals(tier)) {
-                    if (minChallengerLP == null || lp < minChallengerLP) {
-                        minChallengerLP = lp;
-                    }
+                    minChallengerLPByRegion.merge(region, lp, Math::min);
                 } else if ("GRANDMASTER".equals(tier)) {
-                    if (minGrandmasterLP == null || lp < minGrandmasterLP) {
-                        minGrandmasterLP = lp;
-                    }
+                    minGrandmasterLPByRegion.merge(region, lp, Math::min);
                 }
             }
 
@@ -150,24 +149,26 @@ public class SummonerRankingScheduler implements TriggerSummonerRankingCalculati
 
         log.info("큐 {} 랭킹 처리 완료: {} 명", queue, totalCount);
 
-        // 7. 티어 커트라인 저장
+        // 7. 티어 커트라인 저장 (region별)
         List<TierCutoff> cutoffs = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
-        if (minChallengerLP != null) {
+        for (Map.Entry<String, Integer> entry : minChallengerLPByRegion.entrySet()) {
             cutoffs.add(TierCutoff.builder()
                     .queue(queue)
                     .tier("CHALLENGER")
-                    .minLeaguePoints(minChallengerLP)
+                    .region(entry.getKey())
+                    .minLeaguePoints(entry.getValue())
                     .updatedAt(now)
                     .build());
         }
 
-        if (minGrandmasterLP != null) {
+        for (Map.Entry<String, Integer> entry : minGrandmasterLPByRegion.entrySet()) {
             cutoffs.add(TierCutoff.builder()
                     .queue(queue)
                     .tier("GRANDMASTER")
-                    .minLeaguePoints(minGrandmasterLP)
+                    .region(entry.getKey())
+                    .minLeaguePoints(entry.getValue())
                     .updatedAt(now)
                     .build());
         }

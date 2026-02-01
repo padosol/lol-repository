@@ -47,6 +47,9 @@ public class SummonerRankingEntity {
     @Column(name = "queue", nullable = false, length = 50)
     private String queue;
 
+    @Column(name = "region", nullable = false, length = 10)
+    private String region;
+
     @Column(name = "current_rank", nullable = false)
     private int currentRank;
 
@@ -95,6 +98,7 @@ public class SummonerRankingEntity {
                 .id(domain.getId())
                 .puuid(domain.getPuuid())
                 .queue(domain.getQueue())
+                .region(domain.getRegion())
                 .currentRank(domain.getCurrentRank())
                 .rankChange(domain.getRankChange())
                 .gameName(domain.getGameName())
@@ -116,6 +120,7 @@ public class SummonerRankingEntity {
                 .id(this.id)
                 .puuid(this.puuid)
                 .queue(this.queue)
+                .region(this.region)
                 .currentRank(this.currentRank)
                 .rankChange(this.rankChange)
                 .gameName(this.gameName)

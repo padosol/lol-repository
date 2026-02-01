@@ -16,6 +16,7 @@ public class SummonerRanking {
     private Long id;
     private String puuid;
     private String queue;
+    private String region;
 
     private int currentRank;
     private int rankChange;

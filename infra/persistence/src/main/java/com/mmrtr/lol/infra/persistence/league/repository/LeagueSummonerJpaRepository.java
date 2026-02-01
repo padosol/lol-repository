@@ -20,6 +20,7 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
     @Query("""
             SELECT ls.puuid as puuid,
                    ls.queue as queue,
+                   s.region as region,
                    ls.tier as tier,
                    ls.rank as rank,
                    ls.leaguePoints as leaguePoints,
@@ -47,6 +48,7 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
     @Query("""
             SELECT ls.puuid as puuid,
                    ls.queue as queue,
+                   s.region as region,
                    ls.tier as tier,
                    ls.rank as rank,
                    ls.leaguePoints as leaguePoints,
