@@ -13,7 +13,8 @@ public record CurrentGameInfoVO(
     long gameStartTime,
     long gameLength,
     String platformId,
-    String encryptionKey,
+    int gameQueueConfigId,
+    ObserversVO observers,
     List<ParticipantVO> participants,
     List<BannedChampionVO> bannedChampions
 ) {}
