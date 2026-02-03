@@ -8,6 +8,7 @@ import com.mmrtr.lol.infra.riot.dto.champion.ChampionInfo;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
 import com.mmrtr.lol.infra.riot.dto.match_timeline.TimelineDto;
+import com.mmrtr.lol.infra.riot.dto.spectator.CurrentGameInfoVO;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -151,6 +152,19 @@ public class RiotApiService {
                                 .uri(platform.getPlatformHost() + path)
                                 .retrieve()
                                 .body(ChampionInfo.class)
+                , executor
+        );
+    }
+
+    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
+    public CompletableFuture<CurrentGameInfoVO> getActiveGameByPuuid(
+            String puuid, Platform platform, Executor executor) {
+        String path = String.format("/lol/spectator/v5/active-games/by-summoner/%s", puuid);
+        return CompletableFuture.supplyAsync(() ->
+                        riotRestClient.get()
+                                .uri(platform.getPlatformHost() + path)
+                                .retrieve()
+                                .body(CurrentGameInfoVO.class)
                 , executor
         );
     }
