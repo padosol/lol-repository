@@ -17,4 +17,28 @@ public interface TierCutoffJpaRepository extends JpaRepository<TierCutoffEntity,
     @Modifying
     @Query("DELETE FROM TierCutoffEntity tc WHERE tc.queue = :queue")
     void deleteByQueue(@Param("queue") String queue);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO tier_cutoff_backup (queue, tier, region, min_league_points, user_count)
+            SELECT queue, tier, region, min_league_points, user_count
+            FROM tier_cutoff WHERE queue = :queue
+            """, nativeQuery = true)
+    void backupCurrentCutoffs(@Param("queue") String queue);
+
+    @Modifying
+    @Query(value = """
+            UPDATE tier_cutoff tc
+            SET lp_change = tc.min_league_points - COALESCE(backup.min_league_points, tc.min_league_points)
+            FROM tier_cutoff_backup backup
+            WHERE tc.queue = backup.queue
+              AND tc.tier = backup.tier
+              AND tc.region = backup.region
+              AND tc.queue = :queue
+            """, nativeQuery = true)
+    void updateLpChangesFromBackup(@Param("queue") String queue);
+
+    @Modifying
+    @Query(value = "DELETE FROM tier_cutoff_backup WHERE queue = :queue", nativeQuery = true)
+    void clearBackup(@Param("queue") String queue);
 }

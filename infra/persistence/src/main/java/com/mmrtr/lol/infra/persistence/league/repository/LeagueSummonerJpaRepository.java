@@ -64,4 +64,38 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
             ORDER BY ls.absolutePoints DESC
             """)
     Page<SummonerRankingProjection> findRankingByQueuePaged(@Param("queue") String queue, Pageable pageable);
+
+    @Query("""
+            SELECT COUNT(ls)
+            FROM LeagueSummonerEntity ls
+            JOIN SummonerEntity s ON ls.puuid = s.puuid
+            WHERE ls.queue = :queue
+              AND s.region = :region
+              AND ls.tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')
+            """)
+    long countRankingByQueueAndRegion(@Param("queue") String queue, @Param("region") String region);
+
+    @Query("""
+            SELECT ls.puuid as puuid,
+                   ls.queue as queue,
+                   s.region as region,
+                   ls.tier as tier,
+                   ls.rank as rank,
+                   ls.leaguePoints as leaguePoints,
+                   ls.wins as wins,
+                   ls.losses as losses,
+                   ls.absolutePoints as absolutePoints,
+                   s.gameName as gameName,
+                   s.tagLine as tagLine
+            FROM LeagueSummonerEntity ls
+            JOIN SummonerEntity s ON ls.puuid = s.puuid
+            WHERE ls.queue = :queue
+              AND s.region = :region
+              AND ls.tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')
+            ORDER BY ls.absolutePoints DESC
+            """)
+    Page<SummonerRankingProjection> findRankingByQueueAndRegionPaged(
+            @Param("queue") String queue,
+            @Param("region") String region,
+            Pageable pageable);
 }

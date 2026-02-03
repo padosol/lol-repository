@@ -52,6 +52,12 @@ public class TierCutoffEntity {
     @Column(name = "min_league_points", nullable = false)
     private int minLeaguePoints;
 
+    @Column(name = "lp_change")
+    private int lpChange;
+
+    @Column(name = "user_count")
+    private int userCount;
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
@@ -66,6 +72,8 @@ public class TierCutoffEntity {
                 .tier(domain.getTier())
                 .region(domain.getRegion())
                 .minLeaguePoints(domain.getMinLeaguePoints())
+                .lpChange(domain.getLpChange())
+                .userCount(domain.getUserCount())
                 .updatedAt(domain.getUpdatedAt())
                 .build();
     }
@@ -77,6 +85,8 @@ public class TierCutoffEntity {
                 .tier(this.tier)
                 .region(this.region)
                 .minLeaguePoints(this.minLeaguePoints)
+                .lpChange(this.lpChange)
+                .userCount(this.userCount)
                 .updatedAt(this.updatedAt)
                 .build();
     }

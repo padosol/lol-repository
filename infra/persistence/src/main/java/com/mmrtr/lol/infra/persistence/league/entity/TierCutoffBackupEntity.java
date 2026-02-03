@@ -16,23 +16,26 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "summoner_ranking_backup")
-public class SummonerRankingBackupEntity {
+@Table(name = "tier_cutoff_backup")
+public class TierCutoffBackupEntity {
 
     @Id
     @Column(name = "id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "puuid", nullable = false, length = 100)
-    private String puuid;
-
     @Column(name = "queue", nullable = false, length = 50)
     private String queue;
+
+    @Column(name = "tier", nullable = false, length = 20)
+    private String tier;
 
     @Column(name = "region", nullable = false, length = 10)
     private String region;
 
-    @Column(name = "current_rank", nullable = false)
-    private int currentRank;
+    @Column(name = "min_league_points", nullable = false)
+    private int minLeaguePoints;
+
+    @Column(name = "user_count")
+    private int userCount;
 }

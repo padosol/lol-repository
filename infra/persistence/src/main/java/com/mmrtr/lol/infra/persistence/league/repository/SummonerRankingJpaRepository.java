@@ -16,8 +16,8 @@ public interface SummonerRankingJpaRepository extends JpaRepository<SummonerRank
 
     @Modifying
     @Query(value = """
-            INSERT INTO summoner_ranking_backup (puuid, queue, current_rank)
-            SELECT puuid, queue, current_rank FROM summoner_ranking WHERE queue = :queue
+            INSERT INTO summoner_ranking_backup (puuid, queue, region, current_rank)
+            SELECT puuid, queue, region, current_rank FROM summoner_ranking WHERE queue = :queue
             """, nativeQuery = true)
     void backupCurrentRanks(@Param("queue") String queue);
 
@@ -28,6 +28,7 @@ public interface SummonerRankingJpaRepository extends JpaRepository<SummonerRank
             FROM summoner_ranking_backup backup
             WHERE sr.puuid = backup.puuid
               AND sr.queue = backup.queue
+              AND sr.region = backup.region
               AND sr.queue = :queue
             """, nativeQuery = true)
     void updateRankChangesFromBackup(@Param("queue") String queue);
