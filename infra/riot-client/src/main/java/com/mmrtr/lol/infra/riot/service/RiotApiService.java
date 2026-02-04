@@ -1,8 +1,6 @@
 package com.mmrtr.lol.infra.riot.service;
 
 import com.mmrtr.lol.common.type.Platform;
-import com.mmrtr.lol.infra.riot.aspect.RateLimitType;
-import com.mmrtr.lol.infra.riot.aspect.RateLimited;
 import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
 import com.mmrtr.lol.infra.riot.dto.champion.ChampionInfo;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
@@ -29,7 +27,6 @@ public class RiotApiService {
 
     private final RestClient riotRestClient;
 
-    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
     public CompletableFuture<AccountDto> getAccountByRiotId(
             String gameName, String tagLine, Platform platform, Executor executor) {
         log.info("getAccountByRiotId gameName {} tagLine {}", gameName, tagLine);
@@ -43,7 +40,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
     public CompletableFuture<AccountDto> getAccountByPuuid(String puuid, Platform platform, Executor executor) {
         String path = String.format("/riot/account/v1/accounts/by-puuid/%s", puuid);
         return CompletableFuture.supplyAsync(() ->
@@ -55,7 +51,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
     public CompletableFuture<SummonerDto> getSummonerByPuuid(String puuid, Platform platform, Executor executor) {
         String path = String.format("/lol/summoner/v4/summoners/by-puuid/%s", puuid);
         return CompletableFuture.supplyAsync(() ->
@@ -67,7 +62,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
     public CompletableFuture<Set<LeagueEntryDto>> getLeagueEntriesByPuuid(String puuid, Platform platform, Executor executor) {
         String path = String.format("/lol/league/v4/entries/by-puuid/%s", puuid);
         return CompletableFuture.supplyAsync(() ->
@@ -79,7 +73,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
     public CompletableFuture<SummonerDto> getSummonerByName(String summonerName, Platform platform, Executor executor) {
         String path = String.format("/lol/summoner/v4/summoners/by-name/%s", summonerName);
         return CompletableFuture.supplyAsync(() ->
@@ -91,7 +84,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
     public CompletableFuture<List<String>> getMatchListByPuuid(String puuid, Platform platform, Executor executor) {
         String path = String.format("/lol/match/v5/matches/by-puuid/%s/ids", puuid);
         return CompletableFuture.supplyAsync(() ->
@@ -103,7 +95,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
     public CompletableFuture<List<String>> getMatchListByPuuid(
             String puuid, Platform platform, long startTime, int start, int count, Executor executor) {
         String path = String.format("/lol/match/v5/matches/by-puuid/%s/ids", puuid);
@@ -119,7 +110,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
     public CompletableFuture<MatchDto> getMatchById(String matchId, Platform platform, Executor executor) {
         URI uri = URI.create(platform.getRegionalHost() + "/lol/match/v5/matches/" + matchId);
         return CompletableFuture.supplyAsync(() ->
@@ -131,7 +121,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.REGION_RATE_LIMITER)
     public CompletableFuture<TimelineDto> getTimelineById(String matchId, Platform platform, Executor executor) {
         String path = String.format("/lol/match/v5/matches/%s/timeline", matchId);
         return CompletableFuture.supplyAsync(() ->
@@ -143,7 +132,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
     public CompletableFuture<ChampionInfo> getChampionRotation(Platform platform, Executor executor) {
         String path = "/lol/platform/v3/champion-rotations";
 
@@ -156,7 +144,6 @@ public class RiotApiService {
         );
     }
 
-    @RateLimited(type = RateLimitType.PLATFORM_RATE_LIMITER)
     public CompletableFuture<CurrentGameInfoVO> getActiveGameByPuuid(
             String puuid, Platform platform, Executor executor) {
         String path = String.format("/lol/spectator/v5/active-games/by-summoner/%s", puuid);
