@@ -49,7 +49,7 @@ public class SummonerService {
                     .fetchSummonerByPuuid(puuid, regionType, requestExecutor)
                     .join();
 
-            log.info("getSummonerByPuuid region type {} and puuid {}", regionType, puuid);
+            log.debug("getSummonerByPuuid region type {} and puuid {}", regionType, puuid);
             summoner.initSummoner();
             saveSummonerDataUseCase.execute(summoner);
 

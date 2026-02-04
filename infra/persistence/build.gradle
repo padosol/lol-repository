@@ -2,6 +2,7 @@ dependencies {
     implementation project(':core:domain')
     implementation project(':core:enum')
     implementation project(':infra:riot-client')  // MatchDto 등 사용
+    implementation project(':infra:redis')
 
     // JPA
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'

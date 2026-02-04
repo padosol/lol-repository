@@ -89,7 +89,7 @@ public class SummonerApiAdapter implements SummonerApiPort {
         ).thenCombine(leagueEntriesFuture, (arr, leagueEntryDtos) -> {
             AccountDto accountDto = (AccountDto) arr[0];
             SummonerDto summonerDto = (SummonerDto) arr[1];
-            log.info("fetchSummonerByPuuid platform {} puuid {}", platformName, puuid);
+            log.debug("fetchSummonerByPuuid platform {} puuid {}", platformName, puuid);
             return toDomain(accountDto, summonerDto, platform.getPlatformId(), leagueEntryDtos);
         }).exceptionally(ex -> {
             Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
