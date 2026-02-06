@@ -2,86 +2,46 @@ package com.mmrtr.lol.infra.redis.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.Collections;
 import java.util.Optional;
-import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RedisLockHandler {
-    private static final String UNLOCK_LUA =
-            "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end";
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedissonClient redissonClient;
     private final StringRedisTemplate stringRedisTemplate;
 
     public boolean acquireLock(String puuid, Duration duration) {
         String lockKey = "summoner:lock:" + puuid;
 
-        Boolean success = redisTemplate.opsForValue()
-                .setIfAbsent(
-                        lockKey,
-                        puuid,
-                        duration);
-
-        if (Boolean.TRUE.equals(success)) {
-            return true;
+        try {
+            RLock lock = redissonClient.getLock(lockKey);
+            return lock.tryLock(0, duration.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("락 획득 중 인터럽트 발생: {}", lockKey, e);
+            return false;
         }
-
-        return false;
     }
 
     public boolean releaseLock(String puuid) {
         String lockKey = "summoner:lock:" + puuid;
 
-        DefaultRedisScript<Long> script = new DefaultRedisScript<>(UNLOCK_LUA, Long.class);
-
-        Long result = redisTemplate.execute(
-                script,
-                Collections.singletonList(lockKey),
-                puuid
-        );
-
-        return result != null && result == 1L;
-    }
-
-    /**
-     * 범용 분산 락 획득
-     *
-     * @param lockKey   락 키
-     * @param lockValue 락 값 (해제 시 검증용)
-     * @param duration  락 유지 시간
-     * @return 락 획득 성공 여부
-     */
-    public boolean acquireLock(String lockKey, String lockValue, Duration duration) {
-        Boolean success = redisTemplate.opsForValue()
-                .setIfAbsent(lockKey, lockValue, duration);
-        return Boolean.TRUE.equals(success);
-    }
-
-    /**
-     * 범용 분산 락 해제
-     *
-     * @param lockKey   락 키
-     * @param lockValue 락 값 (획득 시 사용한 값과 일치해야 해제됨)
-     * @return 락 해제 성공 여부
-     */
-    public boolean releaseLock(String lockKey, String lockValue) {
-        DefaultRedisScript<Long> script = new DefaultRedisScript<>(UNLOCK_LUA, Long.class);
-        Long result = redisTemplate.execute(
-                script,
-                Collections.singletonList(lockKey),
-                lockValue
-        );
-        return result != null && result == 1L;
+        RLock lock = redissonClient.getLock(lockKey);
+        if (lock.isHeldByCurrentThread()) {
+            lock.unlock();
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -94,14 +54,21 @@ public class RedisLockHandler {
      * @return 작업 결과 (락 획득 실패 시 empty)
      */
     public <T> Optional<T> executeWithLock(String lockKey, Duration duration, Supplier<T> action) {
-        String lockValue = UUID.randomUUID().toString();
+        RLock lock = redissonClient.getLock(lockKey);
 
-        if (acquireLock(lockKey, lockValue, duration)) {
-            try {
-                return Optional.ofNullable(action.get());
-            } finally {
-                releaseLock(lockKey, lockValue);
+        try {
+            if (lock.tryLock(0, duration.toMillis(), TimeUnit.MILLISECONDS)) {
+                try {
+                    return Optional.ofNullable(action.get());
+                } finally {
+                    if (lock.isHeldByCurrentThread()) {
+                        lock.unlock();
+                    }
+                }
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("락 획득 중 인터럽트 발생: {}", lockKey, e);
         }
 
         return Optional.empty();
