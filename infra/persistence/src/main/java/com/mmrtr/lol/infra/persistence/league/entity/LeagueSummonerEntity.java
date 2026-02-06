@@ -111,4 +111,18 @@ public class LeagueSummonerEntity {
 
         return divisionScore + tierScore + this.leaguePoints;
     }
+
+    public void update(LeagueSummoner domain) {
+        this.leagueId = domain.getLeagueId();
+        this.wins = domain.getWins();
+        this.losses = domain.getLosses();
+        this.tier = domain.getTier();
+        this.rank = domain.getRank();
+        this.leaguePoints = domain.getLeaguePoints();
+        this.veteran = domain.isVeteran();
+        this.inactive = domain.isInactive();
+        this.freshBlood = domain.isFreshBlood();
+        this.hotStreak = domain.isHotStreak();
+        this.absolutePoints = calculatePoints();
+    }
 }

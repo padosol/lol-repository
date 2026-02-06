@@ -1,4 +1,4 @@
-package com.example.lolserver.repository.league.entity;
+package com.mmrtr.lol.infra.persistence.league.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -48,4 +48,23 @@ public class LeagueSummonerHistoryEntity {
 
     @CreatedDate
     private LocalDateTime createdAt;
+
+    public static LeagueSummonerHistoryEntity fromLeagueSummonerEntity(LeagueSummonerEntity entity) {
+        return LeagueSummonerHistoryEntity.builder()
+                .leagueSummonerId(entity.getId())
+                .puuid(entity.getPuuid())
+                .queue(entity.getQueue())
+                .leagueId(entity.getLeagueId())
+                .wins(entity.getWins())
+                .losses(entity.getLosses())
+                .tier(entity.getTier())
+                .rank(entity.getRank())
+                .leaguePoints(entity.getLeaguePoints())
+                .absolutePoints(entity.getAbsolutePoints())
+                .veteran(entity.isVeteran())
+                .inactive(entity.isInactive())
+                .freshBlood(entity.isFreshBlood())
+                .hotStreak(entity.isHotStreak())
+                .build();
+    }
 }

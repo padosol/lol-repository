@@ -9,9 +9,22 @@ spring:
   jackson:
     deserialization:
       fail-on-unknown-properties: false
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: Asia/Seoul
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  shutdown: graceful
 
 management:
   endpoints:
     web:
       exposure:
-        include: health, metrics, scheduledtasks
+        include: health
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true

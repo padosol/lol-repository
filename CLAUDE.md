@@ -98,3 +98,7 @@ com.mmrtr.lol.domain/
 - `@Getter`, `@NoArgsConstructor(access = AccessLevel.PROTECTED)` 기본 사용
 - `@Builder` 패턴 활용
 - Entity에서 `@Setter` 사용 지양
+
+## 6. 주요 클래스 레퍼런스
+
+자세한 내용은 [docs/class-reference.md](docs/class-reference.md)를 참조하세요.
