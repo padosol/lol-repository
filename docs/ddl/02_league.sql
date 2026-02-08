@@ -206,6 +206,7 @@ CREATE TABLE tier_cutoff (
     region              VARCHAR(10)     NOT NULL,
     min_league_points   INTEGER         NOT NULL,
     lp_change           INTEGER,
+    user_count          INTEGER,
     updated_at          TIMESTAMP,
     created_at          TIMESTAMP,
 
@@ -220,6 +221,7 @@ COMMENT ON COLUMN tier_cutoff.tier IS '티어';
 COMMENT ON COLUMN tier_cutoff.region IS '서버 지역';
 COMMENT ON COLUMN tier_cutoff.min_league_points IS '해당 티어 진입 최소 LP';
 COMMENT ON COLUMN tier_cutoff.lp_change IS 'LP 변화량 (현재 - 이전)';
+COMMENT ON COLUMN tier_cutoff.user_count IS '해당 티어 유저 수';
 COMMENT ON COLUMN tier_cutoff.updated_at IS '수정 일시';
 COMMENT ON COLUMN tier_cutoff.created_at IS '생성 일시';
 
@@ -234,6 +236,7 @@ CREATE TABLE tier_cutoff_backup (
     tier                VARCHAR(20)     NOT NULL,
     region              VARCHAR(10)     NOT NULL,
     min_league_points   INTEGER         NOT NULL,
+    user_count          INTEGER,
 
     CONSTRAINT pk_tier_cutoff_backup PRIMARY KEY (id)
 );
@@ -246,3 +249,4 @@ COMMENT ON COLUMN tier_cutoff_backup.queue IS '큐 타입';
 COMMENT ON COLUMN tier_cutoff_backup.tier IS '티어';
 COMMENT ON COLUMN tier_cutoff_backup.region IS '서버 지역';
 COMMENT ON COLUMN tier_cutoff_backup.min_league_points IS '이전 최소 LP';
+COMMENT ON COLUMN tier_cutoff_backup.user_count IS '해당 티어 유저 수';
