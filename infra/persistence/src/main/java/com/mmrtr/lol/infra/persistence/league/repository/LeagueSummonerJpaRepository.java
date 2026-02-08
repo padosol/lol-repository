@@ -33,7 +33,7 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
             JOIN SummonerEntity s ON ls.puuid = s.puuid
             WHERE ls.queue = :queue
               AND ls.tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')
-            ORDER BY ls.absolutePoints DESC
+            ORDER BY ls.absolutePoints DESC, ls.puuid ASC
             """)
     List<SummonerRankingProjection> findRankingByQueue(@Param("queue") String queue);
 
@@ -61,7 +61,7 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
             JOIN SummonerEntity s ON ls.puuid = s.puuid
             WHERE ls.queue = :queue
               AND ls.tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')
-            ORDER BY ls.absolutePoints DESC
+            ORDER BY ls.absolutePoints DESC, ls.puuid ASC
             """)
     Page<SummonerRankingProjection> findRankingByQueuePaged(@Param("queue") String queue, Pageable pageable);
 
@@ -92,7 +92,7 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
             WHERE ls.queue = :queue
               AND s.region = :region
               AND ls.tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')
-            ORDER BY ls.absolutePoints DESC
+            ORDER BY ls.absolutePoints DESC, ls.puuid ASC
             """)
     Page<SummonerRankingProjection> findRankingByQueueAndRegionPaged(
             @Param("queue") String queue,

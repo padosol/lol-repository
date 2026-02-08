@@ -35,7 +35,7 @@ public class RiotApiConfig {
     public RetryTemplate retryTemplate() {
         return RetryTemplate.builder()
                 .maxAttempts(2)
-                .fixedBackoff(1000)
+                .fixedBackoff(2000)
                 .retryOn(RiotClientException.class)
                 .build();
     }
