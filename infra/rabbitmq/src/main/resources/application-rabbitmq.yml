@@ -25,27 +25,7 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
-    virtual-host: ${RABBITMQ_VHOST:/}
     connection-timeout: 30000ms
-    requested-heartbeat: 60s
-    cache:
-      channel:
-        size: 25
-        checkout-timeout: 3000ms
-    listener:
-      simple:
-        prefetch: 10
-        retry:
-          enabled: true
-          initial-interval: 1000ms
-          max-attempts: 3
-          max-interval: 10000ms
-          multiplier: 2.0
-    template:
-      retry:
-        enabled: true
-        initial-interval: 1000ms
-        max-attempts: 3
 
 ---
 spring:
