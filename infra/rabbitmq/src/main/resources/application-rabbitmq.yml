@@ -3,6 +3,7 @@ rabbitmq:
   queue.name: sample.queue
   exchange.name: sample.exchange
   routing.key: sample.key
+
 ---
 spring:
   config:
@@ -13,13 +14,27 @@ spring:
     port: 5672
     username: guest
     password: guest
+
 ---
 spring:
   config:
     activate:
       on-profile: prod
   rabbitmq:
-    host: host.docker.internal
-    port: 5672
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
+    connection-timeout: 30000ms
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  rabbitmq:
+    host: lol-rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+    connection-timeout: 30000ms

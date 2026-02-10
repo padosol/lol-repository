@@ -26,25 +26,20 @@ public class SaveSummonerDataUseCase {
         summonerRepositoryPort.save(summoner);
 
         for (LeagueInfo leagueInfo : summoner.getLeagueInfos()) {
-            String leagueId = leagueInfo.getLeagueId();
-            League league = leagueRepositoryPort.findById(leagueId).orElse(null);
-
-            if (league == null) {
-                league = leagueRepositoryPort.save(League.builder()
-                        .leagueId(leagueInfo.getLeagueId())
-                        .queue(leagueInfo.getQueueType())
-                        .tier(leagueInfo.getTier())
-                        .build());
-            }
+            leagueRepositoryPort.saveIfAbsent(League.builder()
+                    .leagueId(leagueInfo.getLeagueId())
+                    .queue(leagueInfo.getQueueType())
+                    .tier(leagueInfo.getTier())
+                    .build());
 
             LeagueSummoner savedLeagueSummoner = leagueSummonerRepositoryPort
-                    .findBy(summoner.getPuuid(), league.getLeagueId())
+                    .findBy(summoner.getPuuid(), leagueInfo.getLeagueId())
                     .orElse(null);
 
             if (savedLeagueSummoner == null) {
                 LeagueSummoner leagueSummoner = LeagueSummoner.builder()
                         .puuid(summoner.getPuuid())
-                        .leagueId(league.getLeagueId())
+                        .leagueId(leagueInfo.getLeagueId())
                         .queue(leagueInfo.getQueueType())
                         .tier(leagueInfo.getTier())
                         .rank(leagueInfo.getRank())

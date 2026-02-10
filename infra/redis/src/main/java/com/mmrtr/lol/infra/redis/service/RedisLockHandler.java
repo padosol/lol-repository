@@ -1,51 +1,77 @@
 package com.mmrtr.lol.infra.redis.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.Collections;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RedisLockHandler {
-    private static final String UNLOCK_LUA =
-            "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end";
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedissonClient redissonClient;
     private final StringRedisTemplate stringRedisTemplate;
 
     public boolean acquireLock(String puuid, Duration duration) {
         String lockKey = "summoner:lock:" + puuid;
 
-        Boolean success = redisTemplate.opsForValue()
-                .setIfAbsent(
-                        lockKey,
-                        puuid,
-                        duration);
-
-        if (Boolean.TRUE.equals(success)) {
-            return true;
+        try {
+            RLock lock = redissonClient.getLock(lockKey);
+            return lock.tryLock(0, duration.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("락 획득 중 인터럽트 발생: {}", lockKey, e);
+            return false;
         }
-
-        return false;
     }
 
     public boolean releaseLock(String puuid) {
         String lockKey = "summoner:lock:" + puuid;
 
-        DefaultRedisScript<Long> script = new DefaultRedisScript<>(UNLOCK_LUA, Long.class);
+        RLock lock = redissonClient.getLock(lockKey);
+        if (lock.isHeldByCurrentThread()) {
+            lock.unlock();
+            return true;
+        }
+        return false;
+    }
 
-        Long result = redisTemplate.execute(
-                script,
-                Collections.singletonList(lockKey),
-                puuid
-        );
+    /**
+     * 분산 락 내에서 작업 실행 (재시도 없음)
+     * 락 획득 실패 시 즉시 empty 반환
+     *
+     * @param lockKey  락 키
+     * @param duration 락 유지 시간
+     * @param action   실행할 작업
+     * @return 작업 결과 (락 획득 실패 시 empty)
+     */
+    public <T> Optional<T> executeWithLock(String lockKey, Duration duration, Supplier<T> action) {
+        RLock lock = redissonClient.getLock(lockKey);
 
-        return result != null && result == 1L;
+        try {
+            if (lock.tryLock(0, duration.toMillis(), TimeUnit.MILLISECONDS)) {
+                try {
+                    return Optional.ofNullable(action.get());
+                } finally {
+                    if (lock.isHeldByCurrentThread()) {
+                        lock.unlock();
+                    }
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("락 획득 중 인터럽트 발생: {}", lockKey, e);
+        }
+
+        return Optional.empty();
     }
 
     public void deleteSummonerRenewal(String puuid) {

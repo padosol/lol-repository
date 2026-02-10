@@ -28,8 +28,8 @@ import java.time.LocalDateTime;
         name = "summoner_ranking",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "unique_puuid_queue",
-                        columnNames = {"puuid", "queue"}
+                        name = "unique_puuid_queue_region",
+                        columnNames = {"puuid", "queue", "region"}
                 )
         }
 )

@@ -34,9 +34,11 @@ public class SummonerService {
 
             return summoner;
 
+        } catch (CoreException e) {
+            throw e;
         } catch (RuntimeException e) {
-            log.error("Error fetching summoner info: {}", e.getMessage());
-            throw new CoreException(ErrorType.NOT_FOUND_USER, "유저 정보 조회 중 오류가 발생했습니다.");
+            log.error("Unexpected error: {}", e.getMessage());
+            throw new CoreException(ErrorType.DEFAULT_ERROR, "유저 정보 조회 중 오류가 발생했습니다.");
         }
     }
 
@@ -47,15 +49,17 @@ public class SummonerService {
                     .fetchSummonerByPuuid(puuid, regionType, requestExecutor)
                     .join();
 
-            log.info("getSummonerByPuuid region type {} and puuid {}", regionType, puuid);
+            log.debug("getSummonerByPuuid region type {} and puuid {}", regionType, puuid);
             summoner.initSummoner();
             saveSummonerDataUseCase.execute(summoner);
 
             return summoner;
 
+        } catch (CoreException e) {
+            throw e;
         } catch (RuntimeException e) {
-            log.error("Error fetching summoner info by puuid: {}", e.getMessage());
-            throw new CoreException(ErrorType.NOT_FOUND_USER, "유저 정보 조회 중 오류가 발생했습니다.");
+            log.error("Unexpected error: {}", e.getMessage());
+            throw new CoreException(ErrorType.DEFAULT_ERROR, "유저 정보 조회 중 오류가 발생했습니다.");
         }
     }
 }

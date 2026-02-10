@@ -10,7 +10,10 @@ import com.mmrtr.lol.domain.summoner.service.port.SummonerApiPort;
 import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
+import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
+import com.mmrtr.lol.support.error.CoreException;
+import com.mmrtr.lol.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -50,6 +53,22 @@ public class SummonerApiAdapter implements SummonerApiPort {
                             (summonerDto, leagueEntryDtos) ->
                                     toDomain(accountDto, summonerDto, platform.getPlatformId(), leagueEntryDtos)
                     );
+                })
+                .exceptionally(ex -> {
+                    Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+
+                    if (cause instanceof RiotClientException riotEx) {
+                        int statusCode = riotEx.getStatus().value();
+
+                        if (statusCode == 429) {
+                            throw new CoreException(ErrorType.TOO_MANY_REQUESTS, "잠시 후 다시 시도해주세요.");
+                        }
+                        if (statusCode == 404) {
+                            throw new CoreException(ErrorType.NOT_FOUND_USER, "유저를 찾을 수 없습니다.");
+                        }
+                    }
+
+                    throw new CoreException(ErrorType.DEFAULT_ERROR, "유저 정보 조회 중 오류가 발생했습니다.");
                 });
     }
 
@@ -70,8 +89,23 @@ public class SummonerApiAdapter implements SummonerApiPort {
         ).thenCombine(leagueEntriesFuture, (arr, leagueEntryDtos) -> {
             AccountDto accountDto = (AccountDto) arr[0];
             SummonerDto summonerDto = (SummonerDto) arr[1];
-            log.info("fetchSummonerByPuuid platform {} puuid {}", platformName, puuid);
+            log.debug("fetchSummonerByPuuid platform {} puuid {}", platformName, puuid);
             return toDomain(accountDto, summonerDto, platform.getPlatformId(), leagueEntryDtos);
+        }).exceptionally(ex -> {
+            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+
+            if (cause instanceof RiotClientException riotEx) {
+                int statusCode = riotEx.getStatus().value();
+
+                if (statusCode == 429) {
+                    throw new CoreException(ErrorType.TOO_MANY_REQUESTS, "잠시 후 다시 시도해주세요.");
+                }
+                if (statusCode == 404) {
+                    throw new CoreException(ErrorType.NOT_FOUND_USER, "유저를 찾을 수 없습니다.");
+                }
+            }
+
+            throw new CoreException(ErrorType.DEFAULT_ERROR, "유저 정보 조회 중 오류가 발생했습니다.");
         });
     }
 

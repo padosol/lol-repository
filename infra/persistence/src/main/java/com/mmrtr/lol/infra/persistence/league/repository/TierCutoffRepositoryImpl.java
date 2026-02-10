@@ -5,6 +5,7 @@ import com.mmrtr.lol.domain.league.repository.TierCutoffRepositoryPort;
 import com.mmrtr.lol.infra.persistence.league.entity.TierCutoffEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -15,6 +16,7 @@ public class TierCutoffRepositoryImpl implements TierCutoffRepositoryPort {
     private final TierCutoffJpaRepository jpaRepository;
 
     @Override
+    @Transactional
     public void saveAll(List<TierCutoff> cutoffs) {
         if (cutoffs.isEmpty()) {
             return;
@@ -34,5 +36,23 @@ public class TierCutoffRepositoryImpl implements TierCutoffRepositoryPort {
         return jpaRepository.findByQueue(queue).stream()
                 .map(TierCutoffEntity::toDomain)
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public void backupCurrentCutoffs(String queue) {
+        jpaRepository.backupCurrentCutoffs(queue);
+    }
+
+    @Override
+    @Transactional
+    public void updateLpChangesFromBackup(String queue) {
+        jpaRepository.updateLpChangesFromBackup(queue);
+    }
+
+    @Override
+    @Transactional
+    public void clearBackup(String queue) {
+        jpaRepository.clearBackup(queue);
     }
 }

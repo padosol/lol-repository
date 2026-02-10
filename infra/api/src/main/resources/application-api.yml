@@ -18,10 +18,26 @@ server:
 
 logging:
   level:
-    com.mmrtr.lol.riot: INFO
+    root: WARN
+    com.mmrtr.lol: INFO
+    com.mmrtr.lol.infra.riot: INFO
+    org.hibernate.SQL: OFF
+    org.hibernate.type.descriptor.sql: OFF
+    com.zaxxer.hikari: INFO
+    org.springframework: WARN
+    org.springframework.amqp: INFO
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.mmrtr.lol: DEBUG
+    org.hibernate.SQL: DEBUG

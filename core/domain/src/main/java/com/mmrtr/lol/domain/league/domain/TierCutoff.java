@@ -18,5 +18,7 @@ public class TierCutoff {
     private String tier;
     private String region;
     private int minLeaguePoints;
+    private int lpChange;
+    private int userCount;
     private LocalDateTime updatedAt;
 }

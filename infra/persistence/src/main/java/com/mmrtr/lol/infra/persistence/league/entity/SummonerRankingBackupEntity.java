@@ -30,6 +30,9 @@ public class SummonerRankingBackupEntity {
     @Column(name = "queue", nullable = false, length = 50)
     private String queue;
 
+    @Column(name = "region", nullable = false, length = 10)
+    private String region;
+
     @Column(name = "current_rank", nullable = false)
     private int currentRank;
 }

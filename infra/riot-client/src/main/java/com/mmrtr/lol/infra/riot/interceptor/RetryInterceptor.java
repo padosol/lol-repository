@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.riot.interceptor;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.HttpStatus;
@@ -13,6 +14,7 @@ import org.springframework.retry.support.RetryTemplate;
 
 import java.io.IOException;
 
+@Slf4j
 public class RetryInterceptor implements ClientHttpRequestInterceptor {
 
     private final RetryTemplate retryTemplate;
@@ -28,6 +30,7 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
                 ClientHttpResponse response = execution.execute(request, body);
 
                 if (response.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                    log.warn("Rate Limit 초과 - Headers: {}", response.getHeaders());
                     throw new RiotClientException(response.getStatusCode(), "요청이 너무 많습니다.", LogLevel.WARN);
                 }
 
