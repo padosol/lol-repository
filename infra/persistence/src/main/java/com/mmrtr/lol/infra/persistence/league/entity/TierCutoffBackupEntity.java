@@ -1,6 +1,5 @@
 package com.mmrtr.lol.infra.persistence.league.entity;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -10,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Entity
@@ -20,22 +20,22 @@ import lombok.NoArgsConstructor;
 public class TierCutoffBackupEntity {
 
     @Id
-    @Column(name = "id")
+    @Comment("백업 ID")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "queue", nullable = false, length = 50)
+    @Comment("큐 타입")
     private String queue;
 
-    @Column(name = "tier", nullable = false, length = 20)
+    @Comment("티어")
     private String tier;
 
-    @Column(name = "region", nullable = false, length = 10)
+    @Comment("서버 지역")
     private String region;
 
-    @Column(name = "min_league_points", nullable = false)
+    @Comment("최소 리그 포인트")
     private int minLeaguePoints;
 
-    @Column(name = "user_count")
+    @Comment("유저 수")
     private int userCount;
 }

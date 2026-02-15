@@ -1,7 +1,6 @@
 package com.mmrtr.lol.infra.persistence.league.entity;
 
 import com.mmrtr.lol.domain.league.domain.SummonerRanking;
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
@@ -13,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -37,60 +37,60 @@ import java.time.LocalDateTime;
 public class SummonerRankingEntity {
 
     @Id
-    @Column(name = "id")
+    @Comment("랭킹 ID")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "puuid", nullable = false, length = 100)
+    @Comment("소환사 고유 식별자")
     private String puuid;
 
-    @Column(name = "queue", nullable = false, length = 50)
+    @Comment("큐 타입")
     private String queue;
 
-    @Column(name = "region", nullable = false, length = 10)
+    @Comment("서버 지역")
     private String region;
 
-    @Column(name = "current_rank", nullable = false)
+    @Comment("현재 순위")
     private int currentRank;
 
-    @Column(name = "rank_change")
+    @Comment("순위 변동")
     private int rankChange;
 
-    @Column(name = "game_name", length = 50)
+    @Comment("게임 닉네임")
     private String gameName;
 
-    @Column(name = "tag_line", length = 10)
+    @Comment("태그라인")
     private String tagLine;
 
-    @Column(name = "most_champion_1", length = 50)
+    @Comment("모스트 챔피언 1")
     private String mostChampion1;
 
-    @Column(name = "most_champion_2", length = 50)
+    @Comment("모스트 챔피언 2")
     private String mostChampion2;
 
-    @Column(name = "most_champion_3", length = 50)
+    @Comment("모스트 챔피언 3")
     private String mostChampion3;
 
-    @Column(name = "wins", nullable = false)
+    @Comment("승리 수")
     private int wins;
 
-    @Column(name = "losses", nullable = false)
+    @Comment("패배 수")
     private int losses;
 
-    @Column(name = "win_rate", nullable = false, precision = 5, scale = 2)
+    @Comment("승률")
     private BigDecimal winRate;
 
-    @Column(name = "tier", nullable = false, length = 20)
+    @Comment("티어")
     private String tier;
 
-    @Column(name = "rank", length = 5)
+    @Comment("랭크 (디비전)")
     private String rank;
 
-    @Column(name = "league_points", nullable = false)
+    @Comment("리그 포인트 (LP)")
     private int leaguePoints;
 
     @CreatedDate
-    @Column(name = "created_at")
+    @Comment("생성 일시")
     private LocalDateTime createdAt;
 
     public static SummonerRankingEntity fromDomain(SummonerRanking domain) {

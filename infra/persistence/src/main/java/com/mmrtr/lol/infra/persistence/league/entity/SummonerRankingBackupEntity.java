@@ -1,6 +1,5 @@
 package com.mmrtr.lol.infra.persistence.league.entity;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -10,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Entity
@@ -20,19 +20,19 @@ import lombok.NoArgsConstructor;
 public class SummonerRankingBackupEntity {
 
     @Id
-    @Column(name = "id")
+    @Comment("백업 ID")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "puuid", nullable = false, length = 100)
+    @Comment("소환사 고유 식별자")
     private String puuid;
 
-    @Column(name = "queue", nullable = false, length = 50)
+    @Comment("큐 타입")
     private String queue;
 
-    @Column(name = "region", nullable = false, length = 10)
+    @Comment("서버 지역")
     private String region;
 
-    @Column(name = "current_rank", nullable = false)
+    @Comment("현재 순위")
     private int currentRank;
 }

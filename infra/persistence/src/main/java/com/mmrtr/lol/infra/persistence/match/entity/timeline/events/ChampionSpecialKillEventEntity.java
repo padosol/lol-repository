@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Setter
@@ -18,7 +19,7 @@ public class ChampionSpecialKillEventEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "champion_special_kill_event_id")
+    @Comment("챔피언 특수 킬 이벤트 ID")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -26,12 +27,17 @@ public class ChampionSpecialKillEventEntity {
     @JoinColumn(name = "timeline_timestamp", referencedColumnName = "timestamp", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private TimeLineEventEntity timeLineEvent;
 
+    @Comment("킬 타입")
     private String killType;
+    @Comment("킬러 ID")
     private int killerId;
+    @Comment("멀티킬 수")
     private int multiKillLength;
     @Embedded
     private PositionValue positionValue;
 
+    @Comment("타임스탬프")
     private long timestamp;
+    @Comment("이벤트 타입")
     private String type;
 }

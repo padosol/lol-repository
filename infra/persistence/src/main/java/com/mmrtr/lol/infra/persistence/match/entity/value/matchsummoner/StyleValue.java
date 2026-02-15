@@ -6,6 +6,7 @@ import com.mmrtr.lol.infra.riot.dto.match.PerkStyleDto;
 import com.mmrtr.lol.infra.riot.dto.match.PerkStyleSelectionDto;
 import jakarta.persistence.Embeddable;
 import lombok.*;
+import org.hibernate.annotations.Comment;
 
 import java.util.List;
 
@@ -17,10 +18,14 @@ import java.util.List;
 @AllArgsConstructor
 public class StyleValue {
 
+    @Comment("주 룬 ID")
     private int primaryRuneId;
+    @Comment("주 룬 세부 ID 목록")
     private String primaryRuneIds;
 
+    @Comment("보조 룬 ID")
     private int secondaryRuneId;
+    @Comment("보조 룬 세부 ID 목록")
     private String secondaryRuneIds;
 
     public StyleValue(ParticipantDto participantDto) {

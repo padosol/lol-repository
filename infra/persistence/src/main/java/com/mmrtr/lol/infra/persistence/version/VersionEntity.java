@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -18,14 +19,15 @@ public class VersionEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "version_id")
+    @Comment("버전 ID")
     private Long versionId;
 
+    @Comment("패치 버전 값")
     @Column(name = "version_value", nullable = false, length = 20)
     private String versionValue;
 
     @CreatedDate
-    @Column(name = "created_at")
+    @Comment("생성 일시")
     private LocalDateTime createdAt;
 
     public VersionEntity(String versionValue) {

@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Setter
@@ -17,7 +18,7 @@ public class SkillEventsEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "skill_event_id")
+    @Comment("스킬 이벤트 ID")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -25,9 +26,14 @@ public class SkillEventsEntity {
     @JoinColumn(name = "timeline_timestamp", referencedColumnName = "timestamp", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private TimeLineEventEntity timeLineEvent;
 
+    @Comment("스킬 슬롯")
     private int skillSlot;
+    @Comment("참가자 ID")
     private int participantId;
+    @Comment("레벨업 타입")
     private String levelUpType;
+    @Comment("타임스탬프")
     private long timestamp;
+    @Comment("이벤트 타입")
     private String type;
 }

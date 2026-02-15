@@ -4,6 +4,7 @@ package com.mmrtr.lol.infra.persistence.match.entity.value.matchsummoner;
 import com.mmrtr.lol.infra.riot.dto.match.ParticipantDto;
 import jakarta.persistence.Embeddable;
 import lombok.*;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Setter
@@ -13,12 +14,19 @@ import lombok.*;
 @AllArgsConstructor
 public class ItemValue {
 
+    @Comment("아이템 슬롯 1")
     private int item0;
+    @Comment("아이템 슬롯 2")
     private int item1;
+    @Comment("아이템 슬롯 3")
     private int item2;
+    @Comment("아이템 슬롯 4")
     private int item3;
+    @Comment("아이템 슬롯 5")
     private int item4;
+    @Comment("아이템 슬롯 6")
     private int item5;
+    @Comment("아이템 슬롯 7")
     private int item6;
 
     public ItemValue(ParticipantDto participantDto) {

@@ -7,6 +7,7 @@ import com.mmrtr.lol.infra.persistence.match.entity.timeline.id.TimeLineEventId;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.Comment;
 
 import java.util.List;
 
@@ -26,6 +27,7 @@ public class TimeLineEventEntity {
     private MatchEntity matchEntity;
 
     @Id
+    @Comment("타임스탬프")
     private int timestamp;
 
     @BatchSize(size = 500)
