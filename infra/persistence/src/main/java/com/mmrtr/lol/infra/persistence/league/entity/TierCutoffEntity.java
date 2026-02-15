@@ -1,7 +1,6 @@
 package com.mmrtr.lol.infra.persistence.league.entity;
 
 import com.mmrtr.lol.domain.league.domain.TierCutoff;
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
@@ -13,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -36,33 +36,33 @@ import java.time.LocalDateTime;
 public class TierCutoffEntity {
 
     @Id
-    @Column(name = "id")
+    @Comment("티어 컷오프 ID")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "queue", nullable = false, length = 50)
+    @Comment("큐 타입")
     private String queue;
 
-    @Column(name = "tier", nullable = false, length = 20)
+    @Comment("티어")
     private String tier;
 
-    @Column(name = "region", nullable = false, length = 10)
+    @Comment("서버 지역")
     private String region;
 
-    @Column(name = "min_league_points", nullable = false)
+    @Comment("최소 리그 포인트")
     private int minLeaguePoints;
 
-    @Column(name = "lp_change")
+    @Comment("LP 변동량")
     private int lpChange;
 
-    @Column(name = "user_count")
+    @Comment("유저 수")
     private int userCount;
 
-    @Column(name = "updated_at")
+    @Comment("수정 일시")
     private LocalDateTime updatedAt;
 
     @CreatedDate
-    @Column(name = "created_at")
+    @Comment("생성 일시")
     private LocalDateTime createdAt;
 
     public static TierCutoffEntity fromDomain(TierCutoff domain) {

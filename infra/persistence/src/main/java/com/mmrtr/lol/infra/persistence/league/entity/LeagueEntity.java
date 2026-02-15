@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 @Entity
 @Builder
@@ -19,12 +20,16 @@ import lombok.NoArgsConstructor;
 public class LeagueEntity {
 
     @Id
+    @Comment("리그 고유 ID")
     @Column(name = "league_id")
     private String leagueId;
 
+    @Comment("티어")
     private String tier;
+    @Comment("리그 이름")
     private String name;
 
+    @Comment("큐 타입")
     private String queue;
 
     public static LeagueEntity fromDomain(League league) {

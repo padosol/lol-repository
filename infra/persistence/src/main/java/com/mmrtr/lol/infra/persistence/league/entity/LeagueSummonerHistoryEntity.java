@@ -2,6 +2,7 @@ package com.mmrtr.lol.infra.persistence.league.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.Comment;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -23,30 +24,44 @@ public class LeagueSummonerHistoryEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Comment("이력 ID")
     private Long id;
 
+    @Comment("리그 소환사 ID")
     private Long leagueSummonerId;
 
+    @Comment("소환사 고유 식별자")
     private String puuid;
 
-    @Column(name = "queue")
+    @Comment("큐 타입")
     private String queue;
 
-    @Column(name = "league_id")
+    @Comment("리그 ID")
     private String leagueId;
 
+    @Comment("승리 수")
     private int wins;
+    @Comment("패배 수")
     private int losses;
+    @Comment("티어")
     private String tier;
+    @Comment("랭크 (디비전)")
     private String rank;
+    @Comment("리그 포인트 (LP)")
     private int leaguePoints;
+    @Comment("절대 포인트")
     private long absolutePoints;
+    @Comment("베테랑 여부")
     private boolean veteran;
+    @Comment("비활성 여부")
     private boolean inactive;
+    @Comment("신규 진입 여부")
     private boolean freshBlood;
+    @Comment("연승 여부")
     private boolean hotStreak;
 
     @CreatedDate
+    @Comment("생성 일시")
     private LocalDateTime createdAt;
 
     public static LeagueSummonerHistoryEntity fromLeagueSummonerEntity(LeagueSummonerEntity entity) {

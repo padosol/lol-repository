@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 import java.time.LocalDateTime;
 
@@ -17,18 +18,20 @@ import java.time.LocalDateTime;
 public class PatchNoteEntity {
 
     @Id
-    @Column(name = "version_id")
+    @Comment("패치 버전 ID")
     private String versionId;
 
+    @Comment("패치노트 제목")
     @Column(name = "title", nullable = false)
     private String title;
 
+    @Comment("패치노트 내용 (JSON)")
     @Column(name = "content", columnDefinition = "jsonb")
     private String content;
 
-    @Column(name = "patch_url")
+    @Comment("패치노트 URL")
     private String patchUrl;
 
-    @Column(name = "created_at")
+    @Comment("생성 일시")
     private LocalDateTime createdAt;
 }

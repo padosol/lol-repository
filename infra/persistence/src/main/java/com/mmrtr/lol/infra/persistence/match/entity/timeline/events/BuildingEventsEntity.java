@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Setter
@@ -18,7 +19,7 @@ public class BuildingEventsEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "building_event_id")
+    @Comment("건물 이벤트 ID")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -26,15 +27,24 @@ public class BuildingEventsEntity {
     @JoinColumn(name = "timeline_timestamp", referencedColumnName = "timestamp", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private TimeLineEventEntity timeLineEvent;
 
+    @Comment("어시스트 참가자 ID 목록")
     private String assistingParticipantIds;
+    @Comment("현상금")
     private int bounty;
+    @Comment("건물 타입")
     private String buildingType;
+    @Comment("킬러 ID")
     private int killerId;
+    @Comment("라인 타입")
     private String laneType;
     @Embedded
     private PositionValue positionValue;
+    @Comment("팀 ID")
     private int teamId;
+    @Comment("타임스탬프")
     private long timestamp;
+    @Comment("타워 타입")
     private String towerType;
+    @Comment("이벤트 타입")
     private String type;
 }

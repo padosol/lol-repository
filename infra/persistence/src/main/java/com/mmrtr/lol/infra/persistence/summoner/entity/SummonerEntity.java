@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -25,14 +26,23 @@ import java.util.HashSet;
 public class SummonerEntity {
 
     @Id
+    @Comment("소환사 고유 식별자")
     private String puuid;
+    @Comment("프로필 아이콘 ID")
     private int profileIconId;
+    @Comment("소환사 레벨")
     private long summonerLevel;
+    @Comment("게임 닉네임")
     private String gameName;
+    @Comment("태그라인")
     private String tagLine;
+    @Comment("서버 지역")
     private String region;
+    @Comment("검색용 이름 (소문자)")
     private String searchName;
+    @Comment("정보 갱신 일시")
     private LocalDateTime revisionDate;
+    @Comment("갱신 클릭 일시")
     private LocalDateTime revisionClickDate;
 
     public static SummonerEntity fromDomain(Summoner summoner) {
