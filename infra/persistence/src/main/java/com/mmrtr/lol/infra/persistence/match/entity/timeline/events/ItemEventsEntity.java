@@ -18,6 +18,7 @@ public class ItemEventsEntity {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Comment("아이템 이벤트 ID")
+    @Column(name = "item_event_id")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)

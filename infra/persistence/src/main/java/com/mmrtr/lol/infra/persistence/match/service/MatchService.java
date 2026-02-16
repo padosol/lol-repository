@@ -30,17 +30,26 @@ public class MatchService {
     private final MatchSummonerRepositoryImpl matchSummonerRepository;
     private final ChallengesRepositoryImpl challengesRepository;
     private final MatchTeamRepositoryImpl matchTeamRepository;
+    private final TimeLineService timeLineService;
 
     @Transactional
     public void addAllMatch(List<MatchDto> matchDtos, List<TimelineDto> timelineDtos) {
 
-        for (MatchDto matchDto : matchDtos) {
-            MatchEntity match = matchRepository.save(new MatchEntity(matchDto, 26));
+        List<MatchEntity> matchEntities = matchDtos.stream()
+                .map(dto -> new MatchEntity(dto, 26))
+                .toList();
+        matchRepository.bulkSave(matchEntities);
+
+        List<MatchSummonerEntity> allMatchSummoners = new ArrayList<>();
+        List<ChallengesEntity> allChallenges = new ArrayList<>();
+        List<MatchTeamEntity> allMatchTeams = new ArrayList<>();
+
+        for (int i = 0; i < matchDtos.size(); i++) {
+            MatchDto matchDto = matchDtos.get(i);
+            MatchEntity match = matchEntities.get(i);
 
             List<ParticipantDto> participants = matchDto.getInfo().getParticipants();
 
-            List<MatchSummonerEntity> matchSummoners = new ArrayList<>();
-            List<ChallengesEntity> challenges = new ArrayList<>();
             for (ParticipantDto participant : participants) {
                 MatchSummonerEntity matchSummoner = MatchSummonerEntity.of(match, participant);
                 ChallengesDto challengesDto = participant.getChallenges();
@@ -49,32 +58,26 @@ public class MatchService {
                     continue;
                 }
 
-                matchSummoners.add(matchSummoner);
-                challenges.add(ChallengesEntity.of(
-                        matchSummoner, challengesDto
-                ));
+                allMatchSummoners.add(matchSummoner);
+                allChallenges.add(ChallengesEntity.of(matchSummoner, challengesDto));
             }
-
-            matchSummonerRepository.bulkSave(matchSummoners);
-            challengesRepository.bulkSave(challenges);
 
             List<TeamDto> teams = matchDto.getInfo().getTeams();
-            List<MatchTeamEntity> matchTeams = new ArrayList<>();
             for (TeamDto team : teams) {
-                MatchTeamEntity matchTeam = MatchTeamEntity.of(match, team);
-                matchTeams.add(matchTeam);
+                allMatchTeams.add(MatchTeamEntity.of(match, team));
             }
-
-            matchTeamRepository.bulkSave(matchTeams);
         }
 
-        for (TimelineDto timelineDto : timelineDtos) {
+        matchSummonerRepository.bulkSave(allMatchSummoners);
+        challengesRepository.bulkSave(allChallenges);
+        matchTeamRepository.bulkSave(allMatchTeams);
 
+        if (timelineDtos != null && !timelineDtos.isEmpty()) {
+            timeLineService.saveAll(matchEntities, timelineDtos);
         }
-
     }
 
     public List<MatchEntity> findAllMatch(List<String> matchIds) {
-        return  matchRepository.findAllByIds(matchIds);
+        return matchRepository.findAllByIds(matchIds);
     }
 }

@@ -20,6 +20,7 @@ public class TurretPlateDestroyedEventEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Comment("포탑 방벽 파괴 이벤트 ID")
+    @Column(name = "turret_plate_destroyed_event_id")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)

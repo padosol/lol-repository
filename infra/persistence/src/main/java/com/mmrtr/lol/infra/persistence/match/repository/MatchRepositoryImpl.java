@@ -51,7 +51,7 @@ public class MatchRepositoryImpl {
     public String insertSql() {
         return " INSERT INTO \"match\" (" +
                 "match_id," +
-                "date_version," +
+                "data_version," +
                 "end_of_game_result," +
                 "game_creation," +
                 "game_duration," +
@@ -72,7 +72,7 @@ public class MatchRepositoryImpl {
                 "game_start_datetime" +
                 ") VALUES (" +
                 ":matchId," +
-                ":dateVersion," +
+                ":dataVersion," +
                 ":endOfGameResult," +
                 ":gameCreation," +
                 ":gameDuration," +
