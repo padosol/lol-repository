@@ -39,5 +39,9 @@ out/
 
 ### Docker ###
 docker/.env
+docker/postgres-data/
 *.env
 !*.env.example
+
+### Plans ###
+plans/
