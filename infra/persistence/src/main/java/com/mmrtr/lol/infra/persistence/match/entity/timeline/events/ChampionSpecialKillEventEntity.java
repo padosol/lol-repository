@@ -20,6 +20,7 @@ public class ChampionSpecialKillEventEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Comment("챔피언 특수 킬 이벤트 ID")
+    @Column(name = "champion_special_kill_event_id")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)

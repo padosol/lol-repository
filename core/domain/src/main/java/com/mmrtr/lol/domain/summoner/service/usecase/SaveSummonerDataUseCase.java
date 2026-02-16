@@ -32,27 +32,21 @@ public class SaveSummonerDataUseCase {
                     .tier(leagueInfo.getTier())
                     .build());
 
-            LeagueSummoner savedLeagueSummoner = leagueSummonerRepositoryPort
-                    .findBy(summoner.getPuuid(), leagueInfo.getLeagueId())
-                    .orElse(null);
-
-            if (savedLeagueSummoner == null) {
-                LeagueSummoner leagueSummoner = LeagueSummoner.builder()
-                        .puuid(summoner.getPuuid())
-                        .leagueId(leagueInfo.getLeagueId())
-                        .queue(leagueInfo.getQueueType())
-                        .tier(leagueInfo.getTier())
-                        .rank(leagueInfo.getRank())
-                        .leaguePoints(leagueInfo.getLeaguePoints())
-                        .wins(leagueInfo.getWins())
-                        .losses(leagueInfo.getLosses())
-                        .hotStreak(leagueInfo.isHotStreak())
-                        .veteran(leagueInfo.isVeteran())
-                        .freshBlood(leagueInfo.isFreshBlood())
-                        .inactive(leagueInfo.isInactive())
-                        .build();
-                leagueSummonerRepositoryPort.save(leagueSummoner);
-            }
+            LeagueSummoner leagueSummoner = LeagueSummoner.builder()
+                    .puuid(summoner.getPuuid())
+                    .leagueId(leagueInfo.getLeagueId())
+                    .queue(leagueInfo.getQueueType())
+                    .tier(leagueInfo.getTier())
+                    .rank(leagueInfo.getRank())
+                    .leaguePoints(leagueInfo.getLeaguePoints())
+                    .wins(leagueInfo.getWins())
+                    .losses(leagueInfo.getLosses())
+                    .hotStreak(leagueInfo.isHotStreak())
+                    .veteran(leagueInfo.isVeteran())
+                    .freshBlood(leagueInfo.isFreshBlood())
+                    .inactive(leagueInfo.isInactive())
+                    .build();
+            leagueSummonerRepositoryPort.save(leagueSummoner);
         }
     }
 }

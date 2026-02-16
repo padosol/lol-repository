@@ -19,6 +19,7 @@ public class LevelEventsEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Comment("레벨 이벤트 ID")
+    @Column(name = "level_event_id")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
