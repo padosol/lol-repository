@@ -2,6 +2,7 @@ package com.mmrtr.lol.infra.rabbitmq.listener;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
+import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRenewalService;
 import com.mmrtr.lol.infra.redis.service.RedisLockHandler;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,7 @@ public class SummonerRenewalListener {
     private final RedisLockHandler redisLockHandler;
     private final SummonerRenewalService summonerRenewalService;
 
-    @RabbitListener(queues = "mmrtr.summoner", containerFactory = "simpleRabbitListenerContainerFactory")
+    @RabbitListener(queues = RabbitMqBinding.Queue.SUMMONER, containerFactory = "simpleRabbitListenerContainerFactory")
     public void receiveSummonerMessageV2(@Payload SummonerMessage summonerMessage) {
         log.info("전적 갱신 요청 {}", summonerMessage);
         String puuid = summonerMessage.getPuuid();

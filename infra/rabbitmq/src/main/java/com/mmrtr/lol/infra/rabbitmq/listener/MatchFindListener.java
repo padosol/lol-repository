@@ -2,6 +2,7 @@ package com.mmrtr.lol.infra.rabbitmq.listener;
 
 import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
 import com.mmrtr.lol.infra.persistence.match.service.MatchService;
+import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
@@ -32,7 +33,7 @@ public class MatchFindListener {
     private final Executor requestExecutor;
 
 
-    @RabbitListener(queues = "renewal.match.find.queue", containerFactory = "findQueueSimpleRabbitListenerContainerFactory")
+    @RabbitListener(queues = RabbitMqBinding.Queue.RENEWAL_MATCH_FIND, containerFactory = "findQueueSimpleRabbitListenerContainerFactory")
     public void findMatchIdsListener(@Payload SummonerRenewalMessage summonerRenewalMessage) {
         String puuid = summonerRenewalMessage.puuid();
         Platform platform = Platform.valueOfName(summonerRenewalMessage.platform());

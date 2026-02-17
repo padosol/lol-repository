@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.rabbitmq.listener;
 import com.mmrtr.lol.infra.persistence.match.service.MatchService;
 import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
 import com.mmrtr.lol.infra.riot.dto.match_timeline.TimelineDto;
+import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.common.type.Platform;
 import com.rabbitmq.client.Channel;
@@ -55,7 +56,7 @@ public class MatchListener {
     }
 
     @RabbitListener(
-            queues = "mmrtr.matchId",
+            queues = RabbitMqBinding.Queue.MATCH_ID,
             containerFactory = "batchRabbitListenerContainerFactory",
             ackMode = "MANUAL"
     )
@@ -83,6 +84,10 @@ public class MatchListener {
                 });
 
         Pair<MatchDto, TimelineDto> dtoPair = completableFuture.join();
+        if (dtoPair == null) {
+            channel.basicNack(deliveryTag, false, false);
+            return;
+        }
         queue.add(dtoPair);
         channel.basicAck(deliveryTag, false);
     }
