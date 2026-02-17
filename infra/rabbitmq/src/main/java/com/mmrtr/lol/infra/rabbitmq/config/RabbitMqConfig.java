@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @EnableRabbit
 public class RabbitMqConfig {
+
     @Value("${spring.rabbitmq.host}")
     private String rabbitmqHost;
 
@@ -30,25 +31,25 @@ public class RabbitMqConfig {
 
     @Bean
     public Queue summonerQueue() {
-        return QueueBuilder.durable("mmrtr.summoner")
-                .withArgument("x-dead-letter-exchange", "summoner.dlx.exchange")
-                .withArgument("x-dead-letter-routing-key", "deadLetter")
+        return QueueBuilder.durable(RabbitMqBinding.Queue.SUMMONER)
+                .withArgument("x-dead-letter-exchange", RabbitMqBinding.SUMMONER_DLX.getExchange())
+                .withArgument("x-dead-letter-routing-key", RabbitMqBinding.SUMMONER_DLX.getRoutingKey())
                 .build();
     }
 
     @Bean
     public Queue dlxSummonerQueue() {
-        return new Queue("mmrtr.summoner.dlx", true);
+        return new Queue(RabbitMqBinding.Queue.SUMMONER_DLX, true);
     }
 
     @Bean
     public TopicExchange topicExchange() {
-        return new TopicExchange("mmrtr.exchange");
+        return new TopicExchange(RabbitMqBinding.SUMMONER.getExchange());
     }
 
     @Bean
     public DirectExchange summonerDlxExchange() {
-        return new DirectExchange("summoner.dlx.exchange");
+        return new DirectExchange(RabbitMqBinding.SUMMONER_DLX.getExchange());
     }
 
     @Bean
@@ -56,7 +57,7 @@ public class RabbitMqConfig {
         return BindingBuilder
                 .bind(summonerQueue())
                 .to(topicExchange())
-                .with("mmrtr.key");
+                .with(RabbitMqBinding.SUMMONER.getRoutingKey());
     }
 
     @Bean
@@ -64,17 +65,17 @@ public class RabbitMqConfig {
         return BindingBuilder
                 .bind(dlxSummonerQueue())
                 .to(summonerDlxExchange())
-                .with("deadLetter");
+                .with(RabbitMqBinding.SUMMONER_DLX.getRoutingKey());
     }
 
     @Bean
     public Queue matchIdQueue() {
-        return new Queue("mmrtr.matchId");
+        return new Queue(RabbitMqBinding.Queue.MATCH_ID);
     }
 
     @Bean
     public DirectExchange matchIdExchange() {
-        return new DirectExchange("mmrtr.matchId.exchange");
+        return new DirectExchange(RabbitMqBinding.MATCH_ID.getExchange());
     }
 
     @Bean
@@ -82,24 +83,24 @@ public class RabbitMqConfig {
         return BindingBuilder
                 .bind(matchIdQueue())
                 .to(matchIdExchange())
-                .with("mmrtr.routingkey.matchId");
+                .with(RabbitMqBinding.MATCH_ID.getRoutingKey());
     }
 
     @Bean
     public TopicExchange renewalExchange() {
-        return new TopicExchange("renewal.topic.exchange", true, false);
+        return new TopicExchange(RabbitMqBinding.RENEWAL_MATCH_FIND.getExchange(), true, false);
     }
 
     @Bean
     public Queue matchFind() {
-        return new Queue("renewal.match.find.queue", true);
+        return new Queue(RabbitMqBinding.Queue.RENEWAL_MATCH_FIND, true);
     }
 
     @Bean
     public Binding matchFindBinding() {
         return BindingBuilder.bind(matchFind())
                 .to(renewalExchange())
-                .with("renewal.match.find");
+                .with(RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey());
     }
 
     @Bean
