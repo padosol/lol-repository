@@ -31,7 +31,7 @@ public class RabbitMqConfig {
 
     @Bean
     public Queue summonerQueue() {
-        return QueueBuilder.durable(RabbitMqBinding.Queue.SUMMONER)
+        return QueueBuilder.durable(RabbitMqBinding.SUMMONER.getQueue())
                 .withArgument("x-dead-letter-exchange", RabbitMqBinding.SUMMONER_DLX.getExchange())
                 .withArgument("x-dead-letter-routing-key", RabbitMqBinding.SUMMONER_DLX.getRoutingKey())
                 .build();
@@ -39,7 +39,7 @@ public class RabbitMqConfig {
 
     @Bean
     public Queue dlxSummonerQueue() {
-        return new Queue(RabbitMqBinding.Queue.SUMMONER_DLX, true);
+        return new Queue(RabbitMqBinding.SUMMONER_DLX.getQueue(), true);
     }
 
     @Bean
@@ -70,7 +70,7 @@ public class RabbitMqConfig {
 
     @Bean
     public Queue matchIdQueue() {
-        return new Queue(RabbitMqBinding.Queue.MATCH_ID);
+        return new Queue(RabbitMqBinding.MATCH_ID.getQueue());
     }
 
     @Bean
@@ -93,7 +93,7 @@ public class RabbitMqConfig {
 
     @Bean
     public Queue matchFind() {
-        return new Queue(RabbitMqBinding.Queue.RENEWAL_MATCH_FIND, true);
+        return new Queue(RabbitMqBinding.RENEWAL_MATCH_FIND.getQueue(), true);
     }
 
     @Bean

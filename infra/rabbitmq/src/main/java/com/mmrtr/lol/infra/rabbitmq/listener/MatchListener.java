@@ -84,6 +84,10 @@ public class MatchListener {
                 });
 
         Pair<MatchDto, TimelineDto> dtoPair = completableFuture.join();
+        if (dtoPair == null) {
+            channel.basicNack(deliveryTag, false, false);
+            return;
+        }
         queue.add(dtoPair);
         channel.basicAck(deliveryTag, false);
     }

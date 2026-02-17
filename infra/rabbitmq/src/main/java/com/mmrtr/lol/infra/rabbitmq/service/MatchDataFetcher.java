@@ -35,6 +35,9 @@ public class MatchDataFetcher {
                 puuid, platform, dbRevisionDateMillis, 0, MATCH_FETCH_COUNT, executor);
 
         return matchIdListFuture.thenApply(matchIds -> {
+            if (matchIds == null || matchIds.isEmpty()) {
+                return List.of();
+            }
             if (matchIds.size() == MATCH_FETCH_COUNT) {
                 log.info("matchIds size is 20. send message for search more matchIds");
                 rabbitTemplate.convertAndSend(
