@@ -326,6 +326,16 @@ public class MatchSummonerEntity {
     @Comment("시야 제거 핑 횟수")
     private int visionClearedPings;
 
+    @Comment("매치 저장 시점 소환사 티어")
+    private String tier;
+
+    @Comment("매치 저장 시점 소환사 디비전")
+    @Column(name = "tier_rank")
+    private String tierRank;
+
+    @Comment("매치 저장 시점 절대 포인트")
+    private Integer absolutePoints;
+
     @Embedded
     private ItemValue item;
 
@@ -335,7 +345,8 @@ public class MatchSummonerEntity {
     @Embedded
     private StyleValue styleValue;
 
-    public static MatchSummonerEntity of(MatchEntity match, ParticipantDto participantDto) {
+    public static MatchSummonerEntity of(MatchEntity match, ParticipantDto participantDto,
+                                          String tier, String tierRank, Integer absolutePoints) {
         return MatchSummonerEntity.builder()
                 .puuid(participantDto.getPuuid())
                 .matchId(match.getMatchId())
@@ -472,7 +483,9 @@ public class MatchSummonerEntity {
                 .totalAllyJungleMinionsKilled(participantDto.getTotalAllyJungleMinionsKilled())
                 .totalEnemyJungleMinionsKilled(participantDto.getTotalEnemyJungleMinionsKilled())
                 .visionClearedPings(participantDto.getVisionClearedPings())
-
+                .tier(tier)
+                .tierRank(tierRank)
+                .absolutePoints(absolutePoints)
                 .build();
     }
 }

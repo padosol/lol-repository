@@ -69,7 +69,8 @@ public class MatchRepositoryImpl {
                 "season," +
                 "game_create_datetime," +
                 "game_end_datetime," +
-                "game_start_datetime" +
+                "game_start_datetime," +
+                "average_tier" +
                 ") VALUES (" +
                 ":matchId," +
                 ":dataVersion," +
@@ -90,7 +91,8 @@ public class MatchRepositoryImpl {
                 ":season," +
                 ":gameCreateDatetime," +
                 ":gameEndDatetime," +
-                ":gameStartDatetime "+
+                ":gameStartDatetime," +
+                ":averageTier" +
                 ") ON CONFLICT (match_id) DO NOTHING";
     }
 }
