@@ -76,7 +76,6 @@ CREATE TABLE match_summoner (
     riot_id_game_name                   VARCHAR(255),
     riot_id_tagline                     VARCHAR(255),
     profile_icon                        INTEGER         NOT NULL,
-    summoner_name                       VARCHAR(255),
     participant_id                      INTEGER         NOT NULL,
 
     -- 챔피언, 룬, 스펠 정보
@@ -217,7 +216,6 @@ CREATE TABLE match_summoner (
     player_augment4                     INTEGER         NOT NULL,
     player_subteam_id                   INTEGER         NOT NULL,
     push_pings                          INTEGER         NOT NULL,
-    riot_id_name                        VARCHAR(255),
     subteam_placement                   INTEGER         NOT NULL,
     total_ally_jungle_minions_killed    INTEGER         NOT NULL,
     total_enemy_jungle_minions_killed   INTEGER         NOT NULL,
