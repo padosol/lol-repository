@@ -74,6 +74,9 @@ public class MatchEntity {
     @Comment("게임 시작 일시")
     private LocalDateTime gameStartDatetime;
 
+    @Comment("참가자 평균 절대 포인트")
+    private Integer averageTier;
+
     public MatchEntity(MatchDto matchDto, int season) {
         this.matchId = matchDto.getMetadata().getMatchId();
         this.dataVersion = matchDto.getMetadata().getDataVersion();
@@ -95,6 +98,10 @@ public class MatchEntity {
         this.gameCreateDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameCreation()), ZoneId.systemDefault());
         this.gameEndDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameEndTimestamp()), ZoneId.systemDefault());
         this.gameStartDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameStartTimestamp()), ZoneId.systemDefault());
+    }
+
+    public void setAverageTier(Integer averageTier) {
+        this.averageTier = averageTier;
     }
 
 }

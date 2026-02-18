@@ -171,7 +171,10 @@ public class MatchSummonerRepositoryImpl {
                 "primary_rune_id," +
                 "primary_rune_ids," +
                 "secondary_rune_id," +
-                "secondary_rune_ids " +
+                "secondary_rune_ids," +
+                "tier," +
+                "tier_rank," +
+                "absolute_points " +
                 ") VALUES (" +
                 ":summonerId," +
                 ":matchId," +
@@ -318,7 +321,10 @@ public class MatchSummonerRepositoryImpl {
                 ":primaryRuneId," +
                 ":primaryRuneIds," +
                 ":secondaryRuneId," +
-                ":secondaryRuneIds" +
+                ":secondaryRuneIds," +
+                ":tier," +
+                ":tierRank," +
+                ":absolutePoints" +
                 ") ON CONFLICT (puuid, match_id) DO NOTHING";
 
         SqlParameterSource[] params = matchSummoners.stream()
@@ -470,6 +476,9 @@ public class MatchSummonerRepositoryImpl {
                             .addValue("primaryRuneIds", comment.getStyleValue().getPrimaryRuneIds())
                             .addValue("secondaryRuneId", comment.getStyleValue().getSecondaryRuneId())
                             .addValue("secondaryRuneIds", comment.getStyleValue().getSecondaryRuneIds())
+                            .addValue("tier", comment.getTier())
+                            .addValue("tierRank", comment.getTierRank())
+                            .addValue("absolutePoints", comment.getAbsolutePoints())
                             ;
                 })
                 .toArray(SqlParameterSource[]::new);
