@@ -17,6 +17,8 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class RedisLockHandler {
 
+    private static final String RENEWAL_KEY_PREFIX = "summoner:renewal:";
+
     private final RedissonClient redissonClient;
     private final StringRedisTemplate stringRedisTemplate;
 
@@ -75,6 +77,6 @@ public class RedisLockHandler {
     }
 
     public void deleteSummonerRenewal(String puuid) {
-        stringRedisTemplate.delete(puuid);
+        stringRedisTemplate.delete(RENEWAL_KEY_PREFIX + puuid);
     }
 }
