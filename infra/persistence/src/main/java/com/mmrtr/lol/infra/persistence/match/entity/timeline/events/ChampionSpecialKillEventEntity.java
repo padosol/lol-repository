@@ -24,8 +24,7 @@ public class ChampionSpecialKillEventEntity {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "match_id", referencedColumnName = "match_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
-    @JoinColumn(name = "timeline_timestamp", referencedColumnName = "timestamp", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    @JoinColumn(name = "time_line_event_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private TimeLineEventEntity timeLineEvent;
 
     @Comment("킬 타입")

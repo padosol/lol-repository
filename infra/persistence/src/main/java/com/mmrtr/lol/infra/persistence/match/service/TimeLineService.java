@@ -29,6 +29,10 @@ public class TimeLineService {
 
     @Transactional
     public void saveAll(List<MatchEntity> matchEntities, List<TimelineDto> timelineDtos) {
+        long start = System.currentTimeMillis();
+
+        // 엔티티 매핑
+        long t = System.currentTimeMillis();
         Map<String, MatchEntity> matchEntityMap = matchEntities.stream()
                 .collect(Collectors.toMap(MatchEntity::getMatchId, Function.identity()));
 
@@ -56,6 +60,7 @@ public class TimeLineService {
 
             for (FramesTimeLineDto frame : frames) {
                 TimeLineEventEntity timeLineEvent = TimeLineEventEntity.builder()
+                        .matchId(matchEntity.getMatchId())
                         .matchEntity(matchEntity)
                         .timestamp(frame.getTimestamp())
                         .build();
@@ -102,18 +107,57 @@ public class TimeLineService {
                 }
             }
         }
+        log.info("[timeline] 엔티티 매핑: {}ms", System.currentTimeMillis() - t);
 
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveTimeLineEvents(allTimeLineEvents);
+        log.info("[timeline] bulkSave events: {}ms ({}건)", System.currentTimeMillis() - t, allTimeLineEvents.size());
+
+        t = System.currentTimeMillis();
+        timeLineRepository.populateTimeLineEventIds(allTimeLineEvents);
+        log.info("[timeline] populateTimeLineEventIds: {}ms ({}건)", System.currentTimeMillis() - t, allTimeLineEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveParticipantFrames(allParticipantFrames);
+        log.info("[timeline] bulkSave participantFrames: {}ms ({}건)", System.currentTimeMillis() - t, allParticipantFrames.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveItemEvents(allItemEvents);
+        log.info("[timeline] bulkSave itemEvents: {}ms ({}건)", System.currentTimeMillis() - t, allItemEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveSkillEvents(allSkillEvents);
+        log.info("[timeline] bulkSave skillEvents: {}ms ({}건)", System.currentTimeMillis() - t, allSkillEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveKillEvents(allKillEvents);
+        log.info("[timeline] bulkSave killEvents: {}ms ({}건)", System.currentTimeMillis() - t, allKillEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveBuildingEvents(allBuildingEvents);
+        log.info("[timeline] bulkSave buildingEvents: {}ms ({}건)", System.currentTimeMillis() - t, allBuildingEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveWardEvents(allWardEvents);
+        log.info("[timeline] bulkSave wardEvents: {}ms ({}건)", System.currentTimeMillis() - t, allWardEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveGameEvents(allGameEvents);
+        log.info("[timeline] bulkSave gameEvents: {}ms ({}건)", System.currentTimeMillis() - t, allGameEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveLevelEvents(allLevelEvents);
+        log.info("[timeline] bulkSave levelEvents: {}ms ({}건)", System.currentTimeMillis() - t, allLevelEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveChampionSpecialKillEvents(allChampionSpecialKillEvents);
+        log.info("[timeline] bulkSave championSpecialKillEvents: {}ms ({}건)", System.currentTimeMillis() - t, allChampionSpecialKillEvents.size());
+
+        t = System.currentTimeMillis();
         timeLineRepository.bulkSaveTurretPlateDestroyedEvents(allTurretPlateDestroyedEvents);
+        log.info("[timeline] bulkSave turretPlateDestroyedEvents: {}ms ({}건)", System.currentTimeMillis() - t, allTurretPlateDestroyedEvents.size());
+
+        log.info("[timeline] 총 소요: {}ms", System.currentTimeMillis() - start);
     }
 
     private List<ParticipantFrameDto> toParticipantFrameList(ParticipantFramesDto frames) {
@@ -137,6 +181,7 @@ public class TimeLineService {
         PositionDto pos = dto.getPosition();
 
         return ParticipantFrameEntity.builder()
+                .matchId(matchEntity.getMatchId())
                 .matchEntity(matchEntity)
                 .timestamp(timestamp)
                 .participantId(dto.getParticipantId())

@@ -29,7 +29,7 @@ public class MatchRepositoryImpl {
     }
 
     public List<MatchEntity> findAllByIds(Collection<String> matchIds) {
-        return matchJpaRepository.findAllById(matchIds);
+        return matchJpaRepository.findAllByMatchIdIn(matchIds);
     }
 
     public MatchEntity save(MatchEntity match){

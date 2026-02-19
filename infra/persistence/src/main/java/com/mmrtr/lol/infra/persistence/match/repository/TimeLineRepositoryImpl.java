@@ -9,7 +9,11 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.stereotype.Repository;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -26,11 +30,33 @@ public class TimeLineRepositoryImpl {
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getMatchEntity().getMatchId())
+                        .addValue("matchId", e.getMatchId())
                         .addValue("timestamp", e.getTimestamp()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
+    }
+
+    public void populateTimeLineEventIds(List<TimeLineEventEntity> entities) {
+        if (entities.isEmpty()) return;
+
+        Set<String> matchIds = entities.stream()
+                .map(TimeLineEventEntity::getMatchId)
+                .collect(Collectors.toSet());
+
+        String sql = "SELECT id, match_id, timestamp FROM time_line_event WHERE match_id IN (:matchIds)";
+        MapSqlParameterSource param = new MapSqlParameterSource("matchIds", matchIds);
+
+        Map<String, Long> keyToId = new HashMap<>();
+        jdbcTemplate.query(sql, param, rs -> {
+            String key = rs.getString("match_id") + ":" + rs.getInt("timestamp");
+            keyToId.put(key, rs.getLong("id"));
+        });
+
+        for (TimeLineEventEntity entity : entities) {
+            String key = entity.getMatchId() + ":" + entity.getTimestamp();
+            entity.setId(keyToId.get(key));
+        }
     }
 
     public void bulkSaveParticipantFrames(List<ParticipantFrameEntity> entities) {
@@ -68,7 +94,7 @@ public class TimeLineRepositoryImpl {
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getMatchEntity().getMatchId())
+                        .addValue("matchId", e.getMatchId())
                         .addValue("timestamp", e.getTimestamp())
                         .addValue("participantId", e.getParticipantId())
                         .addValue("abilityHaste", e.getChampionStats().getAbilityHaste())
@@ -127,14 +153,13 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO item_events (" +
-                "match_id, timeline_timestamp, item_id, participant_id, timestamp, type, after_id, before_id, gold_gain" +
+                "time_line_event_id, item_id, participant_id, timestamp, type, after_id, before_id, gold_gain" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :itemId, :participantId, :timestamp, :type, :afterId, :beforeId, :goldGain)";
+                ":timeLineEventId, :itemId, :participantId, :timestamp, :type, :afterId, :beforeId, :goldGain)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("itemId", e.getItemId())
                         .addValue("participantId", e.getParticipantId())
                         .addValue("timestamp", e.getTimestamp())
@@ -151,14 +176,13 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO skill_events (" +
-                "match_id, timeline_timestamp, skill_slot, participant_id, level_up_type, timestamp, type" +
+                "time_line_event_id, skill_slot, participant_id, level_up_type, timestamp, type" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :skillSlot, :participantId, :levelUpType, :timestamp, :type)";
+                ":timeLineEventId, :skillSlot, :participantId, :levelUpType, :timestamp, :type)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("skillSlot", e.getSkillSlot())
                         .addValue("participantId", e.getParticipantId())
                         .addValue("levelUpType", e.getLevelUpType())
@@ -173,16 +197,15 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO kill_events (" +
-                "match_id, timeline_timestamp, assisting_participant_ids, bounty, kill_streak_length, " +
+                "time_line_event_id, assisting_participant_ids, bounty, kill_streak_length, " +
                 "killer_id, x, y, shutdown_bounty, victim_id, timestamp, type" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :assistingParticipantIds, :bounty, :killStreakLength, " +
+                ":timeLineEventId, :assistingParticipantIds, :bounty, :killStreakLength, " +
                 ":killerId, :x, :y, :shutdownBounty, :victimId, :timestamp, :type)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("assistingParticipantIds", e.getAssistingParticipantIds())
                         .addValue("bounty", e.getBounty())
                         .addValue("killStreakLength", e.getKillStreakLength())
@@ -202,16 +225,15 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO building_events (" +
-                "match_id, timeline_timestamp, assisting_participant_ids, bounty, building_type, " +
+                "time_line_event_id, assisting_participant_ids, bounty, building_type, " +
                 "killer_id, lane_type, x, y, team_id, timestamp, tower_type, type" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :assistingParticipantIds, :bounty, :buildingType, " +
+                ":timeLineEventId, :assistingParticipantIds, :bounty, :buildingType, " +
                 ":killerId, :laneType, :x, :y, :teamId, :timestamp, :towerType, :type)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("assistingParticipantIds", e.getAssistingParticipantIds())
                         .addValue("bounty", e.getBounty())
                         .addValue("buildingType", e.getBuildingType())
@@ -232,14 +254,13 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO ward_events (" +
-                "match_id, timeline_timestamp, participant_id, ward_type, timestamp, type" +
+                "time_line_event_id, participant_id, ward_type, timestamp, type" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :participantId, :wardType, :timestamp, :type)";
+                ":timeLineEventId, :participantId, :wardType, :timestamp, :type)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("participantId", e.getParticipantId())
                         .addValue("wardType", e.getWardType())
                         .addValue("timestamp", e.getTimestamp())
@@ -253,14 +274,13 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO game_events (" +
-                "match_id, timeline_timestamp, timestamp, game_id, real_timestamp, winning_team, type" +
+                "time_line_event_id, timestamp, game_id, real_timestamp, winning_team, type" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :timestamp, :gameId, :realTimestamp, :winningTeam, :type)";
+                ":timeLineEventId, :timestamp, :gameId, :realTimestamp, :winningTeam, :type)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("timestamp", e.getTimestamp())
                         .addValue("gameId", e.getGameId())
                         .addValue("realTimestamp", e.getRealTimestamp())
@@ -275,14 +295,13 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO level_events (" +
-                "match_id, timeline_timestamp, level, participant_id, timestamp, type" +
+                "time_line_event_id, level, participant_id, timestamp, type" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :level, :participantId, :timestamp, :type)";
+                ":timeLineEventId, :level, :participantId, :timestamp, :type)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("level", e.getLevel())
                         .addValue("participantId", e.getParticipantId())
                         .addValue("timestamp", e.getTimestamp())
@@ -296,14 +315,13 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO champion_special_kill_event (" +
-                "match_id, timeline_timestamp, kill_type, killer_id, multi_kill_length, x, y, timestamp, type" +
+                "time_line_event_id, kill_type, killer_id, multi_kill_length, x, y, timestamp, type" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :killType, :killerId, :multiKillLength, :x, :y, :timestamp, :type)";
+                ":timeLineEventId, :killType, :killerId, :multiKillLength, :x, :y, :timestamp, :type)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("killType", e.getKillType())
                         .addValue("killerId", e.getKillerId())
                         .addValue("multiKillLength", e.getMultiKillLength())
@@ -320,14 +338,13 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO turret_plate_destroyed_event (" +
-                "match_id, timeline_timestamp, killer_id, lane_type, x, y, team_id, timestamp, type" +
+                "time_line_event_id, killer_id, lane_type, x, y, team_id, timestamp, type" +
                 ") VALUES (" +
-                ":matchId, :timelineTimestamp, :killerId, :laneType, :x, :y, :teamId, :timestamp, :type)";
+                ":timeLineEventId, :killerId, :laneType, :x, :y, :teamId, :timestamp, :type)";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
-                        .addValue("matchId", e.getTimeLineEvent().getMatchEntity().getMatchId())
-                        .addValue("timelineTimestamp", e.getTimeLineEvent().getTimestamp())
+                        .addValue("timeLineEventId", e.getTimeLineEvent().getId())
                         .addValue("killerId", e.getKillerId())
                         .addValue("laneType", e.getLaneType())
                         .addValue("x", e.getPositionValue() != null ? e.getPositionValue().getX() : 0)

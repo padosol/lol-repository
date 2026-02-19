@@ -39,7 +39,7 @@ public class MatchDataFetcher {
                 return List.of();
             }
             if (matchIds.size() == MATCH_FETCH_COUNT) {
-                log.info("matchIds size is 20. send message for search more matchIds");
+                log.info("matchIds size is 20. send messge for search more matchIds");
                 rabbitTemplate.convertAndSend(
                         RabbitMqBinding.RENEWAL_MATCH_FIND.getExchange(),
                         RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey(),

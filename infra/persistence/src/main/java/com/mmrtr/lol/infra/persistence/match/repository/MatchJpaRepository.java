@@ -8,7 +8,9 @@ import java.util.Collection;
 import java.util.List;
 
 @Repository
-public interface MatchJpaRepository extends JpaRepository<MatchEntity, String> {
+public interface MatchJpaRepository extends JpaRepository<MatchEntity, Long> {
 
     List<MatchEntity> findAllByMatchIdIsNotIn(Collection<String> matchIds);
+
+    List<MatchEntity> findAllByMatchIdIn(Collection<String> matchIds);
 }

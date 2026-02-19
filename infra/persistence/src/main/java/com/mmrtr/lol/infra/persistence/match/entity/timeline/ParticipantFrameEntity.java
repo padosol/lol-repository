@@ -1,7 +1,6 @@
 package com.mmrtr.lol.infra.persistence.match.entity.timeline;
 
 import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
-import com.mmrtr.lol.infra.persistence.match.entity.timeline.id.ParticipantFrameId;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.ChampionStatsValue;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.DamageStatsValue;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.PositionValue;
@@ -15,21 +14,24 @@ import org.hibernate.annotations.Comment;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@IdClass(ParticipantFrameId.class)
 @Table(name = "participant_frame")
 public class ParticipantFrameEntity {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "match_id", nullable = false)
+    private String matchId;
+
     @Comment("타임스탬프")
     private int timestamp;
 
-    @Id
     @Comment("참가자 ID")
     private int participantId;
 
-    @Id
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "matchId", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    @JoinColumn(name = "match_id", referencedColumnName = "match_id", insertable = false, updatable = false, foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private MatchEntity matchEntity;
 
     @Embedded
