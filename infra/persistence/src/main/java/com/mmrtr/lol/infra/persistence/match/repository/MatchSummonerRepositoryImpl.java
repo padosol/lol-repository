@@ -32,7 +32,6 @@ public class MatchSummonerRepositoryImpl {
                 "riot_id_tagline," +
                 "puuid," +
                 "profile_icon," +
-                "summoner_name," +
                 "participant_id," +
                 "champ_level," +
                 "champion_id," +
@@ -153,7 +152,6 @@ public class MatchSummonerRepositoryImpl {
                 "player_augment4," +
                 "player_subteam_id," +
                 "push_pings," +
-                "riot_id_name," +
                 "subteam_placement," +
                 "total_ally_jungle_minions_killed," +
                 "total_enemy_jungle_minions_killed," +
@@ -182,7 +180,6 @@ public class MatchSummonerRepositoryImpl {
                 ":riotIdTagline," +
                 ":puuid," +
                 ":profileIcon," +
-                ":summonerName," +
                 ":participantId," +
                 ":champLevel," +
                 ":championId," +
@@ -303,7 +300,6 @@ public class MatchSummonerRepositoryImpl {
                 ":playerAugment4," +
                 ":playerSubteamId," +
                 ":pushPings," +
-                ":riotIdName," +
                 ":subteamPlacement," +
                 ":totalAllyJungleMinionsKilled," +
                 ":totalEnemyJungleMinionsKilled," +
@@ -336,7 +332,6 @@ public class MatchSummonerRepositoryImpl {
                             .addValue("riotIdTagline", comment.getRiotIdTagline())
                             .addValue("puuid", comment.getPuuid())
                             .addValue("profileIcon", comment.getProfileIcon())
-                            .addValue("summonerName", comment.getSummonerName())
                             .addValue("participantId", comment.getParticipantId())
                             .addValue("champLevel", comment.getChampLevel())
                             .addValue("championId", comment.getChampionId())
@@ -457,7 +452,6 @@ public class MatchSummonerRepositoryImpl {
                             .addValue("playerAugment4", comment.getPlayerAugment4())
                             .addValue("playerSubteamId", comment.getPlayerSubteamId())
                             .addValue("pushPings", comment.getPushPings())
-                            .addValue("riotIdName", comment.getRiotIdName())
                             .addValue("subteamPlacement", comment.getSubteamPlacement())
                             .addValue("totalAllyJungleMinionsKilled", comment.getTotalAllyJungleMinionsKilled())
                             .addValue("totalEnemyJungleMinionsKilled", comment.getTotalEnemyJungleMinionsKilled())

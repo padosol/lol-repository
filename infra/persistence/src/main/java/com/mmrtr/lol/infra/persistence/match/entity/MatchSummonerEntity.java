@@ -53,8 +53,6 @@ public class MatchSummonerEntity {
 
     @Comment("프로필 아이콘")
     private int profileIcon;
-    @Comment("소환사 이름")
-    private String summonerName;
     @Comment("참가자 ID")
     private int participantId;
 
@@ -315,8 +313,6 @@ public class MatchSummonerEntity {
     private int playerSubteamId;
     @Comment("밀어 핑 횟수")
     private int pushPings;
-    @Comment("라이엇 ID 이름")
-    private String riotIdName;
     @Comment("서브팀 순위 (아레나)")
     private int subteamPlacement;
     @Comment("아군 정글 몬스터 처치 수")
@@ -354,7 +350,6 @@ public class MatchSummonerEntity {
                 .riotIdGameName(participantDto.getRiotIdGameName())
                 .riotIdTagline(participantDto.getRiotIdTagline())
                 .profileIcon(participantDto.getProfileIcon())
-                .summonerName(participantDto.getSummonerName())
                 .participantId(participantDto.getParticipantId())
                 .champLevel(participantDto.getChampLevel())
                 .championId(participantDto.getChampionId())
@@ -478,7 +473,6 @@ public class MatchSummonerEntity {
                 .playerAugment4(participantDto.getPlayerAugment4())
                 .playerSubteamId(participantDto.getPlayerSubteamId())
                 .pushPings(participantDto.getPushPings())
-                .riotIdName(participantDto.getRiotIdName())
                 .subteamPlacement(participantDto.getSubteamPlacement())
                 .totalAllyJungleMinionsKilled(participantDto.getTotalAllyJungleMinionsKilled())
                 .totalEnemyJungleMinionsKilled(participantDto.getTotalEnemyJungleMinionsKilled())
