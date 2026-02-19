@@ -6,10 +6,9 @@ import lombok.*;
 import org.hibernate.annotations.Comment;
 
 @Getter
-@Setter
 @Embeddable
 @Builder
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 public class StatDimensionValue {
 

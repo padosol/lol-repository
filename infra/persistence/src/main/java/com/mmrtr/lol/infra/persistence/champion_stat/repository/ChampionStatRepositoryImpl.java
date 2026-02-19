@@ -116,7 +116,7 @@ public class ChampionStatRepositoryImpl implements ChampionStatRepositoryPort {
 
         String sql = "INSERT INTO champion_spell_stat (" +
                 "champion_id, team_position, season, tier_group, platform_id, queue_id, game_version, " +
-                "spell1id, spell2id, games, wins" +
+                "spell1_id, spell2_id, games, wins" +
                 ") VALUES (" +
                 ":championId, :teamPosition, :season, :tierGroup, :platformId, :queueId, :gameVersion, " +
                 ":spell1Id, :spell2Id, :games, :wins)";

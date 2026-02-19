@@ -168,16 +168,16 @@ public class ChampionStatAggregationService implements TriggerChampionStatAggreg
         Map<Integer, Long> finalBanCounts = banCounts;
         List<ChampionStatSummary> summaries = rows.stream()
                 .map(row -> ChampionStatSummary.builder()
-                        .championId(((Number) row.get("champion_id")).intValue())
+                        .championId(toInt(row.get("champion_id")))
                         .teamPosition((String) row.get("team_position"))
                         .season(season)
                         .tierGroup(tierGroupName)
                         .platformId(platformId)
                         .queueId(queueId)
                         .gameVersion(gameVersion)
-                        .totalGames(((Number) row.get("total_games")).longValue())
-                        .wins(((Number) row.get("wins")).longValue())
-                        .totalBans(finalBanCounts.getOrDefault(((Number) row.get("champion_id")).intValue(), 0L))
+                        .totalGames(toLong(row.get("total_games")))
+                        .wins(toLong(row.get("wins")))
+                        .totalBans(finalBanCounts.getOrDefault(toInt(row.get("champion_id")), 0L))
                         .totalMatchesInDimension(totalMatches)
                         .avgKills(toBigDecimal(row.get("avg_kills")))
                         .avgDeaths(toBigDecimal(row.get("avg_deaths")))
@@ -214,22 +214,22 @@ public class ChampionStatAggregationService implements TriggerChampionStatAggreg
 
         List<ChampionRuneStat> runeStats = rows.stream()
                 .map(row -> ChampionRuneStat.builder()
-                        .championId(((Number) row.get("champion_id")).intValue())
+                        .championId(toInt(row.get("champion_id")))
                         .teamPosition((String) row.get("team_position"))
                         .season(season)
                         .tierGroup(tierGroupName)
                         .platformId(platformId)
                         .queueId(queueId)
                         .gameVersion(gameVersion)
-                        .primaryRuneId(((Number) row.get("primary_rune_id")).intValue())
+                        .primaryRuneId(toInt(row.get("primary_rune_id")))
                         .primaryRuneIds((String) row.get("primary_rune_ids"))
-                        .secondaryRuneId(((Number) row.get("secondary_rune_id")).intValue())
+                        .secondaryRuneId(toInt(row.get("secondary_rune_id")))
                         .secondaryRuneIds((String) row.get("secondary_rune_ids"))
-                        .statOffense(((Number) row.get("offense")).intValue())
-                        .statFlex(((Number) row.get("flex")).intValue())
-                        .statDefense(((Number) row.get("defense")).intValue())
-                        .games(((Number) row.get("games")).longValue())
-                        .wins(((Number) row.get("wins")).longValue())
+                        .statOffense(toInt(row.get("offense")))
+                        .statFlex(toInt(row.get("flex")))
+                        .statDefense(toInt(row.get("defense")))
+                        .games(toLong(row.get("games")))
+                        .wins(toLong(row.get("wins")))
                         .build())
                 .toList();
 
@@ -240,8 +240,8 @@ public class ChampionStatAggregationService implements TriggerChampionStatAggreg
     private void aggregateSpell(int season, int queueId, String tierGroupName,
                                 Set<String> tiers, String platformId, String gameVersion) {
         String sql = "SELECT ms.champion_id, ms.team_position, " +
-                "LEAST(ms.summoner1id, ms.summoner2id) AS spell1_id, " +
-                "GREATEST(ms.summoner1id, ms.summoner2id) AS spell2_id, " +
+                "LEAST(ms.summoner1_id, ms.summoner2_id) AS spell1_id, " +
+                "GREATEST(ms.summoner1_id, ms.summoner2_id) AS spell2_id, " +
                 "COUNT(*) AS games, " +
                 "SUM(CASE WHEN ms.win THEN 1 ELSE 0 END) AS wins " +
                 "FROM match_summoner ms " +
@@ -258,17 +258,17 @@ public class ChampionStatAggregationService implements TriggerChampionStatAggreg
 
         List<ChampionSpellStat> spellStats = rows.stream()
                 .map(row -> ChampionSpellStat.builder()
-                        .championId(((Number) row.get("champion_id")).intValue())
+                        .championId(toInt(row.get("champion_id")))
                         .teamPosition((String) row.get("team_position"))
                         .season(season)
                         .tierGroup(tierGroupName)
                         .platformId(platformId)
                         .queueId(queueId)
                         .gameVersion(gameVersion)
-                        .spell1Id(((Number) row.get("spell1_id")).intValue())
-                        .spell2Id(((Number) row.get("spell2_id")).intValue())
-                        .games(((Number) row.get("games")).longValue())
-                        .wins(((Number) row.get("wins")).longValue())
+                        .spell1Id(toInt(row.get("spell1_id")))
+                        .spell2Id(toInt(row.get("spell2_id")))
+                        .games(toLong(row.get("games")))
+                        .wins(toLong(row.get("wins")))
                         .build())
                 .toList();
 
@@ -531,16 +531,16 @@ public class ChampionStatAggregationService implements TriggerChampionStatAggreg
 
         List<ChampionMatchupStat> matchupStats = rows.stream()
                 .map(row -> ChampionMatchupStat.builder()
-                        .championId(((Number) row.get("champion_id")).intValue())
+                        .championId(toInt(row.get("champion_id")))
                         .teamPosition((String) row.get("team_position"))
                         .season(season)
                         .tierGroup(tierGroupName)
                         .platformId(platformId)
                         .queueId(queueId)
                         .gameVersion(gameVersion)
-                        .opponentChampionId(((Number) row.get("opponent_champion_id")).intValue())
-                        .games(((Number) row.get("games")).longValue())
-                        .wins(((Number) row.get("wins")).longValue())
+                        .opponentChampionId(toInt(row.get("opponent_champion_id")))
+                        .games(toLong(row.get("games")))
+                        .wins(toLong(row.get("wins")))
                         .avgKills(toBigDecimal(row.get("avg_kills")))
                         .avgDeaths(toBigDecimal(row.get("avg_deaths")))
                         .avgAssists(toBigDecimal(row.get("avg_assists")))
@@ -549,6 +549,14 @@ public class ChampionStatAggregationService implements TriggerChampionStatAggreg
                 .toList();
 
         championStatRepositoryPort.bulkSaveMatchupStats(matchupStats);
+    }
+
+    private int toInt(Object value) {
+        return value != null ? ((Number) value).intValue() : 0;
+    }
+
+    private long toLong(Object value) {
+        return value != null ? ((Number) value).longValue() : 0L;
     }
 
     private BigDecimal toBigDecimal(Object value) {

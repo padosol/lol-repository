@@ -32,7 +32,7 @@ public class ChampionStatAdminController {
         ItemMetadata itemMetadata = ItemMetadata.builder()
                 .itemId(request.itemId())
                 .itemName(request.itemName())
-                .itemCategory(request.itemCategory())
+                .itemCategory(request.itemCategory().name())
                 .gameVersion(request.gameVersion())
                 .build();
         return ResponseEntity.ok(itemMetadataUseCase.save(itemMetadata));
@@ -44,7 +44,7 @@ public class ChampionStatAdminController {
                 .map(req -> ItemMetadata.builder()
                         .itemId(req.itemId())
                         .itemName(req.itemName())
-                        .itemCategory(req.itemCategory())
+                        .itemCategory(req.itemCategory().name())
                         .gameVersion(req.gameVersion())
                         .build())
                 .toList();

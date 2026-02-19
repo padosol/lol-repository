@@ -5,8 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
+
 import java.time.Duration;
-import java.util.Objects;
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
@@ -36,10 +39,19 @@ public class ChampionStatCacheService {
     }
 
     public void evictAll() {
-        Set<String> keys = stringRedisTemplate.keys(KEY_PREFIX + "*");
-        if (keys != null && !keys.isEmpty()) {
-            stringRedisTemplate.delete(keys);
-            log.info("챔피언 통계 캐시 무효화 완료 - {} 건", keys.size());
+        Set<String> keysToDelete = new HashSet<>();
+        ScanOptions options = ScanOptions.scanOptions()
+                .match(KEY_PREFIX + "*")
+                .count(100)
+                .build();
+        try (Cursor<String> cursor = stringRedisTemplate.scan(options)) {
+            while (cursor.hasNext()) {
+                keysToDelete.add(cursor.next());
+            }
+        }
+        if (!keysToDelete.isEmpty()) {
+            stringRedisTemplate.delete(keysToDelete);
+            log.info("챔피언 통계 캐시 무효화 완료 - {} 건", keysToDelete.size());
         }
     }
 }

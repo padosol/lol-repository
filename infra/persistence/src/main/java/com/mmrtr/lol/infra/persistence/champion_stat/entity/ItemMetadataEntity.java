@@ -1,6 +1,7 @@
 package com.mmrtr.lol.infra.persistence.champion_stat.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -10,7 +11,7 @@ import org.hibernate.annotations.Comment;
 @Entity
 @Getter
 @Builder
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Table(name = "item_metadata")
 public class ItemMetadataEntity {

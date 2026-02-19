@@ -2,6 +2,7 @@ package com.mmrtr.lol.infra.persistence.champion_stat.entity;
 
 import com.mmrtr.lol.infra.persistence.champion_stat.entity.value.StatDimensionValue;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -11,7 +12,7 @@ import org.hibernate.annotations.Comment;
 @Entity
 @Getter
 @Builder
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Table(name = "champion_spell_stat")
 public class ChampionSpellStatEntity {

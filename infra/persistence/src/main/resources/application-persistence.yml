@@ -30,7 +30,8 @@ spring:
         use_sql_comments: true
   flyway:
     enabled: true
-    baseline-on-migrate: false
+    baseline-on-migrate: true
+    baseline-version: 7
 
 ---
 spring:
@@ -72,4 +73,5 @@ spring:
     show-sql: false
   flyway:
     enabled: true
-    baseline-on-migrate: false
+    baseline-on-migrate: true
+    baseline-version: 7
