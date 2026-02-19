@@ -12,6 +12,7 @@ LOL Repository는 League of Legends 데이터 처리를 위한 컨슈머 서비�
 - PostgreSQL (JPA/Hibernate)
 - Redis + Redisson 3.46.0 (캐싱, 분산 락)
 - RabbitMQ (비동기 메시지 처리)
+- Flyway (DB 마이그레이션)
 
 ## 3. 프로젝트 구조
 
@@ -20,6 +21,7 @@ LOL Repository는 League of Legends 데이터 처리를 위한 컨슈머 서비�
 ```
 lol-repository (루트)
 ├── app                    # Spring Boot 애플리케이션 진입점 (LolRepositoryApplication.java)
+├── lol-db-schema/         # Git 서브모듈 (padosol/lol-db-schema) - Flyway 마이그레이션 SQL
 ├── core/
 │   ├── domain             # DDD 도메인 비즈니스 로직 (Port 인터페이스, UseCase, Service)
 │   └── enum               # 공유 enum 타입들 (Region, Platform 등)
@@ -53,6 +55,12 @@ com.mmrtr.lol.domain/
 ## 4. 명령어
 
 ```bash
+# 서브모듈 초기화 (최초 클론 후)
+git submodule update --init --recursive
+
+# 서브모듈 최신화
+git submodule update --remote lol-db-schema
+
 # 전체 모듈 빌드
 ./gradlew build
 

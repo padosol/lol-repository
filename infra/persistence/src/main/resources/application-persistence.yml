@@ -16,22 +16,21 @@ spring:
     activate:
       on-profile: local
   datasource:
-#    url: jdbc:postgresql://localhost:5432/postgres
-#    driver-class-name: org.postgresql.Driver
-#    username: postgres
-#    password: 1234
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
     driver-class-name: org.postgresql.Driver
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
         format_sql: true
         use_sql_comments: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
 
 ---
 spring:
@@ -52,6 +51,10 @@ spring:
         format_sql: false
         use_sql_comments: false
         generate_statistics: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 7
 
 ---
 spring:
@@ -65,5 +68,8 @@ spring:
     password: postgres
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
