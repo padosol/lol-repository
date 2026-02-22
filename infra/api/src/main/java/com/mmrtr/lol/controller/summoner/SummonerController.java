@@ -26,7 +26,7 @@ public class SummonerController {
             @PathVariable("tagLine") String tagLine
     ) {
 
-        log.info("Region: {}, GameName: {}, TagLine: {}", region, gameName, tagLine);
+        log.debug("Region: {}, GameName: {}, TagLine: {}", region, gameName, tagLine);
         Summoner summoner = summonerService.getSummonerInfoV2(region, gameName, tagLine);
 
         return ResponseEntity.ok(SummonerResponse.of(summoner));

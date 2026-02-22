@@ -40,7 +40,7 @@ public class SummonerApiAdapter implements SummonerApiPort {
 
         return riotApiService.getAccountByRiotId(gameName, tagLine, platform, executor)
                 .thenCompose(accountDto -> {
-                    log.info("fetchSummonerByRiotId platform {} gameName {}", platformName, gameName);
+                    log.debug("fetchSummonerByRiotId platform {} gameName {}", platformName, gameName);
                     String puuid = accountDto.getPuuid();
 
                     CompletableFuture<SummonerDto> summonerDtoFuture = riotApiService

@@ -3,14 +3,11 @@ package com.mmrtr.lol.infra.rabbitmq.service;
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
 import com.mmrtr.lol.infra.persistence.match.service.MatchService;
-import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
-import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
 import com.mmrtr.lol.infra.riot.dto.match_timeline.TimelineDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -26,9 +23,14 @@ public class MatchDataFetcher {
 
     private final RiotApiService riotApiService;
     private final MatchService matchService;
-    private final RabbitTemplate rabbitTemplate;
 
-    public CompletableFuture<List<String>> fetchNewMatchIds(
+    public record FetchNewMatchIdsResult(
+            List<String> newMatchIds,
+            boolean hasMoreMatches,
+            long dbRevisionDateMillis
+    ) {}
+
+    public CompletableFuture<FetchNewMatchIdsResult> fetchNewMatchIds(
             String puuid, Platform platform, long dbRevisionDateMillis, Executor executor) {
 
         CompletableFuture<List<String>> matchIdListFuture = riotApiService.getMatchListByPuuid(
@@ -36,20 +38,18 @@ public class MatchDataFetcher {
 
         return matchIdListFuture.thenApply(matchIds -> {
             if (matchIds == null || matchIds.isEmpty()) {
-                return List.of();
+                return new FetchNewMatchIdsResult(List.of(), false, dbRevisionDateMillis);
             }
-            if (matchIds.size() == MATCH_FETCH_COUNT) {
-                log.info("matchIds size is 20. send messge for search more matchIds");
-                rabbitTemplate.convertAndSend(
-                        RabbitMqBinding.RENEWAL_MATCH_FIND.getExchange(),
-                        RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey(),
-                        new SummonerRenewalMessage(puuid, platform.getPlatformId(), dbRevisionDateMillis)
-                );
+
+            boolean hasMoreMatches = matchIds.size() == MATCH_FETCH_COUNT;
+            if (hasMoreMatches) {
+                log.debug("matchIds size is 20. more matchIds will be searched after renewal completes");
             }
 
             List<MatchEntity> matchList = matchService.findAllMatch(matchIds);
             List<String> existMatchIds = matchList.stream().map(MatchEntity::getMatchId).toList();
-            return matchIds.stream().filter(matchId -> !existMatchIds.contains(matchId)).toList();
+            List<String> newMatchIds = matchIds.stream().filter(matchId -> !existMatchIds.contains(matchId)).toList();
+            return new FetchNewMatchIdsResult(newMatchIds, hasMoreMatches, dbRevisionDateMillis);
         });
     }
 

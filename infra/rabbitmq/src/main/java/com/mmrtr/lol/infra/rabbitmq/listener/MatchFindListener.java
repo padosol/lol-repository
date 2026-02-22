@@ -30,7 +30,7 @@ public class MatchFindListener {
     private final MatchService matchService;
     private final MessageSender messageSender;
     private final RiotApiService riotApiService;
-    private final Executor requestExecutor;
+    private final Executor matchFindExecutor;
 
 
     @RabbitListener(queues = RabbitMqBinding.Queue.RENEWAL_MATCH_FIND, containerFactory = "findQueueSimpleRabbitListenerContainerFactory")
@@ -41,7 +41,7 @@ public class MatchFindListener {
 
         log.info("Starting renewal match ID search for puuid: {} on platform: {} with revisionDate: {}",
                 puuid, platform, revisionDate);
-        log.info("LocalDateTime: {}", LocalDateTime.ofInstant(Instant.ofEpochSecond(revisionDate), ZoneId.systemDefault()));
+        log.debug("LocalDateTime: {}", LocalDateTime.ofInstant(Instant.ofEpochSecond(revisionDate), ZoneId.systemDefault()));
 
         List<String> allFetchedMatchIds = new ArrayList<>();
         int offset = 20;
@@ -51,16 +51,16 @@ public class MatchFindListener {
         boolean hasMoreMatches = true;
         while (retry < 10 && hasMoreMatches) {
             List<String> fetchedMatchIds = riotApiService
-                    .getMatchListByPuuid(puuid, platform, revisionDate, offset, count, requestExecutor).join();
+                    .getMatchListByPuuid(puuid, platform, revisionDate, offset, count, matchFindExecutor).join();
 
             if (fetchedMatchIds == null || fetchedMatchIds.isEmpty()) {
-                log.info("No more match IDs found for puuid: {} at offset: {}. Ending search.", puuid, offset);
+                log.debug("No more match IDs found for puuid: {} at offset: {}. Ending search.", puuid, offset);
                 hasMoreMatches = false;
             } else {
                 allFetchedMatchIds.addAll(fetchedMatchIds);
 
                 if (fetchedMatchIds.size() < count) {
-                    log.info("Fewer than {} match IDs found ({}). Reached end of available matches for puuid: {}. Ending search.", count, fetchedMatchIds.size(), puuid);
+                    log.debug("Fewer than {} match IDs found ({}). Reached end of available matches for puuid: {}. Ending search.", count, fetchedMatchIds.size(), puuid);
                     hasMoreMatches = false;
                 } else {
                     offset += count;

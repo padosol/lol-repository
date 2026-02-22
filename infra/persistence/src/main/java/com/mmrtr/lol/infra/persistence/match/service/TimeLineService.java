@@ -12,11 +12,13 @@ import com.mmrtr.lol.infra.riot.dto.match_timeline.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -26,8 +28,8 @@ import java.util.stream.Collectors;
 public class TimeLineService {
 
     private final TimeLineRepositoryImpl timeLineRepository;
+    private final Executor timelineSaveExecutor;
 
-    @Transactional
     public void saveAll(List<MatchEntity> matchEntities, List<TimelineDto> timelineDtos) {
         long start = System.currentTimeMillis();
 
@@ -107,57 +109,56 @@ public class TimeLineService {
                 }
             }
         }
-        log.info("[timeline] 엔티티 매핑: {}ms", System.currentTimeMillis() - t);
+        log.debug("[timeline] 엔티티 매핑: {}ms", System.currentTimeMillis() - t);
 
         t = System.currentTimeMillis();
         timeLineRepository.bulkSaveTimeLineEvents(allTimeLineEvents);
-        log.info("[timeline] bulkSave events: {}ms ({}건)", System.currentTimeMillis() - t, allTimeLineEvents.size());
+        log.debug("[timeline] bulkSave events: {}ms ({}건)", System.currentTimeMillis() - t, allTimeLineEvents.size());
 
         t = System.currentTimeMillis();
         timeLineRepository.populateTimeLineEventIds(allTimeLineEvents);
-        log.info("[timeline] populateTimeLineEventIds: {}ms ({}건)", System.currentTimeMillis() - t, allTimeLineEvents.size());
+        log.debug("[timeline] populateTimeLineEventIds: {}ms ({}건)", System.currentTimeMillis() - t, allTimeLineEvents.size());
 
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveParticipantFrames(allParticipantFrames);
-        log.info("[timeline] bulkSave participantFrames: {}ms ({}건)", System.currentTimeMillis() - t, allParticipantFrames.size());
+        // Phase 2: 병렬 bulk save (ID populate 완료 후 모두 독립적)
+        CompletableFuture<?>[] futures = {
+            runBulkSave("participantFrames", allParticipantFrames,
+                    timeLineRepository::bulkSaveParticipantFrames),
+            runBulkSave("itemEvents", allItemEvents,
+                    timeLineRepository::bulkSaveItemEvents),
+            runBulkSave("skillEvents", allSkillEvents,
+                    timeLineRepository::bulkSaveSkillEvents),
+            runBulkSave("killEvents", allKillEvents,
+                    timeLineRepository::bulkSaveKillEvents),
+            runBulkSave("buildingEvents", allBuildingEvents,
+                    timeLineRepository::bulkSaveBuildingEvents),
+            runBulkSave("wardEvents", allWardEvents,
+                    timeLineRepository::bulkSaveWardEvents),
+            runBulkSave("gameEvents", allGameEvents,
+                    timeLineRepository::bulkSaveGameEvents),
+            runBulkSave("levelEvents", allLevelEvents,
+                    timeLineRepository::bulkSaveLevelEvents),
+            runBulkSave("championSpecialKillEvents", allChampionSpecialKillEvents,
+                    timeLineRepository::bulkSaveChampionSpecialKillEvents),
+            runBulkSave("turretPlateDestroyedEvents", allTurretPlateDestroyedEvents,
+                    timeLineRepository::bulkSaveTurretPlateDestroyedEvents),
+        };
 
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveItemEvents(allItemEvents);
-        log.info("[timeline] bulkSave itemEvents: {}ms ({}건)", System.currentTimeMillis() - t, allItemEvents.size());
+        CompletableFuture.allOf(futures).join();
 
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveSkillEvents(allSkillEvents);
-        log.info("[timeline] bulkSave skillEvents: {}ms ({}건)", System.currentTimeMillis() - t, allSkillEvents.size());
+        log.debug("[timeline] 총 소요: {}ms", System.currentTimeMillis() - start);
+    }
 
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveKillEvents(allKillEvents);
-        log.info("[timeline] bulkSave killEvents: {}ms ({}건)", System.currentTimeMillis() - t, allKillEvents.size());
-
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveBuildingEvents(allBuildingEvents);
-        log.info("[timeline] bulkSave buildingEvents: {}ms ({}건)", System.currentTimeMillis() - t, allBuildingEvents.size());
-
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveWardEvents(allWardEvents);
-        log.info("[timeline] bulkSave wardEvents: {}ms ({}건)", System.currentTimeMillis() - t, allWardEvents.size());
-
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveGameEvents(allGameEvents);
-        log.info("[timeline] bulkSave gameEvents: {}ms ({}건)", System.currentTimeMillis() - t, allGameEvents.size());
-
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveLevelEvents(allLevelEvents);
-        log.info("[timeline] bulkSave levelEvents: {}ms ({}건)", System.currentTimeMillis() - t, allLevelEvents.size());
-
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveChampionSpecialKillEvents(allChampionSpecialKillEvents);
-        log.info("[timeline] bulkSave championSpecialKillEvents: {}ms ({}건)", System.currentTimeMillis() - t, allChampionSpecialKillEvents.size());
-
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveTurretPlateDestroyedEvents(allTurretPlateDestroyedEvents);
-        log.info("[timeline] bulkSave turretPlateDestroyedEvents: {}ms ({}건)", System.currentTimeMillis() - t, allTurretPlateDestroyedEvents.size());
-
-        log.info("[timeline] 총 소요: {}ms", System.currentTimeMillis() - start);
+    private <T> CompletableFuture<Void> runBulkSave(String name, List<T> entities,
+                                                      Consumer<List<T>> saveFunction) {
+        if (entities.isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return CompletableFuture.runAsync(() -> {
+            long t = System.currentTimeMillis();
+            saveFunction.accept(entities);
+            log.debug("[timeline] bulkSave {}: {}ms ({}건)", name,
+                    System.currentTimeMillis() - t, entities.size());
+        }, timelineSaveExecutor);
     }
 
     private List<ParticipantFrameDto> toParticipantFrameList(ParticipantFramesDto frames) {
