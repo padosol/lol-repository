@@ -92,7 +92,7 @@ public class SummonerRenewalService {
 
         // 6) Summoner 저장
         t = System.currentTimeMillis();
-        summoner.resetClickDate();
+        summoner.updateLastRiotCallDate();
         saveSummonerDataUseCase.execute(summoner);
         log.debug("[5/6] saveSummonerData: {}ms", System.currentTimeMillis() - t);
 

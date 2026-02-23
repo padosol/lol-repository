@@ -6,6 +6,8 @@ import com.mmrtr.lol.infra.persistence.summoner.entity.SummonerEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.Optional;
 
 @Repository
@@ -23,5 +25,12 @@ public class SummonerRepositoryImpl implements SummonerRepositoryPort {
     public Optional<Summoner> findByPuuid(String puuid) {
         return jpaRepository.findById(puuid)
                 .map(SummonerEntity::toDomain);
+    }
+
+    @Override
+    @Transactional
+    public void updateLastRiotCallDate(String puuid) {
+        jpaRepository.findById(puuid)
+                .ifPresent(SummonerEntity::updateLastRiotCallDate);
     }
 }
