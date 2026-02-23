@@ -46,12 +46,12 @@ public class Summoner {
                 .gameIdentity(new GameIdentity(gameName, tagLine))
                 .platformId(platformId)
                 .statusInfo(new StatusInfo(profileIconId, summonerLevel))
-                .revisionInfo(new RevisionInfo(revisionDate, revisionDate))
+                .revisionInfo(new RevisionInfo(revisionDate, LocalDateTime.now()))
                 .leagueInfos(leagueInfos)
                 .build();
     }
 
-    public void resetClickDate() {
+    public void updateLastRiotCallDate() {
         revisionInfo = new RevisionInfo(
                 revisionInfo.revisionDate(), LocalDateTime.now());
     }
@@ -59,7 +59,7 @@ public class Summoner {
     public void initSummoner() {
         revisionInfo = new RevisionInfo(
                 LocalDateTime.of(2026, 1, 1, 0, 0),
-                LocalDateTime.of(2026, 1, 1, 0, 0)
+                LocalDateTime.now()
         );
     }
 }

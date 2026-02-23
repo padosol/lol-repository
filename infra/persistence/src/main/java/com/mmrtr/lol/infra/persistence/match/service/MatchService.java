@@ -39,13 +39,17 @@ public class MatchService {
 
     @Transactional
     public void addAllMatch(List<MatchDto> matchDtos, List<TimelineDto> timelineDtos) {
+        long start = System.currentTimeMillis();
 
+        // 엔티티 매핑
+        long t = System.currentTimeMillis();
         List<MatchEntity> matchEntities = matchDtos.stream()
                 .map(dto -> new MatchEntity(dto, 26))
                 .toList();
 
         // queueId별로 참가자 puuid를 수집하고 league 데이터를 배치 조회
         Map<String, Map<String, LeagueSummonerEntity>> leagueByQueueAndPuuid = buildLeagueMap(matchDtos);
+        log.debug("[addAllMatch] 엔티티 매핑+buildLeagueMap: {}ms", System.currentTimeMillis() - t);
 
         List<MatchSummonerEntity> allMatchSummoners = new ArrayList<>();
         List<ChallengesEntity> allChallenges = new ArrayList<>();
@@ -103,14 +107,29 @@ public class MatchService {
             }
         }
 
+        t = System.currentTimeMillis();
         matchRepository.bulkSave(matchEntities);
+        log.debug("[addAllMatch] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
+
+        t = System.currentTimeMillis();
         matchSummonerRepository.bulkSave(allMatchSummoners);
+        log.debug("[addAllMatch] bulkSave matchSummoner: {}ms ({}건)", System.currentTimeMillis() - t, allMatchSummoners.size());
+
+        t = System.currentTimeMillis();
         challengesRepository.bulkSave(allChallenges);
+        log.debug("[addAllMatch] bulkSave challenges: {}ms ({}건)", System.currentTimeMillis() - t, allChallenges.size());
+
+        t = System.currentTimeMillis();
         matchTeamRepository.bulkSave(allMatchTeams);
+        log.debug("[addAllMatch] bulkSave matchTeam: {}ms ({}건)", System.currentTimeMillis() - t, allMatchTeams.size());
 
         if (timelineDtos != null && !timelineDtos.isEmpty()) {
+            t = System.currentTimeMillis();
             timeLineService.saveAll(matchEntities, timelineDtos);
+            log.debug("[addAllMatch] saveAll timelines: {}ms", System.currentTimeMillis() - t);
         }
+
+        log.debug("[addAllMatch] 총 소요: {}ms", System.currentTimeMillis() - start);
     }
 
     private Map<String, Map<String, LeagueSummonerEntity>> buildLeagueMap(List<MatchDto> matchDtos) {

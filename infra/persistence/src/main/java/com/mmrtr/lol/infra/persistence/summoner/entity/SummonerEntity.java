@@ -42,8 +42,8 @@ public class SummonerEntity {
     private String searchName;
     @Comment("정보 갱신 일시")
     private LocalDateTime revisionDate;
-    @Comment("갱신 클릭 일시")
-    private LocalDateTime revisionClickDate;
+    @Comment("최근 RIOT API 호출 일시")
+    private LocalDateTime lastRiotCallDate;
 
     public static SummonerEntity fromDomain(Summoner summoner) {
         return SummonerEntity.builder()
@@ -55,7 +55,7 @@ public class SummonerEntity {
                 .gameName(summoner.getGameIdentity().gameName())
                 .tagLine(summoner.getGameIdentity().tagLine())
                 .searchName((summoner.getGameIdentity().gameName().replace(" ", "") + "#" + summoner.getGameIdentity().tagLine()).toLowerCase())
-                .revisionClickDate(summoner.getRevisionInfo().revisionClickDate())
+                .lastRiotCallDate(summoner.getRevisionInfo().lastRiotCallDate())
                 .build();
     }
 
@@ -65,14 +65,18 @@ public class SummonerEntity {
                 .gameIdentity(new GameIdentity(this.gameName, this.tagLine))
                 .platformId(this.region)
                 .statusInfo(new StatusInfo(this.profileIconId, this.summonerLevel))
-                .revisionInfo(new RevisionInfo(this.revisionDate, this.revisionClickDate))
+                .revisionInfo(new RevisionInfo(this.revisionDate, this.lastRiotCallDate))
                 .leagueInfos(new HashSet<>())
                 .build();
+    }
+
+    public void updateLastRiotCallDate() {
+        this.lastRiotCallDate = LocalDateTime.now();
     }
 
     public void initRevisionDate() {
         LocalDateTime revisionDateTime = LocalDateTime.of(2000, 1, 1, 1, 1, 1);
         this.revisionDate = revisionDateTime;
-        this.revisionClickDate = revisionDateTime;
+        this.lastRiotCallDate = revisionDateTime;
     }
 }

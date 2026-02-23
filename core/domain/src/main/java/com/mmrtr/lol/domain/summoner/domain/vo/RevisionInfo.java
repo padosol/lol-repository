@@ -4,6 +4,6 @@ import java.time.LocalDateTime;
 
 public record RevisionInfo(
         LocalDateTime revisionDate,
-        LocalDateTime revisionClickDate
+        LocalDateTime lastRiotCallDate
 ) {
 }

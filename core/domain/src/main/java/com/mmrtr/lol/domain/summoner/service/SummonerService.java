@@ -28,7 +28,7 @@ public class SummonerService {
                     .fetchSummonerByRiotId(gameName, tagLine, regionType, requestExecutor)
                     .join();
 
-            log.info("getSummonerInfoV2 region type {} and gameName {}", regionType, gameName);
+            log.debug("getSummonerInfoV2 region type {} and gameName {}", regionType, gameName);
             summoner.initSummoner();
             saveSummonerDataUseCase.execute(summoner);
 

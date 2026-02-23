@@ -22,8 +22,11 @@ import java.time.ZoneId;
 public class MatchEntity {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
     @Comment("매치 ID")
-    @Column(name = "match_id")
+    @Column(name = "match_id", nullable = false, unique = true)
     private String matchId;
 
     @Comment("데이터 버전")

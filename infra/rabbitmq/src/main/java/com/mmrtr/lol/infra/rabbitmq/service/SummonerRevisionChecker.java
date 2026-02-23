@@ -30,8 +30,10 @@ public class SummonerRevisionChecker {
         if (existingSummoner.isPresent()) {
             LocalDateTime riotRevisionDate = LocalDateTime.ofInstant(
                     Instant.ofEpochMilli(summonerDto.getRevisionDate()), ZoneId.systemDefault());
+            log.info("revision 비교 - DB: {}, RIOT: {}", existingSummoner.get().getRevisionInfo().revisionDate(), riotRevisionDate);
             if (existingSummoner.get().getRevisionInfo().revisionDate().equals(riotRevisionDate)) {
-                log.info("revisionDate is same. No need to update.");
+                log.info("revisionDate is same. No need to update. revision: {}", riotRevisionDate);
+                summonerRepositoryPort.updateLastRiotCallDate(puuid);
                 return new RevisionCheckResult(false, dbRevisionDateMillis);
             }
         }

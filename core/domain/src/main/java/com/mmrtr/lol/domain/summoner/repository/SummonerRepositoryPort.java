@@ -9,4 +9,6 @@ public interface SummonerRepositoryPort {
     void save(Summoner summoner);
 
     Optional<Summoner> findByPuuid(String puuid);
+
+    void updateLastRiotCallDate(String puuid);
 }

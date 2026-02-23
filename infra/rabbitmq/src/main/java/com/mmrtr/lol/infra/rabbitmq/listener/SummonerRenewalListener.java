@@ -36,6 +36,7 @@ public class SummonerRenewalListener {
             Platform platform = Platform.valueOfName(summonerMessage.getPlatform());
             summonerRenewalService.renewSummoner(puuid, platform);
         } finally {
+            log.info("전적 갱신 요청 완료 {}", summonerMessage);
             redisLockHandler.deleteSummonerRenewal(puuid);
             redisLockHandler.releaseLock(puuid);
         }

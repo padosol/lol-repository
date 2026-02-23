@@ -29,7 +29,7 @@ public class RiotApiService {
 
     public CompletableFuture<AccountDto> getAccountByRiotId(
             String gameName, String tagLine, Platform platform, Executor executor) {
-        log.info("getAccountByRiotId gameName {} tagLine {}", gameName, tagLine);
+        log.debug("getAccountByRiotId gameName {} tagLine {}", gameName, tagLine);
         String path = String.format("/riot/account/v1/accounts/by-riot-id/%s/%s", gameName, tagLine);
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
