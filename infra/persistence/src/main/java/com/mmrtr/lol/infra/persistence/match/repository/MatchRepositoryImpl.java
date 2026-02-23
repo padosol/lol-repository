@@ -67,6 +67,7 @@ public class MatchRepositoryImpl {
                 "platform_id," +
                 "tournament_code," +
                 "season," +
+                "patch_version," +
                 "game_create_datetime," +
                 "game_end_datetime," +
                 "game_start_datetime," +
@@ -89,6 +90,7 @@ public class MatchRepositoryImpl {
                 ":platformId," +
                 ":tournamentCode," +
                 ":season," +
+                ":patchVersion," +
                 ":gameCreateDatetime," +
                 ":gameEndDatetime," +
                 ":gameStartDatetime," +

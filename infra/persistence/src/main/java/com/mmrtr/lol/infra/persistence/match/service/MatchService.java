@@ -44,7 +44,7 @@ public class MatchService {
         // 엔티티 매핑
         long t = System.currentTimeMillis();
         List<MatchEntity> matchEntities = matchDtos.stream()
-                .map(dto -> new MatchEntity(dto, 26))
+                .map(MatchEntity::new)
                 .toList();
 
         // queueId별로 참가자 puuid를 수집하고 league 데이터를 배치 조회

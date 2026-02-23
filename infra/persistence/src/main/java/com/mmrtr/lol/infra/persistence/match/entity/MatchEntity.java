@@ -7,12 +7,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.hibernate.annotations.Comment;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
+@Slf4j
 @Entity
 @Getter
 @Builder
@@ -69,6 +71,10 @@ public class MatchEntity {
     @Comment("시즌")
     private int season;
 
+    @Comment("패치 버전 (major.minor)")
+    @Column(name = "patch_version")
+    private String patchVersion;
+
     // date time
     @Comment("게임 생성 일시")
     private LocalDateTime gameCreateDatetime;
@@ -80,7 +86,7 @@ public class MatchEntity {
     @Comment("참가자 평균 절대 포인트")
     private Integer averageTier;
 
-    public MatchEntity(MatchDto matchDto, int season) {
+    public MatchEntity(MatchDto matchDto) {
         this.matchId = matchDto.getMetadata().getMatchId();
         this.dataVersion = matchDto.getMetadata().getDataVersion();
         this.endOfGameResult = matchDto.getInfo().getEndOfGameResult();
@@ -97,7 +103,18 @@ public class MatchEntity {
         this.queueId = matchDto.getInfo().getQueueId();
         this.platformId = matchDto.getInfo().getPlatformId();
         this.tournamentCode = matchDto.getInfo().getTournamentCode();
-        this.season = season;
+
+        // gameVersion (예: "14.23.638.8912")에서 season과 patchVersion 자동 추출
+        String gameVersion = matchDto.getInfo().getGameVersion();
+        try {
+            String[] versionParts = gameVersion.split("\\.");
+            this.season = Integer.parseInt(versionParts[0]);
+            this.patchVersion = versionParts[0] + "." + versionParts[1];
+        } catch (Exception e) {
+            log.warn("gameVersion 파싱 실패 (matchId={}, gameVersion={}): {}",
+                    matchDto.getMetadata().getMatchId(), gameVersion, e.getMessage());
+        }
+
         this.gameCreateDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameCreation()), ZoneId.systemDefault());
         this.gameEndDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameEndTimestamp()), ZoneId.systemDefault());
         this.gameStartDatetime = LocalDateTime.ofInstant(Instant.ofEpochMilli(matchDto.getInfo().getGameStartTimestamp()), ZoneId.systemDefault());
