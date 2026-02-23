@@ -19,6 +19,9 @@ services:
     ports:
       - "8123:8123" # HTTP 인터페이스
       - "9000:9000" # 기본 클라이언트 포트
+    volumes:
+      - ./clickhouse/init/02_local_tables.sql:/docker-entrypoint-initdb.d/02_local_tables.sql
+      - ./clickhouse/init/03_materialized_views.sql:/docker-entrypoint-initdb.d/03_materialized_views.sql
     ulimits:
       nofile:
         soft: 262144

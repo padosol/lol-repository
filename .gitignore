@@ -38,8 +38,7 @@ out/
 .claude/settings.local.json
 
 ### Docker ###
-docker/.env
-docker/postgres-data/
+docker/*/
 *.env
 !*.env.example
 
