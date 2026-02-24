@@ -53,22 +53,22 @@ public class SummonerRankingCalculationService {
             // 2. 기존 데이터 삭제
             summonerRankingRepositoryPort.deleteByQueue(queue);
 
-            // 3. 지역 목록 (Platform enum 기반)
-            List<String> regions = Arrays.stream(Platform.values())
+            // 3. 플랫폼 목록 (Platform enum 기반)
+            List<String> platformIds = Arrays.stream(Platform.values())
                     .map(Platform::getPlatformId)
                     .toList();
 
-            // 티어 커트라인 계산을 위한 데이터 수집 (region별)
-            Map<String, Integer> minChallengerLPByRegion = new HashMap<>();
-            Map<String, Integer> minGrandmasterLPByRegion = new HashMap<>();
-            Map<String, Integer> challengerCountByRegion = new HashMap<>();
-            Map<String, Integer> grandmasterCountByRegion = new HashMap<>();
+            // 티어 커트라인 계산을 위한 데이터 수집 (platformId별)
+            Map<String, Integer> minChallengerLPByPlatformId = new HashMap<>();
+            Map<String, Integer> minGrandmasterLPByPlatformId = new HashMap<>();
+            Map<String, Integer> challengerCountByPlatformId = new HashMap<>();
+            Map<String, Integer> grandmasterCountByPlatformId = new HashMap<>();
 
             long totalProcessed = 0;
 
-            // 4. 지역별로 순위 계산
-            for (String region : regions) {
-                long regionCount = leagueSummonerJpaRepository.countRankingByQueueAndRegion(queue, region);
+            // 4. 플랫폼별로 순위 계산
+            for (String platformId : platformIds) {
+                long regionCount = leagueSummonerJpaRepository.countRankingByQueueAndPlatformId(queue, platformId);
                 if (regionCount == 0) {
                     continue;
                 }
@@ -78,8 +78,8 @@ public class SummonerRankingCalculationService {
 
                 for (int page = 0; page < totalPages; page++) {
                     Page<SummonerRankingProjection> projectionPage =
-                            leagueSummonerJpaRepository.findRankingByQueueAndRegionPaged(
-                                    queue, region, PageRequest.of(page, PAGE_SIZE));
+                            leagueSummonerJpaRepository.findRankingByQueueAndPlatformIdPaged(
+                                    queue, platformId, PageRequest.of(page, PAGE_SIZE));
 
                     List<String> puuids = projectionPage.getContent().stream()
                             .map(SummonerRankingProjection::getPuuid)
@@ -103,7 +103,7 @@ public class SummonerRankingCalculationService {
                         SummonerRanking ranking = SummonerRanking.builder()
                                 .puuid(projection.getPuuid())
                                 .queue(queue)
-                                .region(region)
+                                .platformId(platformId)
                                 .currentRank(currentRank++)
                                 .rankChange(0)
                                 .gameName(projection.getGameName())
@@ -124,21 +124,21 @@ public class SummonerRankingCalculationService {
                         String tier = projection.getTier();
                         int lp = projection.getLeaguePoints();
                         if ("CHALLENGER".equals(tier)) {
-                            minChallengerLPByRegion.merge(region, lp, Math::min);
-                            challengerCountByRegion.merge(region, 1, Integer::sum);
+                            minChallengerLPByPlatformId.merge(platformId, lp, Math::min);
+                            challengerCountByPlatformId.merge(platformId, 1, Integer::sum);
                         } else if ("GRANDMASTER".equals(tier)) {
-                            minGrandmasterLPByRegion.merge(region, lp, Math::min);
-                            grandmasterCountByRegion.merge(region, 1, Integer::sum);
+                            minGrandmasterLPByPlatformId.merge(platformId, lp, Math::min);
+                            grandmasterCountByPlatformId.merge(platformId, 1, Integer::sum);
                         }
                     }
 
                     summonerRankingRepositoryPort.bulkSaveAll(rankings);
                     rankings.clear();
-                    log.debug("큐 {} 지역 {} 페이지 {}/{} 처리 완료", queue, region, page + 1, totalPages);
+                    log.debug("큐 {} 플랫폼 {} 페이지 {}/{} 처리 완료", queue, platformId, page + 1, totalPages);
                 }
 
                 totalProcessed += regionCount;
-                log.debug("큐 {} 지역 {} 랭킹 처리 완료: {} 명", queue, region, regionCount);
+                log.debug("큐 {} 플랫폼 {} 랭킹 처리 완료: {} 명", queue, platformId, regionCount);
             }
 
             // 5. rankChange 일괄 UPDATE (DB 레벨)
@@ -147,30 +147,30 @@ public class SummonerRankingCalculationService {
             // 6. 백업 테이블 정리
             summonerRankingRepositoryPort.clearBackup(queue);
 
-            log.info("큐 {} 랭킹 처리 완료: {} 명 ({} 개 지역)", queue, totalProcessed, regions.size());
+            log.info("큐 {} 랭킹 처리 완료: {} 명 ({} 개 플랫폼)", queue, totalProcessed, platformIds.size());
 
-            // 7. 티어 커트라인 저장 (region별)
+            // 7. 티어 커트라인 저장 (platformId별)
             List<TierCutoff> cutoffs = new ArrayList<>();
             LocalDateTime now = LocalDateTime.now();
 
-            for (Map.Entry<String, Integer> entry : minChallengerLPByRegion.entrySet()) {
+            for (Map.Entry<String, Integer> entry : minChallengerLPByPlatformId.entrySet()) {
                 cutoffs.add(TierCutoff.builder()
                         .queue(queue)
                         .tier("CHALLENGER")
-                        .region(entry.getKey())
+                        .platformId(entry.getKey())
                         .minLeaguePoints(entry.getValue())
-                        .userCount(challengerCountByRegion.getOrDefault(entry.getKey(), 0))
+                        .userCount(challengerCountByPlatformId.getOrDefault(entry.getKey(), 0))
                         .updatedAt(now)
                         .build());
             }
 
-            for (Map.Entry<String, Integer> entry : minGrandmasterLPByRegion.entrySet()) {
+            for (Map.Entry<String, Integer> entry : minGrandmasterLPByPlatformId.entrySet()) {
                 cutoffs.add(TierCutoff.builder()
                         .queue(queue)
                         .tier("GRANDMASTER")
-                        .region(entry.getKey())
+                        .platformId(entry.getKey())
                         .minLeaguePoints(entry.getValue())
-                        .userCount(grandmasterCountByRegion.getOrDefault(entry.getKey(), 0))
+                        .userCount(grandmasterCountByPlatformId.getOrDefault(entry.getKey(), 0))
                         .updatedAt(now)
                         .build());
             }

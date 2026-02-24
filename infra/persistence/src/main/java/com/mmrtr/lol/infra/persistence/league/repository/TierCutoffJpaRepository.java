@@ -20,8 +20,8 @@ public interface TierCutoffJpaRepository extends JpaRepository<TierCutoffEntity,
 
     @Modifying
     @Query(value = """
-            INSERT INTO tier_cutoff_backup (queue, tier, region, min_league_points, user_count)
-            SELECT queue, tier, region, min_league_points, user_count
+            INSERT INTO tier_cutoff_backup (queue, tier, platform_id, min_league_points, user_count)
+            SELECT queue, tier, platform_id, min_league_points, user_count
             FROM tier_cutoff WHERE queue = :queue
             """, nativeQuery = true)
     void backupCurrentCutoffs(@Param("queue") String queue);
@@ -33,7 +33,7 @@ public interface TierCutoffJpaRepository extends JpaRepository<TierCutoffEntity,
             FROM tier_cutoff_backup backup
             WHERE tc.queue = backup.queue
               AND tc.tier = backup.tier
-              AND tc.region = backup.region
+              AND tc.platform_id = backup.platform_id
               AND tc.queue = :queue
             """, nativeQuery = true)
     void updateLpChangesFromBackup(@Param("queue") String queue);

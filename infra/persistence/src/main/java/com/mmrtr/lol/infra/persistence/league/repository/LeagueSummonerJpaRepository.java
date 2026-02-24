@@ -23,7 +23,7 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
     @Query("""
             SELECT ls.puuid as puuid,
                    ls.queue as queue,
-                   s.region as region,
+                   s.platformId as platformId,
                    ls.tier as tier,
                    ls.rank as rank,
                    ls.leaguePoints as leaguePoints,
@@ -51,7 +51,7 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
     @Query("""
             SELECT ls.puuid as puuid,
                    ls.queue as queue,
-                   s.region as region,
+                   s.platformId as platformId,
                    ls.tier as tier,
                    ls.rank as rank,
                    ls.leaguePoints as leaguePoints,
@@ -73,15 +73,15 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
             FROM LeagueSummonerEntity ls
             JOIN SummonerEntity s ON ls.puuid = s.puuid
             WHERE ls.queue = :queue
-              AND s.region = :region
+              AND s.platformId = :platformId
               AND ls.tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')
             """)
-    long countRankingByQueueAndRegion(@Param("queue") String queue, @Param("region") String region);
+    long countRankingByQueueAndPlatformId(@Param("queue") String queue, @Param("platformId") String platformId);
 
     @Query("""
             SELECT ls.puuid as puuid,
                    ls.queue as queue,
-                   s.region as region,
+                   s.platformId as platformId,
                    ls.tier as tier,
                    ls.rank as rank,
                    ls.leaguePoints as leaguePoints,
@@ -93,12 +93,12 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
             FROM LeagueSummonerEntity ls
             JOIN SummonerEntity s ON ls.puuid = s.puuid
             WHERE ls.queue = :queue
-              AND s.region = :region
+              AND s.platformId = :platformId
               AND ls.tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')
             ORDER BY ls.absolutePoints DESC, ls.puuid ASC
             """)
-    Page<SummonerRankingProjection> findRankingByQueueAndRegionPaged(
+    Page<SummonerRankingProjection> findRankingByQueueAndPlatformIdPaged(
             @Param("queue") String queue,
-            @Param("region") String region,
+            @Param("platformId") String platformId,
             Pageable pageable);
 }

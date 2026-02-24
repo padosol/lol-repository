@@ -36,8 +36,8 @@ public class SummonerEntity {
     private String gameName;
     @Comment("태그라인")
     private String tagLine;
-    @Comment("서버 지역")
-    private String region;
+    @Comment("플랫폼 ID")
+    private String platformId;
     @Comment("검색용 이름 (소문자)")
     private String searchName;
     @Comment("정보 갱신 일시")
@@ -51,7 +51,7 @@ public class SummonerEntity {
                 .profileIconId(summoner.getStatusInfo().profileIconId())
                 .revisionDate(summoner.getRevisionInfo().revisionDate())
                 .summonerLevel(summoner.getStatusInfo().summonerLevel())
-                .region(summoner.getPlatformId())
+                .platformId(summoner.getPlatformId())
                 .gameName(summoner.getGameIdentity().gameName())
                 .tagLine(summoner.getGameIdentity().tagLine())
                 .searchName((summoner.getGameIdentity().gameName().replace(" ", "") + "#" + summoner.getGameIdentity().tagLine()).toLowerCase())
@@ -63,7 +63,7 @@ public class SummonerEntity {
         return Summoner.builder()
                 .puuid(this.puuid)
                 .gameIdentity(new GameIdentity(this.gameName, this.tagLine))
-                .platformId(this.region)
+                .platformId(this.platformId)
                 .statusInfo(new StatusInfo(this.profileIconId, this.summonerLevel))
                 .revisionInfo(new RevisionInfo(this.revisionDate, this.lastRiotCallDate))
                 .leagueInfos(new HashSet<>())

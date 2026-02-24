@@ -27,8 +27,8 @@ import java.time.LocalDateTime;
         name = "tier_cutoff",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "unique_queue_tier_region",
-                        columnNames = {"queue", "tier", "region"}
+                        name = "unique_queue_tier_platform_id",
+                        columnNames = {"queue", "tier", "platform_id"}
                 )
         }
 )
@@ -46,8 +46,8 @@ public class TierCutoffEntity {
     @Comment("티어")
     private String tier;
 
-    @Comment("서버 지역")
-    private String region;
+    @Comment("플랫폼 ID")
+    private String platformId;
 
     @Comment("최소 리그 포인트")
     private int minLeaguePoints;
@@ -70,7 +70,7 @@ public class TierCutoffEntity {
                 .id(domain.getId())
                 .queue(domain.getQueue())
                 .tier(domain.getTier())
-                .region(domain.getRegion())
+                .platformId(domain.getPlatformId())
                 .minLeaguePoints(domain.getMinLeaguePoints())
                 .lpChange(domain.getLpChange())
                 .userCount(domain.getUserCount())
@@ -83,7 +83,7 @@ public class TierCutoffEntity {
                 .id(this.id)
                 .queue(this.queue)
                 .tier(this.tier)
-                .region(this.region)
+                .platformId(this.platformId)
                 .minLeaguePoints(this.minLeaguePoints)
                 .lpChange(this.lpChange)
                 .userCount(this.userCount)

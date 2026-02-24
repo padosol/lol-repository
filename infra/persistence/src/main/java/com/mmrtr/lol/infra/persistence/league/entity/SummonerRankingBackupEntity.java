@@ -30,8 +30,8 @@ public class SummonerRankingBackupEntity {
     @Comment("큐 타입")
     private String queue;
 
-    @Comment("서버 지역")
-    private String region;
+    @Comment("플랫폼 ID")
+    private String platformId;
 
     @Comment("현재 순위")
     private int currentRank;

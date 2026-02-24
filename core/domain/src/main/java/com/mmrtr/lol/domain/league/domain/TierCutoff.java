@@ -16,7 +16,7 @@ public class TierCutoff {
     private Long id;
     private String queue;
     private String tier;
-    private String region;
+    private String platformId;
     private int minLeaguePoints;
     private int lpChange;
     private int userCount;

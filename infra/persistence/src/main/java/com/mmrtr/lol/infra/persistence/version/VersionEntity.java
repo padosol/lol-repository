@@ -26,6 +26,10 @@ public class VersionEntity {
     @Column(name = "version_value", nullable = false, length = 20)
     private String versionValue;
 
+    @Comment("시즌 ID")
+    @Column(name = "season_id")
+    private Long seasonId;
+
     @CreatedDate
     @Comment("생성 일시")
     private LocalDateTime createdAt;

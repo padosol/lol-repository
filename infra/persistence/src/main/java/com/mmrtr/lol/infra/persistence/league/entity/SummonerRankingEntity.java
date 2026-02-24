@@ -28,8 +28,8 @@ import java.time.LocalDateTime;
         name = "summoner_ranking",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "unique_puuid_queue_region",
-                        columnNames = {"puuid", "queue", "region"}
+                        name = "unique_puuid_queue_platform_id",
+                        columnNames = {"puuid", "queue", "platform_id"}
                 )
         }
 )
@@ -47,8 +47,8 @@ public class SummonerRankingEntity {
     @Comment("큐 타입")
     private String queue;
 
-    @Comment("서버 지역")
-    private String region;
+    @Comment("플랫폼 ID")
+    private String platformId;
 
     @Comment("현재 순위")
     private int currentRank;
@@ -98,7 +98,7 @@ public class SummonerRankingEntity {
                 .id(domain.getId())
                 .puuid(domain.getPuuid())
                 .queue(domain.getQueue())
-                .region(domain.getRegion())
+                .platformId(domain.getPlatformId())
                 .currentRank(domain.getCurrentRank())
                 .rankChange(domain.getRankChange())
                 .gameName(domain.getGameName())
@@ -120,7 +120,7 @@ public class SummonerRankingEntity {
                 .id(this.id)
                 .puuid(this.puuid)
                 .queue(this.queue)
-                .region(this.region)
+                .platformId(this.platformId)
                 .currentRank(this.currentRank)
                 .rankChange(this.rankChange)
                 .gameName(this.gameName)

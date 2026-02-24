@@ -3,7 +3,7 @@ package com.mmrtr.lol.infra.persistence.league.repository;
 public interface SummonerRankingProjection {
     String getPuuid();
     String getQueue();
-    String getRegion();
+    String getPlatformId();
     String getTier();
     String getRank();
     Integer getLeaguePoints();

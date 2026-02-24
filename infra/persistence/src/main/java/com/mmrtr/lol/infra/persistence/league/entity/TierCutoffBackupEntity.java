@@ -30,8 +30,8 @@ public class TierCutoffBackupEntity {
     @Comment("티어")
     private String tier;
 
-    @Comment("서버 지역")
-    private String region;
+    @Comment("플랫폼 ID")
+    private String platformId;
 
     @Comment("최소 리그 포인트")
     private int minLeaguePoints;
