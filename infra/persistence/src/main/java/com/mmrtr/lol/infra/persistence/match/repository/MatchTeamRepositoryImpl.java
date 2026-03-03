@@ -28,54 +28,48 @@ public class MatchTeamRepositoryImpl {
                 "team_id," +
                 "match_id," +
                 "win," +
+                "atakhan_first," +
+                "atakhan_kills," +
                 "baron_first," +
                 "baron_kills," +
                 "champion_first," +
                 "champion_kills," +
                 "dragon_first," +
                 "dragon_kills," +
+                "horde_first," +
+                "horde_kills," +
                 "inhibitor_first," +
                 "inhibitor_kills," +
                 "rift_herald_first," +
                 "rift_herald_kills," +
                 "tower_first," +
                 "tower_kills," +
-                "champion1id," +
-                "pick1turn," +
-                "champion2id," +
-                "pick2turn," +
-                "champion3id," +
-                "pick3turn," +
-                "champion4id," +
-                "pick4turn," +
-                "champion5id," +
-                "pick5turn "+
+                "feat_epic_monster_kill," +
+                "feat_first_blood," +
+                "feat_first_turret" +
                 ") VALUES (" +
                 ":teamId," +
                 ":matchId," +
                 ":win," +
+                ":atakhanFirst," +
+                ":atakhanKills," +
                 ":baronFirst," +
                 ":baronKills," +
                 ":championFirst," +
                 ":championKills," +
                 ":dragonFirst," +
                 ":dragonKills," +
+                ":hordeFirst," +
+                ":hordeKills," +
                 ":inhibitorFirst," +
                 ":inhibitorKills," +
                 ":riftHeraldFirst," +
                 ":riftHeraldKills," +
                 ":towerFirst," +
                 ":towerKills," +
-                ":champion1Id," +
-                ":pick1Turn," +
-                ":champion2Id," +
-                ":pick2Turn," +
-                ":champion3Id," +
-                ":pick3Turn," +
-                ":champion4Id," +
-                ":pick4Turn," +
-                ":champion5Id," +
-                ":pick5Turn " +
+                ":featEpicMonsterKill," +
+                ":featFirstBlood," +
+                ":featFirstTurret" +
                 ") ON CONFLICT (team_id, match_id) DO NOTHING";
 
         SqlParameterSource[] params = matchTeams.stream()
@@ -84,28 +78,25 @@ public class MatchTeamRepositoryImpl {
                             .addValue("teamId", param.getTeamId())
                             .addValue("matchId", param.getMatchId())
                             .addValue("win", param.isWin())
+                            .addValue("atakhanFirst", param.isAtakhanFirst())
+                            .addValue("atakhanKills", param.getAtakhanKills())
                             .addValue("baronFirst", param.isBaronFirst())
                             .addValue("baronKills", param.getBaronKills())
                             .addValue("championFirst", param.isChampionFirst())
                             .addValue("championKills", param.getChampionKills())
                             .addValue("dragonFirst", param.isDragonFirst())
                             .addValue("dragonKills", param.getDragonKills())
+                            .addValue("hordeFirst", param.isHordeFirst())
+                            .addValue("hordeKills", param.getHordeKills())
                             .addValue("inhibitorFirst", param.isInhibitorFirst())
                             .addValue("inhibitorKills", param.getInhibitorKills())
                             .addValue("riftHeraldFirst", param.isRiftHeraldFirst())
                             .addValue("riftHeraldKills", param.getRiftHeraldKills())
                             .addValue("towerFirst", param.isTowerFirst())
                             .addValue("towerKills", param.getTowerKills())
-                            .addValue("champion1Id", param.getChampion1Id())
-                            .addValue("pick1Turn", param.getPick1Turn())
-                            .addValue("champion2Id", param.getChampion2Id())
-                            .addValue("pick2Turn", param.getPick2Turn())
-                            .addValue("champion3Id", param.getChampion3Id())
-                            .addValue("pick3Turn", param.getPick3Turn())
-                            .addValue("champion4Id", param.getChampion4Id())
-                            .addValue("pick4Turn", param.getPick4Turn())
-                            .addValue("champion5Id", param.getChampion5Id())
-                            .addValue("pick5Turn", param.getPick5Turn())
+                            .addValue("featEpicMonsterKill", param.getFeatEpicMonsterKill())
+                            .addValue("featFirstBlood", param.getFeatFirstBlood())
+                            .addValue("featFirstTurret", param.getFeatFirstTurret())
                             ;
                 })
                 .toArray(SqlParameterSource[]::new);

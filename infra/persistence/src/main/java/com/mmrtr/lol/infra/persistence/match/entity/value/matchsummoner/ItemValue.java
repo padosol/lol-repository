@@ -1,6 +1,5 @@
 package com.mmrtr.lol.infra.persistence.match.entity.value.matchsummoner;
 
-
 import com.mmrtr.lol.infra.riot.dto.match.ParticipantDto;
 import jakarta.persistence.Embeddable;
 import lombok.*;
@@ -28,6 +27,10 @@ public class ItemValue {
     private int item5;
     @Comment("아이템 슬롯 7")
     private int item6;
+    @Comment("아이템 구매 횟수")
+    private int itemsPurchased;
+    @Comment("소모품 구매 횟수")
+    private int consumablesPurchased;
 
     public ItemValue(ParticipantDto participantDto) {
         this.item0 = participantDto.getItem0();
@@ -37,6 +40,7 @@ public class ItemValue {
         this.item4 = participantDto.getItem4();
         this.item5 = participantDto.getItem5();
         this.item6 = participantDto.getItem6();
+        this.itemsPurchased = participantDto.getItemsPurchased();
+        this.consumablesPurchased = participantDto.getConsumablesPurchased();
     }
-
 }

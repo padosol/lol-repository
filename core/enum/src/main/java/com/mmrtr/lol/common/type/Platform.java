@@ -46,6 +46,7 @@ public enum Platform {
     }
 
     public static Platform valueOfName(String name) {
+        if (name == null) return null;
         return PLATFORM_NAME.get(name.toUpperCase());
     }
 }

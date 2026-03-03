@@ -1,6 +1,6 @@
 package com.mmrtr.lol.infra.persistence.match.repository;
 
-import com.mmrtr.lol.infra.persistence.match.entity.ChallengesEntity;
+import com.mmrtr.lol.infra.persistence.match.entity.MatchParticipantChallengesEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
@@ -16,13 +16,13 @@ public class ChallengesRepositoryImpl {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ChallengesJpaRepository challengesJpaRepository;
 
-    public List<ChallengesEntity> saveAll(List<ChallengesEntity> challenges) {
+    public List<MatchParticipantChallengesEntity> saveAll(List<MatchParticipantChallengesEntity> challenges) {
         return challengesJpaRepository.saveAll(challenges);
     }
 
 
-    public void bulkSave(List<ChallengesEntity> challenges) {
-        String sql = " INSERT INTO challenges (" +
+    public void bulkSave(List<MatchParticipantChallengesEntity> challenges) {
+        String sql = " INSERT INTO match_participant_challenges (" +
                 "puuid," +
                 "match_id," +
                 "assist_streak_count12," +
@@ -44,6 +44,7 @@ public class ChallengesRepositoryImpl {
                 "dodge_skill_shots_small_window," +
                 "double_aces," +
                 "dragon_takedowns," +
+                "earliest_baron," +
                 "early_laning_phase_gold_exp_advantage," +
                 "effective_heal_and_shielding," +
                 "elder_dragon_kills_with_opposing_soul," +
@@ -54,6 +55,7 @@ public class ChallengesRepositoryImpl {
                 "epic_monster_kills_within30seconds_of_spawn," +
                 "epic_monster_steals," +
                 "epic_monster_stolen_without_smite," +
+                "fastest_legendary," +
                 "first_turret_killed," +
                 "first_turret_killed_time," +
                 "fist_bump_participation," +
@@ -63,6 +65,7 @@ public class ChallengesRepositoryImpl {
                 "get_takedowns_in_all_lanes_early_jungle_as_laner," +
                 "gold_per_minute," +
                 "had_open_nexus," +
+                "heal_from_map_sources," +
                 "immobilize_and_kill_with_ally," +
                 "initial_buff_count," +
                 "initial_crab_count," +
@@ -109,6 +112,7 @@ public class ChallengesRepositoryImpl {
                 "rift_herald_takedowns," +
                 "save_ally_from_death," +
                 "scuttle_crab_kills," +
+                "shortest_time_to_ace_from_first_takedown," +
                 "skillshots_dodged," +
                 "skillshots_hit," +
                 "snowballs_hit," +
@@ -163,6 +167,7 @@ public class ChallengesRepositoryImpl {
                 ":dodgeSkillShotsSmallWindow," +
                 ":doubleAces," +
                 ":dragonTakedowns," +
+                ":earliestBaron," +
                 ":earlyLaningPhaseGoldExpAdvantage," +
                 ":effectiveHealAndShielding," +
                 ":elderDragonKillsWithOpposingSoul," +
@@ -173,6 +178,7 @@ public class ChallengesRepositoryImpl {
                 ":epicMonsterKillsWithin30SecondsOfSpawn," +
                 ":epicMonsterSteals," +
                 ":epicMonsterStolenWithoutSmite," +
+                ":fastestLegendary," +
                 ":firstTurretKilled," +
                 ":firstTurretKilledTime," +
                 ":fistBumpParticipation," +
@@ -182,6 +188,7 @@ public class ChallengesRepositoryImpl {
                 ":getTakedownsInAllLanesEarlyJungleAsLaner," +
                 ":goldPerMinute," +
                 ":hadOpenNexus," +
+                ":healFromMapSources," +
                 ":immobilizeAndKillWithAlly," +
                 ":initialBuffCount," +
                 ":initialCrabCount," +
@@ -228,6 +235,7 @@ public class ChallengesRepositoryImpl {
                 ":riftHeraldTakedowns," +
                 ":saveAllyFromDeath," +
                 ":scuttleCrabKills," +
+                ":shortestTimeToAceFromFirstTakedown," +
                 ":skillshotsDodged," +
                 ":skillshotsHit," +
                 ":snowballsHit," +
@@ -259,7 +267,7 @@ public class ChallengesRepositoryImpl {
                 ":voidMonsterKill," +
                 ":wardTakedowns," +
                 ":wardTakedownsBefore20M," +
-                ":wardsGuarded "+
+                ":wardsGuarded " +
                 ") ON CONFLICT (puuid, match_id) DO NOTHING";
 
         SqlParameterSource[] params = SqlParameterSourceUtils.createBatch(challenges);

@@ -35,4 +35,8 @@ public class EventsTimeLineDto {
     private String monsterType;
     private String monsterSubType;
     private int killerTeamId;
+    private int level;
+    private long realTimestamp;
+    private int winningTeam;
+    private int multiKillLength;
 }

@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.persistence.match.repository;
 
 
-import com.mmrtr.lol.infra.persistence.match.entity.MatchSummonerEntity;
+import com.mmrtr.lol.infra.persistence.match.entity.MatchParticipantEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -18,18 +18,19 @@ public class MatchSummonerRepositoryImpl {
     private final MatchSummonerJpaRepository matchSummonerJpaRepository;
 
 
-    public List<MatchSummonerEntity> saveAll(List<MatchSummonerEntity> matchSummoners) {
-        return matchSummonerJpaRepository.saveAll(matchSummoners);
+    public List<MatchParticipantEntity> saveAll(List<MatchParticipantEntity> matchParticipants) {
+        return matchSummonerJpaRepository.saveAll(matchParticipants);
     }
 
 
-    public void bulkSave(List<MatchSummonerEntity> matchSummoners) {
+    public void bulkSave(List<MatchParticipantEntity> matchParticipants) {
 
-        String sql = " INSERT INTO match_summoner (" +
+        String sql = " INSERT INTO match_participant (" +
                 "summoner_id," +
                 "match_id," +
                 "riot_id_game_name," +
                 "riot_id_tagline," +
+                "summoner_name," +
                 "puuid," +
                 "profile_icon," +
                 "participant_id," +
@@ -104,6 +105,7 @@ public class MatchSummonerRepositoryImpl {
                 "damage_dealt_to_buildings," +
                 "damage_dealt_to_objectives," +
                 "damage_dealt_to_turrets," +
+                "damage_dealt_to_epic_monsters," +
                 "damage_self_mitigated," +
                 "total_damage_dealt," +
                 "total_damage_dealt_to_champions," +
@@ -125,7 +127,9 @@ public class MatchSummonerRepositoryImpl {
                 "longest_time_spent_living," +
                 "all_in_pings," +
                 "assist_me_pings," +
+                "basic_pings," +
                 "command_pings," +
+                "danger_pings," +
                 "eligible_for_progression," +
                 "enemy_missing_pings," +
                 "enemy_vision_pings," +
@@ -133,6 +137,9 @@ public class MatchSummonerRepositoryImpl {
                 "get_back_pings," +
                 "need_vision_pings," +
                 "on_my_way_pings," +
+                "push_pings," +
+                "retreat_pings," +
+                "vision_cleared_pings," +
                 "player_score0," +
                 "player_score1," +
                 "player_score2," +
@@ -146,16 +153,16 @@ public class MatchSummonerRepositoryImpl {
                 "player_score10," +
                 "player_score11," +
                 "placement," +
+                "player_subteam_id," +
+                "subteam_placement," +
                 "player_augment1," +
                 "player_augment2," +
                 "player_augment3," +
                 "player_augment4," +
-                "player_subteam_id," +
-                "push_pings," +
-                "subteam_placement," +
+                "player_augment5," +
+                "player_augment6," +
                 "total_ally_jungle_minions_killed," +
                 "total_enemy_jungle_minions_killed," +
-                "vision_cleared_pings," +
                 "item0," +
                 "item1," +
                 "item2," +
@@ -163,13 +170,18 @@ public class MatchSummonerRepositoryImpl {
                 "item4," +
                 "item5," +
                 "item6," +
-                "defense," +
-                "flex," +
-                "offense," +
-                "primary_rune_id," +
-                "primary_rune_ids," +
-                "secondary_rune_id," +
-                "secondary_rune_ids," +
+                "stat_perk_defense," +
+                "stat_perk_flex," +
+                "stat_perk_offense," +
+                "primary_style_id," +
+                "primary_perk0," +
+                "primary_perk1," +
+                "primary_perk2," +
+                "primary_perk3," +
+                "sub_style_id," +
+                "sub_perk0," +
+                "sub_perk1," +
+                "role_bound_item," +
                 "tier," +
                 "tier_rank," +
                 "absolute_points " +
@@ -178,6 +190,7 @@ public class MatchSummonerRepositoryImpl {
                 ":matchId," +
                 ":riotIdGameName," +
                 ":riotIdTagline," +
+                ":summonerName," +
                 ":puuid," +
                 ":profileIcon," +
                 ":participantId," +
@@ -252,6 +265,7 @@ public class MatchSummonerRepositoryImpl {
                 ":damageDealtToBuildings," +
                 ":damageDealtToObjectives," +
                 ":damageDealtToTurrets," +
+                ":damageDealtToEpicMonsters," +
                 ":damageSelfMitigated," +
                 ":totalDamageDealt," +
                 ":totalDamageDealtToChampions," +
@@ -273,7 +287,9 @@ public class MatchSummonerRepositoryImpl {
                 ":longestTimeSpentLiving," +
                 ":allInPings," +
                 ":assistMePings," +
+                ":basicPings," +
                 ":commandPings," +
+                ":dangerPings," +
                 ":eligibleForProgression," +
                 ":enemyMissingPings," +
                 ":enemyVisionPings," +
@@ -281,6 +297,9 @@ public class MatchSummonerRepositoryImpl {
                 ":getBackPings," +
                 ":needVisionPings," +
                 ":onMyWayPings," +
+                ":pushPings," +
+                ":retreatPings," +
+                ":visionClearedPings," +
                 ":playerScore0," +
                 ":playerScore1," +
                 ":playerScore2," +
@@ -294,16 +313,16 @@ public class MatchSummonerRepositoryImpl {
                 ":playerScore10," +
                 ":playerScore11," +
                 ":placement," +
+                ":playerSubteamId," +
+                ":subteamPlacement," +
                 ":playerAugment1," +
                 ":playerAugment2," +
                 ":playerAugment3," +
                 ":playerAugment4," +
-                ":playerSubteamId," +
-                ":pushPings," +
-                ":subteamPlacement," +
+                ":playerAugment5," +
+                ":playerAugment6," +
                 ":totalAllyJungleMinionsKilled," +
                 ":totalEnemyJungleMinionsKilled," +
-                ":visionClearedPings," +
                 ":item0," +
                 ":item1," +
                 ":item2," +
@@ -311,168 +330,185 @@ public class MatchSummonerRepositoryImpl {
                 ":item4," +
                 ":item5," +
                 ":item6," +
-                ":defense," +
-                ":flex," +
-                ":offense," +
-                ":primaryRuneId," +
-                ":primaryRuneIds," +
-                ":secondaryRuneId," +
-                ":secondaryRuneIds," +
+                ":statPerkDefense," +
+                ":statPerkFlex," +
+                ":statPerkOffense," +
+                ":primaryStyleId," +
+                ":primaryPerk0," +
+                ":primaryPerk1," +
+                ":primaryPerk2," +
+                ":primaryPerk3," +
+                ":subStyleId," +
+                ":subPerk0," +
+                ":subPerk1," +
+                ":roleBoundItem," +
                 ":tier," +
                 ":tierRank," +
                 ":absolutePoints" +
                 ") ON CONFLICT (puuid, match_id) DO NOTHING";
 
-        SqlParameterSource[] params = matchSummoners.stream()
-                .map(comment -> {
+        SqlParameterSource[] params = matchParticipants.stream()
+                .map(entity -> {
                     return new MapSqlParameterSource()
-                            .addValue("summonerId", comment.getSummonerId())
-                            .addValue("matchId", comment.getMatchId())
-                            .addValue("riotIdGameName", comment.getRiotIdGameName())
-                            .addValue("riotIdTagline", comment.getRiotIdTagline())
-                            .addValue("puuid", comment.getPuuid())
-                            .addValue("profileIcon", comment.getProfileIcon())
-                            .addValue("participantId", comment.getParticipantId())
-                            .addValue("champLevel", comment.getChampLevel())
-                            .addValue("championId", comment.getChampionId())
-                            .addValue("championName", comment.getChampionName())
-                            .addValue("lane", comment.getLane())
-                            .addValue("champExperience", comment.getChampExperience())
-                            .addValue("role", comment.getRole())
-                            .addValue("spell1Casts", comment.getSpell1Casts())
-                            .addValue("spell2Casts", comment.getSpell2Casts())
-                            .addValue("spell3Casts", comment.getSpell3Casts())
-                            .addValue("spell4Casts", comment.getSpell4Casts())
-                            .addValue("summoner1Casts", comment.getSummoner1Casts())
-                            .addValue("summoner1Id", comment.getSummoner1Id())
-                            .addValue("summoner2Casts", comment.getSummoner2Casts())
-                            .addValue("summoner2Id", comment.getSummoner2Id())
-                            .addValue("summonerLevel", comment.getSummonerLevel())
-                            .addValue("bountyLevel", comment.getBountyLevel())
-                            .addValue("kills", comment.getKills())
-                            .addValue("assists", comment.getAssists())
-                            .addValue("deaths", comment.getDeaths())
-                            .addValue("doubleKills", comment.getDoubleKills())
-                            .addValue("tripleKills", comment.getTripleKills())
-                            .addValue("quadraKills", comment.getQuadraKills())
-                            .addValue("pentaKills", comment.getPentaKills())
-                            .addValue("unrealKills", comment.getUnrealKills())
-                            .addValue("championTransform", comment.getChampionTransform())
-                            .addValue("goldEarned", comment.getGoldEarned())
-                            .addValue("goldSpent", comment.getGoldSpent())
-                            .addValue("itemsPurchased", comment.getItemsPurchased())
-                            .addValue("consumablesPurchased", comment.getConsumablesPurchased())
-                            .addValue("neutralMinionsKilled", comment.getNeutralMinionsKilled())
-                            .addValue("totalMinionsKilled", comment.getTotalMinionsKilled())
-                            .addValue("objectivesStolen", comment.getObjectivesStolen())
-                            .addValue("objectivesStolenAssists", comment.getObjectivesStolenAssists())
-                            .addValue("detectorWardsPlaced", comment.getDetectorWardsPlaced())
-                            .addValue("sightWardsBoughtInGame", comment.getSightWardsBoughtInGame())
-                            .addValue("visionScore", comment.getVisionScore())
-                            .addValue("visionWardsBoughtInGame", comment.getVisionWardsBoughtInGame())
-                            .addValue("wardsKilled", comment.getWardsKilled())
-                            .addValue("wardsPlaced", comment.getWardsPlaced())
-                            .addValue("baronKills", comment.getBaronKills())
-                            .addValue("dragonKills", comment.getDragonKills())
-                            .addValue("firstBloodAssist", comment.isFirstBloodAssist())
-                            .addValue("firstBloodKill", comment.isFirstBloodKill())
-                            .addValue("firstTowerAssist", comment.isFirstTowerAssist())
-                            .addValue("firstTowerKill", comment.isFirstTowerKill())
-                            .addValue("inhibitorKills", comment.getInhibitorKills())
-                            .addValue("inhibitorTakedowns", comment.getInhibitorTakedowns())
-                            .addValue("inhibitorsLost", comment.getInhibitorsLost())
-                            .addValue("nexusKills", comment.getNexusKills())
-                            .addValue("nexusTakedowns", comment.getNexusTakedowns())
-                            .addValue("nexusLost", comment.getNexusLost())
-                            .addValue("turretKills", comment.getTurretKills())
-                            .addValue("turretTakedowns", comment.getTurretTakedowns())
-                            .addValue("turretsLost", comment.getTurretsLost())
-                            .addValue("gameEndedInEarlySurrender", comment.isGameEndedInEarlySurrender())
-                            .addValue("gameEndedInSurrender", comment.isGameEndedInSurrender())
-                            .addValue("teamEarlySurrendered", comment.isTeamEarlySurrendered())
-                            .addValue("teamPosition", comment.getTeamPosition())
-                            .addValue("teamId", comment.getTeamId())
-                            .addValue("win", comment.isWin())
-                            .addValue("timePlayed", comment.getTimePlayed())
-                            .addValue("individualPosition", comment.getIndividualPosition())
-                            .addValue("magicDamageDealt", comment.getMagicDamageDealt())
-                            .addValue("magicDamageDealtToChampions", comment.getMagicDamageDealtToChampions())
-                            .addValue("magicDamageTaken", comment.getMagicDamageTaken())
-                            .addValue("physicalDamageDealt", comment.getPhysicalDamageDealt())
-                            .addValue("physicalDamageDealtToChampions", comment.getPhysicalDamageDealtToChampions())
-                            .addValue("physicalDamageTaken", comment.getPhysicalDamageTaken())
-                            .addValue("damageDealtToBuildings", comment.getDamageDealtToBuildings())
-                            .addValue("damageDealtToObjectives", comment.getDamageDealtToObjectives())
-                            .addValue("damageDealtToTurrets", comment.getDamageDealtToTurrets())
-                            .addValue("damageSelfMitigated", comment.getDamageSelfMitigated())
-                            .addValue("totalDamageDealt", comment.getTotalDamageDealt())
-                            .addValue("totalDamageDealtToChampions", comment.getTotalDamageDealtToChampions())
-                            .addValue("totalDamageShieldedOnTeammates", comment.getTotalDamageShieldedOnTeammates())
-                            .addValue("totalDamageTaken", comment.getTotalDamageTaken())
-                            .addValue("trueDamageDealt", comment.getTrueDamageDealt())
-                            .addValue("trueDamageDealtToChampions", comment.getTrueDamageDealtToChampions())
-                            .addValue("trueDamageTaken", comment.getTrueDamageTaken())
-                            .addValue("totalHeal", comment.getTotalHeal())
-                            .addValue("totalHealsOnTeammates", comment.getTotalHealsOnTeammates())
-                            .addValue("totalTimeCCDealt", comment.getTotalTimeCCDealt())
-                            .addValue("totalTimeSpentDead", comment.getTotalTimeSpentDead())
-                            .addValue("totalUnitsHealed", comment.getTotalUnitsHealed())
-                            .addValue("timeCCingOthers", comment.getTimeCCingOthers())
-                            .addValue("killingSprees", comment.getKillingSprees())
-                            .addValue("largestCriticalStrike", comment.getLargestCriticalStrike())
-                            .addValue("largestKillingSpree", comment.getLargestKillingSpree())
-                            .addValue("largestMultiKill", comment.getLargestMultiKill())
-                            .addValue("longestTimeSpentLiving", comment.getLongestTimeSpentLiving())
-                            .addValue("allInPings", comment.getAllInPings())
-                            .addValue("assistMePings", comment.getAssistMePings())
-                            .addValue("commandPings", comment.getCommandPings())
-                            .addValue("eligibleForProgression", comment.isEligibleForProgression())
-                            .addValue("enemyMissingPings", comment.getEnemyMissingPings())
-                            .addValue("enemyVisionPings", comment.getEnemyVisionPings())
-                            .addValue("holdPings", comment.getHoldPings())
-                            .addValue("getBackPings", comment.getGetBackPings())
-                            .addValue("needVisionPings", comment.getNeedVisionPings())
-                            .addValue("onMyWayPings", comment.getOnMyWayPings())
-                            .addValue("playerScore0", comment.getPlayerScore0())
-                            .addValue("playerScore1", comment.getPlayerScore1())
-                            .addValue("playerScore2", comment.getPlayerScore2())
-                            .addValue("playerScore3", comment.getPlayerScore3())
-                            .addValue("playerScore4", comment.getPlayerScore4())
-                            .addValue("playerScore5", comment.getPlayerScore5())
-                            .addValue("playerScore6", comment.getPlayerScore6())
-                            .addValue("playerScore7", comment.getPlayerScore7())
-                            .addValue("playerScore8", comment.getPlayerScore8())
-                            .addValue("playerScore9", comment.getPlayerScore9())
-                            .addValue("playerScore10", comment.getPlayerScore10())
-                            .addValue("playerScore11", comment.getPlayerScore11())
-                            .addValue("placement", comment.getPlacement())
-                            .addValue("playerAugment1", comment.getPlayerAugment1())
-                            .addValue("playerAugment2", comment.getPlayerAugment2())
-                            .addValue("playerAugment3", comment.getPlayerAugment3())
-                            .addValue("playerAugment4", comment.getPlayerAugment4())
-                            .addValue("playerSubteamId", comment.getPlayerSubteamId())
-                            .addValue("pushPings", comment.getPushPings())
-                            .addValue("subteamPlacement", comment.getSubteamPlacement())
-                            .addValue("totalAllyJungleMinionsKilled", comment.getTotalAllyJungleMinionsKilled())
-                            .addValue("totalEnemyJungleMinionsKilled", comment.getTotalEnemyJungleMinionsKilled())
-                            .addValue("visionClearedPings", comment.getVisionClearedPings())
-                            .addValue("item0", comment.getItem().getItem0())
-                            .addValue("item1", comment.getItem().getItem1())
-                            .addValue("item2", comment.getItem().getItem2())
-                            .addValue("item3", comment.getItem().getItem3())
-                            .addValue("item4", comment.getItem().getItem4())
-                            .addValue("item5", comment.getItem().getItem5())
-                            .addValue("item6", comment.getItem().getItem6())
-                            .addValue("defense", comment.getStatValue().getDefense())
-                            .addValue("flex", comment.getStatValue().getFlex())
-                            .addValue("offense", comment.getStatValue().getOffense())
-                            .addValue("primaryRuneId", comment.getStyleValue().getPrimaryRuneId())
-                            .addValue("primaryRuneIds", comment.getStyleValue().getPrimaryRuneIds())
-                            .addValue("secondaryRuneId", comment.getStyleValue().getSecondaryRuneId())
-                            .addValue("secondaryRuneIds", comment.getStyleValue().getSecondaryRuneIds())
-                            .addValue("tier", comment.getTier())
-                            .addValue("tierRank", comment.getTierRank())
-                            .addValue("absolutePoints", comment.getAbsolutePoints())
+                            .addValue("summonerId", entity.getSummonerId())
+                            .addValue("matchId", entity.getMatchId())
+                            .addValue("riotIdGameName", entity.getRiotIdGameName())
+                            .addValue("riotIdTagline", entity.getRiotIdTagline())
+                            .addValue("summonerName", entity.getSummonerName())
+                            .addValue("puuid", entity.getPuuid())
+                            .addValue("profileIcon", entity.getProfileIcon())
+                            .addValue("participantId", entity.getParticipantId())
+                            .addValue("champLevel", entity.getChampLevel())
+                            .addValue("championId", entity.getChampionId())
+                            .addValue("championName", entity.getChampionName())
+                            .addValue("lane", entity.getLane())
+                            .addValue("champExperience", entity.getChampExperience())
+                            .addValue("role", entity.getRole())
+                            .addValue("spell1Casts", entity.getSpell1Casts())
+                            .addValue("spell2Casts", entity.getSpell2Casts())
+                            .addValue("spell3Casts", entity.getSpell3Casts())
+                            .addValue("spell4Casts", entity.getSpell4Casts())
+                            .addValue("summoner1Casts", entity.getSummoner1Casts())
+                            .addValue("summoner1Id", entity.getSummoner1Id())
+                            .addValue("summoner2Casts", entity.getSummoner2Casts())
+                            .addValue("summoner2Id", entity.getSummoner2Id())
+                            .addValue("summonerLevel", entity.getSummonerLevel())
+                            .addValue("bountyLevel", entity.getBountyLevel())
+                            .addValue("kills", entity.getKills())
+                            .addValue("assists", entity.getAssists())
+                            .addValue("deaths", entity.getDeaths())
+                            .addValue("doubleKills", entity.getDoubleKills())
+                            .addValue("tripleKills", entity.getTripleKills())
+                            .addValue("quadraKills", entity.getQuadraKills())
+                            .addValue("pentaKills", entity.getPentaKills())
+                            .addValue("unrealKills", entity.getUnrealKills())
+                            .addValue("championTransform", entity.getChampionTransform())
+                            .addValue("goldEarned", entity.getGoldEarned())
+                            .addValue("goldSpent", entity.getGoldSpent())
+                            .addValue("itemsPurchased", entity.getItem().getItemsPurchased())
+                            .addValue("consumablesPurchased", entity.getItem().getConsumablesPurchased())
+                            .addValue("neutralMinionsKilled", entity.getNeutralMinionsKilled())
+                            .addValue("totalMinionsKilled", entity.getTotalMinionsKilled())
+                            .addValue("objectivesStolen", entity.getObjectivesStolen())
+                            .addValue("objectivesStolenAssists", entity.getObjectivesStolenAssists())
+                            .addValue("detectorWardsPlaced", entity.getDetectorWardsPlaced())
+                            .addValue("sightWardsBoughtInGame", entity.getSightWardsBoughtInGame())
+                            .addValue("visionScore", entity.getVisionScore())
+                            .addValue("visionWardsBoughtInGame", entity.getVisionWardsBoughtInGame())
+                            .addValue("wardsKilled", entity.getWardsKilled())
+                            .addValue("wardsPlaced", entity.getWardsPlaced())
+                            .addValue("baronKills", entity.getBaronKills())
+                            .addValue("dragonKills", entity.getDragonKills())
+                            .addValue("firstBloodAssist", entity.isFirstBloodAssist())
+                            .addValue("firstBloodKill", entity.isFirstBloodKill())
+                            .addValue("firstTowerAssist", entity.isFirstTowerAssist())
+                            .addValue("firstTowerKill", entity.isFirstTowerKill())
+                            .addValue("inhibitorKills", entity.getInhibitorKills())
+                            .addValue("inhibitorTakedowns", entity.getInhibitorTakedowns())
+                            .addValue("inhibitorsLost", entity.getInhibitorsLost())
+                            .addValue("nexusKills", entity.getNexusKills())
+                            .addValue("nexusTakedowns", entity.getNexusTakedowns())
+                            .addValue("nexusLost", entity.getNexusLost())
+                            .addValue("turretKills", entity.getTurretKills())
+                            .addValue("turretTakedowns", entity.getTurretTakedowns())
+                            .addValue("turretsLost", entity.getTurretsLost())
+                            .addValue("gameEndedInEarlySurrender", entity.isGameEndedInEarlySurrender())
+                            .addValue("gameEndedInSurrender", entity.isGameEndedInSurrender())
+                            .addValue("teamEarlySurrendered", entity.isTeamEarlySurrendered())
+                            .addValue("teamPosition", entity.getTeamPosition())
+                            .addValue("teamId", entity.getTeamId())
+                            .addValue("win", entity.isWin())
+                            .addValue("timePlayed", entity.getTimePlayed())
+                            .addValue("individualPosition", entity.getIndividualPosition())
+                            .addValue("magicDamageDealt", entity.getMagicDamageDealt())
+                            .addValue("magicDamageDealtToChampions", entity.getMagicDamageDealtToChampions())
+                            .addValue("magicDamageTaken", entity.getMagicDamageTaken())
+                            .addValue("physicalDamageDealt", entity.getPhysicalDamageDealt())
+                            .addValue("physicalDamageDealtToChampions", entity.getPhysicalDamageDealtToChampions())
+                            .addValue("physicalDamageTaken", entity.getPhysicalDamageTaken())
+                            .addValue("damageDealtToBuildings", entity.getDamageDealtToBuildings())
+                            .addValue("damageDealtToObjectives", entity.getDamageDealtToObjectives())
+                            .addValue("damageDealtToTurrets", entity.getDamageDealtToTurrets())
+                            .addValue("damageDealtToEpicMonsters", entity.getDamageDealtToEpicMonsters())
+                            .addValue("damageSelfMitigated", entity.getDamageSelfMitigated())
+                            .addValue("totalDamageDealt", entity.getTotalDamageDealt())
+                            .addValue("totalDamageDealtToChampions", entity.getTotalDamageDealtToChampions())
+                            .addValue("totalDamageShieldedOnTeammates", entity.getTotalDamageShieldedOnTeammates())
+                            .addValue("totalDamageTaken", entity.getTotalDamageTaken())
+                            .addValue("trueDamageDealt", entity.getTrueDamageDealt())
+                            .addValue("trueDamageDealtToChampions", entity.getTrueDamageDealtToChampions())
+                            .addValue("trueDamageTaken", entity.getTrueDamageTaken())
+                            .addValue("totalHeal", entity.getTotalHeal())
+                            .addValue("totalHealsOnTeammates", entity.getTotalHealsOnTeammates())
+                            .addValue("totalTimeCCDealt", entity.getTotalTimeCCDealt())
+                            .addValue("totalTimeSpentDead", entity.getTotalTimeSpentDead())
+                            .addValue("totalUnitsHealed", entity.getTotalUnitsHealed())
+                            .addValue("timeCCingOthers", entity.getTimeCCingOthers())
+                            .addValue("killingSprees", entity.getKillingSprees())
+                            .addValue("largestCriticalStrike", entity.getLargestCriticalStrike())
+                            .addValue("largestKillingSpree", entity.getLargestKillingSpree())
+                            .addValue("largestMultiKill", entity.getLargestMultiKill())
+                            .addValue("longestTimeSpentLiving", entity.getLongestTimeSpentLiving())
+                            .addValue("allInPings", entity.getAllInPings())
+                            .addValue("assistMePings", entity.getAssistMePings())
+                            .addValue("basicPings", entity.getBasicPings())
+                            .addValue("commandPings", entity.getCommandPings())
+                            .addValue("dangerPings", entity.getDangerPings())
+                            .addValue("eligibleForProgression", entity.isEligibleForProgression())
+                            .addValue("enemyMissingPings", entity.getEnemyMissingPings())
+                            .addValue("enemyVisionPings", entity.getEnemyVisionPings())
+                            .addValue("holdPings", entity.getHoldPings())
+                            .addValue("getBackPings", entity.getGetBackPings())
+                            .addValue("needVisionPings", entity.getNeedVisionPings())
+                            .addValue("onMyWayPings", entity.getOnMyWayPings())
+                            .addValue("pushPings", entity.getPushPings())
+                            .addValue("retreatPings", entity.getRetreatPings())
+                            .addValue("visionClearedPings", entity.getVisionClearedPings())
+                            .addValue("playerScore0", entity.getPlayerScore0())
+                            .addValue("playerScore1", entity.getPlayerScore1())
+                            .addValue("playerScore2", entity.getPlayerScore2())
+                            .addValue("playerScore3", entity.getPlayerScore3())
+                            .addValue("playerScore4", entity.getPlayerScore4())
+                            .addValue("playerScore5", entity.getPlayerScore5())
+                            .addValue("playerScore6", entity.getPlayerScore6())
+                            .addValue("playerScore7", entity.getPlayerScore7())
+                            .addValue("playerScore8", entity.getPlayerScore8())
+                            .addValue("playerScore9", entity.getPlayerScore9())
+                            .addValue("playerScore10", entity.getPlayerScore10())
+                            .addValue("playerScore11", entity.getPlayerScore11())
+                            .addValue("placement", entity.getArena().getPlacement())
+                            .addValue("playerSubteamId", entity.getArena().getPlayerSubteamId())
+                            .addValue("subteamPlacement", entity.getArena().getSubteamPlacement())
+                            .addValue("playerAugment1", entity.getArena().getPlayerAugment1())
+                            .addValue("playerAugment2", entity.getArena().getPlayerAugment2())
+                            .addValue("playerAugment3", entity.getArena().getPlayerAugment3())
+                            .addValue("playerAugment4", entity.getArena().getPlayerAugment4())
+                            .addValue("playerAugment5", entity.getArena().getPlayerAugment5())
+                            .addValue("playerAugment6", entity.getArena().getPlayerAugment6())
+                            .addValue("totalAllyJungleMinionsKilled", entity.getTotalAllyJungleMinionsKilled())
+                            .addValue("totalEnemyJungleMinionsKilled", entity.getTotalEnemyJungleMinionsKilled())
+                            .addValue("item0", entity.getItem().getItem0())
+                            .addValue("item1", entity.getItem().getItem1())
+                            .addValue("item2", entity.getItem().getItem2())
+                            .addValue("item3", entity.getItem().getItem3())
+                            .addValue("item4", entity.getItem().getItem4())
+                            .addValue("item5", entity.getItem().getItem5())
+                            .addValue("item6", entity.getItem().getItem6())
+                            .addValue("statPerkDefense", entity.getPerk().getStatPerkDefense())
+                            .addValue("statPerkFlex", entity.getPerk().getStatPerkFlex())
+                            .addValue("statPerkOffense", entity.getPerk().getStatPerkOffense())
+                            .addValue("primaryStyleId", entity.getPerk().getPrimaryStyleId())
+                            .addValue("primaryPerk0", entity.getPerk().getPrimaryPerk0())
+                            .addValue("primaryPerk1", entity.getPerk().getPrimaryPerk1())
+                            .addValue("primaryPerk2", entity.getPerk().getPrimaryPerk2())
+                            .addValue("primaryPerk3", entity.getPerk().getPrimaryPerk3())
+                            .addValue("subStyleId", entity.getPerk().getSubStyleId())
+                            .addValue("subPerk0", entity.getPerk().getSubPerk0())
+                            .addValue("subPerk1", entity.getPerk().getSubPerk1())
+                            .addValue("roleBoundItem", entity.getRoleBoundItem())
+                            .addValue("tier", entity.getTier())
+                            .addValue("tierRank", entity.getTierRank())
+                            .addValue("absolutePoints", entity.getAbsolutePoints())
                             ;
                 })
                 .toArray(SqlParameterSource[]::new);

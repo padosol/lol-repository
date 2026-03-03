@@ -9,6 +9,7 @@ import java.util.List;
 @Setter
 public class TeamDto {
     private List<BanDto> bans;
+    private FeatsDto feats;
     private ObjectivesDto objectives;
     private int teamId;
     private boolean win;

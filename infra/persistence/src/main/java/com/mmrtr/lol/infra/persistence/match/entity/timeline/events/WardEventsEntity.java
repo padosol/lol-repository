@@ -1,38 +1,30 @@
 package com.mmrtr.lol.infra.persistence.match.entity.timeline.events;
 
-import com.mmrtr.lol.infra.persistence.match.entity.timeline.TimeLineEventEntity;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.hibernate.annotations.Comment;
 
 @Getter
 @Setter
 @Entity
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "ward_events")
+@Table(name = "ward_event")
 public class WardEventsEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Comment("와드 이벤트 ID")
-    @Column(name = "ward_event_id")
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "time_line_event_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
-    private TimeLineEventEntity timeLineEvent;
+    @Comment("매치 ID")
+    @Column(name = "match_id", nullable = false)
+    private String matchId;
 
-    @Comment("참가자 ID")
-    private int participantId;
+    @Comment("생성자 ID")
+    private int creatorId;
     @Comment("와드 타입")
     private String wardType;
-
     @Comment("타임스탬프")
     private long timestamp;
-    @Comment("이벤트 타입")
-    private String type;
 }

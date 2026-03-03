@@ -7,7 +7,7 @@ import lombok.ToString;
 @ToString
 public class SummonerMessage {
 
-    private String platform;
+    private String platformId;
     private String puuid;
     private long revisionDate;
 }
