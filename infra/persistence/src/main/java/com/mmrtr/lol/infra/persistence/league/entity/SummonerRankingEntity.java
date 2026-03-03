@@ -6,6 +6,7 @@ import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
@@ -31,6 +32,10 @@ import java.time.LocalDateTime;
                         name = "unique_puuid_queue_platform_id",
                         columnNames = {"puuid", "queue", "platform_id"}
                 )
+        },
+        indexes = {
+                @Index(name = "idx_summoner_ranking_platform_queue_tier", columnList = "platform_id, queue, tier"),
+                @Index(name = "idx_summoner_ranking_puuid", columnList = "puuid")
         }
 )
 @EntityListeners(AuditingEntityListener.class)
