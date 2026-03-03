@@ -2,7 +2,6 @@ package com.mmrtr.lol.infra.persistence.match.service;
 
 import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.ParticipantFrameEntity;
-import com.mmrtr.lol.infra.persistence.match.entity.timeline.TimeLineEventEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.events.*;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.ChampionStatsValue;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.DamageStatsValue;
@@ -38,7 +37,6 @@ public class TimeLineService {
         Map<String, MatchEntity> matchEntityMap = matchEntities.stream()
                 .collect(Collectors.toMap(MatchEntity::getMatchId, Function.identity()));
 
-        List<TimeLineEventEntity> allTimeLineEvents = new ArrayList<>();
         List<ParticipantFrameEntity> allParticipantFrames = new ArrayList<>();
         List<ItemEventsEntity> allItemEvents = new ArrayList<>();
         List<SkillEventsEntity> allSkillEvents = new ArrayList<>();
@@ -61,13 +59,6 @@ public class TimeLineService {
             if (frames == null) continue;
 
             for (FramesTimeLineDto frame : frames) {
-                TimeLineEventEntity timeLineEvent = TimeLineEventEntity.builder()
-                        .matchId(matchEntity.getMatchId())
-                        .matchEntity(matchEntity)
-                        .timestamp(frame.getTimestamp())
-                        .build();
-                allTimeLineEvents.add(timeLineEvent);
-
                 // Participant frames
                 ParticipantFramesDto participantFrames = frame.getParticipantFrames();
                 if (participantFrames != null) {
@@ -87,23 +78,23 @@ public class TimeLineService {
 
                     switch (type) {
                         case "ITEM_PURCHASED", "ITEM_SOLD", "ITEM_DESTROYED", "ITEM_UNDO" ->
-                                allItemEvents.add(toItemEventsEntity(timeLineEvent, event));
+                                allItemEvents.add(toItemEventsEntity(matchEntity.getMatchId(), event));
                         case "SKILL_LEVEL_UP" ->
-                                allSkillEvents.add(toSkillEventsEntity(timeLineEvent, event));
+                                allSkillEvents.add(toSkillEventsEntity(matchEntity.getMatchId(), event));
                         case "CHAMPION_KILL" ->
-                                allKillEvents.add(toKillEventsEntity(timeLineEvent, event));
+                                allKillEvents.add(toKillEventsEntity(matchEntity.getMatchId(), event));
                         case "BUILDING_KILL", "ELITE_MONSTER_KILL" ->
-                                allBuildingEvents.add(toBuildingEventsEntity(timeLineEvent, event));
+                                allBuildingEvents.add(toBuildingEventsEntity(matchEntity.getMatchId(), event));
                         case "WARD_PLACED", "WARD_KILL" ->
-                                allWardEvents.add(toWardEventsEntity(timeLineEvent, event));
+                                allWardEvents.add(toWardEventsEntity(matchEntity.getMatchId(), event));
                         case "GAME_END" ->
-                                allGameEvents.add(toGameEventsEntity(timeLineEvent, event, timelineDto));
+                                allGameEvents.add(toGameEventsEntity(matchEntity.getMatchId(), event, timelineDto));
                         case "LEVEL_UP" ->
-                                allLevelEvents.add(toLevelEventsEntity(timeLineEvent, event));
+                                allLevelEvents.add(toLevelEventsEntity(matchEntity.getMatchId(), event));
                         case "CHAMPION_SPECIAL_KILL" ->
-                                allChampionSpecialKillEvents.add(toChampionSpecialKillEventEntity(timeLineEvent, event));
+                                allChampionSpecialKillEvents.add(toChampionSpecialKillEventEntity(matchEntity.getMatchId(), event));
                         case "TURRET_PLATE_DESTROYED" ->
-                                allTurretPlateDestroyedEvents.add(toTurretPlateDestroyedEventEntity(timeLineEvent, event));
+                                allTurretPlateDestroyedEvents.add(toTurretPlateDestroyedEventEntity(matchEntity.getMatchId(), event));
                         default -> { }
                     }
                 }
@@ -111,15 +102,7 @@ public class TimeLineService {
         }
         log.debug("[timeline] 엔티티 매핑: {}ms", System.currentTimeMillis() - t);
 
-        t = System.currentTimeMillis();
-        timeLineRepository.bulkSaveTimeLineEvents(allTimeLineEvents);
-        log.debug("[timeline] bulkSave events: {}ms ({}건)", System.currentTimeMillis() - t, allTimeLineEvents.size());
-
-        t = System.currentTimeMillis();
-        timeLineRepository.populateTimeLineEventIds(allTimeLineEvents);
-        log.debug("[timeline] populateTimeLineEventIds: {}ms ({}건)", System.currentTimeMillis() - t, allTimeLineEvents.size());
-
-        // Phase 2: 병렬 bulk save (ID populate 완료 후 모두 독립적)
+        // Phase 2: 병렬 bulk save (모두 독립적)
         CompletableFuture<?>[] futures = {
             runBulkSave("participantFrames", allParticipantFrames,
                     timeLineRepository::bulkSaveParticipantFrames),
@@ -183,7 +166,6 @@ public class TimeLineService {
 
         return ParticipantFrameEntity.builder()
                 .matchId(matchEntity.getMatchId())
-                .matchEntity(matchEntity)
                 .timestamp(timestamp)
                 .participantId(dto.getParticipantId())
                 .championStats(cs != null ? ChampionStatsValue.builder()
@@ -242,122 +224,118 @@ public class TimeLineService {
                 .build();
     }
 
-    private ItemEventsEntity toItemEventsEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event) {
-        ItemEventsEntity entity = new ItemEventsEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setItemId(event.getItemId());
-        entity.setParticipantId(event.getParticipantId());
-        entity.setTimestamp(event.getTimestamp());
-        entity.setType(event.getType());
-        entity.setAfterId(event.getAfterId());
-        entity.setBeforeId(event.getBeforeId());
-        entity.setGoldGain(event.getGoldGain());
-        return entity;
+    private ItemEventsEntity toItemEventsEntity(String matchId, EventsTimeLineDto event) {
+        return ItemEventsEntity.builder()
+                .matchId(matchId)
+                .itemId(event.getItemId())
+                .participantId(event.getParticipantId())
+                .timestamp(event.getTimestamp())
+                .type(event.getType())
+                .afterId(event.getAfterId())
+                .beforeId(event.getBeforeId())
+                .goldGain(event.getGoldGain())
+                .build();
     }
 
-    private SkillEventsEntity toSkillEventsEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event) {
-        SkillEventsEntity entity = new SkillEventsEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setSkillSlot(event.getSkillSlot());
-        entity.setParticipantId(event.getParticipantId());
-        entity.setLevelUpType(event.getLevelUpType());
-        entity.setTimestamp(event.getTimestamp());
-        entity.setType(event.getType());
-        return entity;
+    private SkillEventsEntity toSkillEventsEntity(String matchId, EventsTimeLineDto event) {
+        return SkillEventsEntity.builder()
+                .matchId(matchId)
+                .skillSlot(event.getSkillSlot())
+                .participantId(event.getParticipantId())
+                .levelUpType(event.getLevelUpType())
+                .timestamp(event.getTimestamp())
+                .build();
     }
 
-    private KillEventsEntity toKillEventsEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event) {
-        KillEventsEntity entity = new KillEventsEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setAssistingParticipantIds(convertAssistingIds(event.getAssistingParticipantIds()));
-        entity.setBounty(event.getBounty());
-        entity.setKillStreakLength(event.getKillStreakLength());
-        entity.setKillerId(event.getKillerId());
-        entity.setPosition(event.getPosition() != null
-                ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
-                : new PositionValue());
-        entity.setShutdownBounty(0);
-        entity.setVictimId(event.getVictimId());
-        entity.setTimestamp(event.getTimestamp());
-        entity.setType(event.getType());
-        return entity;
+    private KillEventsEntity toKillEventsEntity(String matchId, EventsTimeLineDto event) {
+        return KillEventsEntity.builder()
+                .matchId(matchId)
+                .killerId(event.getKillerId())
+                .victimId(event.getVictimId())
+                .assistingParticipantIds(convertAssistingIds(event.getAssistingParticipantIds()))
+                .bounty(event.getBounty())
+                .shutdownBounty(0)
+                .killStreakLength(event.getKillStreakLength())
+                .position(event.getPosition() != null
+                        ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
+                        : new PositionValue())
+                .victimDamageDealt(null)
+                .victimDamageReceived(null)
+                .timestamp(event.getTimestamp())
+                .build();
     }
 
-    private BuildingEventsEntity toBuildingEventsEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event) {
-        BuildingEventsEntity entity = new BuildingEventsEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setAssistingParticipantIds(convertAssistingIds(event.getAssistingParticipantIds()));
-        entity.setBounty(event.getBounty());
-        entity.setBuildingType(event.getBuildingType());
-        entity.setKillerId(event.getKillerId());
-        entity.setLaneType(event.getLaneType());
-        entity.setPositionValue(event.getPosition() != null
-                ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
-                : new PositionValue());
-        entity.setTeamId(event.getTeamId());
-        entity.setTimestamp(event.getTimestamp());
-        entity.setTowerType(event.getTowerType());
-        entity.setType(event.getType());
-        return entity;
+    private BuildingEventsEntity toBuildingEventsEntity(String matchId, EventsTimeLineDto event) {
+        return BuildingEventsEntity.builder()
+                .matchId(matchId)
+                .assistingParticipantIds(convertAssistingIds(event.getAssistingParticipantIds()))
+                .bounty(event.getBounty())
+                .buildingType(event.getBuildingType())
+                .killerId(event.getKillerId())
+                .laneType(event.getLaneType())
+                .position(event.getPosition() != null
+                        ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
+                        : new PositionValue())
+                .teamId(event.getTeamId())
+                .timestamp(event.getTimestamp())
+                .towerType(event.getTowerType())
+                .type(event.getType())
+                .build();
     }
 
-    private WardEventsEntity toWardEventsEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event) {
-        WardEventsEntity entity = new WardEventsEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setParticipantId(event.getParticipantId());
-        entity.setWardType(event.getWardType());
-        entity.setTimestamp(event.getTimestamp());
-        entity.setType(event.getType());
-        return entity;
+    private WardEventsEntity toWardEventsEntity(String matchId, EventsTimeLineDto event) {
+        return WardEventsEntity.builder()
+                .matchId(matchId)
+                .creatorId(event.getCreatorId() != 0 ? event.getCreatorId() : event.getParticipantId())
+                .wardType(event.getWardType())
+                .timestamp(event.getTimestamp())
+                .build();
     }
 
-    private GameEventsEntity toGameEventsEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event, TimelineDto timelineDto) {
-        GameEventsEntity entity = new GameEventsEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setTimestamp(event.getTimestamp());
-        entity.setGameId(timelineDto.getInfo().getGameId());
-        entity.setRealTimestamp(0L);
-        entity.setWinningTeam(0);
-        entity.setType(event.getType());
-        return entity;
+    private GameEventsEntity toGameEventsEntity(String matchId, EventsTimeLineDto event, TimelineDto timelineDto) {
+        return GameEventsEntity.builder()
+                .matchId(matchId)
+                .timestamp(event.getTimestamp())
+                .gameId(timelineDto.getInfo().getGameId())
+                .realTimestamp(event.getRealTimestamp())
+                .winningTeam(event.getWinningTeam())
+                .build();
     }
 
-    private LevelEventsEntity toLevelEventsEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event) {
-        LevelEventsEntity entity = new LevelEventsEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setLevel(0);
-        entity.setParticipantId(event.getParticipantId());
-        entity.setTimestamp(event.getTimestamp());
-        entity.setType(event.getType());
-        return entity;
+    private LevelEventsEntity toLevelEventsEntity(String matchId, EventsTimeLineDto event) {
+        return LevelEventsEntity.builder()
+                .matchId(matchId)
+                .level(event.getLevel())
+                .participantId(event.getParticipantId())
+                .timestamp(event.getTimestamp())
+                .build();
     }
 
-    private ChampionSpecialKillEventEntity toChampionSpecialKillEventEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event) {
-        ChampionSpecialKillEventEntity entity = new ChampionSpecialKillEventEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setKillType(event.getKillType());
-        entity.setKillerId(event.getKillerId());
-        entity.setMultiKillLength(0);
-        entity.setPositionValue(event.getPosition() != null
-                ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
-                : new PositionValue());
-        entity.setTimestamp(event.getTimestamp());
-        entity.setType(event.getType());
-        return entity;
+    private ChampionSpecialKillEventEntity toChampionSpecialKillEventEntity(String matchId, EventsTimeLineDto event) {
+        return ChampionSpecialKillEventEntity.builder()
+                .matchId(matchId)
+                .killType(event.getKillType())
+                .killerId(event.getKillerId())
+                .multiKillLength(event.getMultiKillLength())
+                .position(event.getPosition() != null
+                        ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
+                        : new PositionValue())
+                .timestamp(event.getTimestamp())
+                .build();
     }
 
-    private TurretPlateDestroyedEventEntity toTurretPlateDestroyedEventEntity(TimeLineEventEntity timeLineEvent, EventsTimeLineDto event) {
-        TurretPlateDestroyedEventEntity entity = new TurretPlateDestroyedEventEntity();
-        entity.setTimeLineEvent(timeLineEvent);
-        entity.setKillerId(event.getKillerId());
-        entity.setLaneType(event.getLaneType());
-        entity.setPositionValue(event.getPosition() != null
-                ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
-                : new PositionValue());
-        entity.setTeamId(event.getTeamId());
-        entity.setTimestamp(event.getTimestamp());
-        entity.setType(event.getType());
-        return entity;
+    private TurretPlateDestroyedEventEntity toTurretPlateDestroyedEventEntity(String matchId, EventsTimeLineDto event) {
+        return TurretPlateDestroyedEventEntity.builder()
+                .matchId(matchId)
+                .killerId(event.getKillerId())
+                .laneType(event.getLaneType())
+                .position(event.getPosition() != null
+                        ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
+                        : new PositionValue())
+                .teamId(event.getTeamId())
+                .timestamp(event.getTimestamp())
+                .type(event.getType())
+                .build();
     }
 
     private String convertAssistingIds(List<Integer> ids) {

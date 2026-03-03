@@ -148,4 +148,13 @@ public class ParticipantDto {
     private int totalAllyJungleMinionsKilled;
     private int totalEnemyJungleMinionsKilled;
     private int visionClearedPings;
+
+    // 누락된 필드 추가
+    private int basicPings;
+    private int dangerPings;
+    private int retreatPings;
+    private int playerAugment5;
+    private int playerAugment6;
+    private int damageDealtToEpicMonsters;
+    private int roleBoundItem;
 }

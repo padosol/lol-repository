@@ -3,14 +3,17 @@ package com.mmrtr.lol.infra.persistence.match.service;
 import com.mmrtr.lol.common.type.Queue;
 import com.mmrtr.lol.infra.persistence.league.entity.LeagueSummonerEntity;
 import com.mmrtr.lol.infra.persistence.league.repository.LeagueSummonerJpaRepository;
-import com.mmrtr.lol.infra.persistence.match.entity.ChallengesEntity;
+import com.mmrtr.lol.infra.persistence.match.entity.MatchBanEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
-import com.mmrtr.lol.infra.persistence.match.entity.MatchSummonerEntity;
+import com.mmrtr.lol.infra.persistence.match.entity.MatchParticipantChallengesEntity;
+import com.mmrtr.lol.infra.persistence.match.entity.MatchParticipantEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchTeamEntity;
 import com.mmrtr.lol.infra.persistence.match.repository.ChallengesRepositoryImpl;
+import com.mmrtr.lol.infra.persistence.match.repository.MatchBanRepositoryImpl;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchRepositoryImpl;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerRepositoryImpl;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchTeamRepositoryImpl;
+import com.mmrtr.lol.infra.riot.dto.match.BanDto;
 import com.mmrtr.lol.infra.riot.dto.match.ChallengesDto;
 import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
 import com.mmrtr.lol.infra.riot.dto.match.ParticipantDto;
@@ -34,6 +37,7 @@ public class MatchService {
     private final MatchSummonerRepositoryImpl matchSummonerRepository;
     private final ChallengesRepositoryImpl challengesRepository;
     private final MatchTeamRepositoryImpl matchTeamRepository;
+    private final MatchBanRepositoryImpl matchBanRepository;
     private final TimeLineService timeLineService;
     private final LeagueSummonerJpaRepository leagueSummonerJpaRepository;
 
@@ -51,9 +55,10 @@ public class MatchService {
         Map<String, Map<String, LeagueSummonerEntity>> leagueByQueueAndPuuid = buildLeagueMap(matchDtos);
         log.debug("[addAllMatch] 엔티티 매핑+buildLeagueMap: {}ms", System.currentTimeMillis() - t);
 
-        List<MatchSummonerEntity> allMatchSummoners = new ArrayList<>();
-        List<ChallengesEntity> allChallenges = new ArrayList<>();
+        List<MatchParticipantEntity> allMatchParticipants = new ArrayList<>();
+        List<MatchParticipantChallengesEntity> allChallenges = new ArrayList<>();
         List<MatchTeamEntity> allMatchTeams = new ArrayList<>();
+        List<MatchBanEntity> allMatchBans = new ArrayList<>();
 
         for (int i = 0; i < matchDtos.size(); i++) {
             MatchDto matchDto = matchDtos.get(i);
@@ -81,15 +86,15 @@ public class MatchService {
                     absolutePointsList.add(absolutePoints);
                 }
 
-                MatchSummonerEntity matchSummoner = MatchSummonerEntity.of(match, participant, tier, tierRank, absolutePoints);
+                MatchParticipantEntity matchParticipant = MatchParticipantEntity.of(match, participant, tier, tierRank, absolutePoints);
                 ChallengesDto challengesDto = participant.getChallenges();
 
                 if (challengesDto == null) {
                     continue;
                 }
 
-                allMatchSummoners.add(matchSummoner);
-                allChallenges.add(ChallengesEntity.of(matchSummoner, challengesDto));
+                allMatchParticipants.add(matchParticipant);
+                allChallenges.add(MatchParticipantChallengesEntity.of(matchParticipant, challengesDto));
             }
 
             // 평균 티어 계산
@@ -104,6 +109,11 @@ public class MatchService {
             List<TeamDto> teams = matchDto.getInfo().getTeams();
             for (TeamDto team : teams) {
                 allMatchTeams.add(MatchTeamEntity.of(match, team));
+                if (team.getBans() != null) {
+                    for (BanDto ban : team.getBans()) {
+                        allMatchBans.add(MatchBanEntity.of(match.getMatchId(), team.getTeamId(), ban));
+                    }
+                }
             }
         }
 
@@ -112,8 +122,8 @@ public class MatchService {
         log.debug("[addAllMatch] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
 
         t = System.currentTimeMillis();
-        matchSummonerRepository.bulkSave(allMatchSummoners);
-        log.debug("[addAllMatch] bulkSave matchSummoner: {}ms ({}건)", System.currentTimeMillis() - t, allMatchSummoners.size());
+        matchSummonerRepository.bulkSave(allMatchParticipants);
+        log.debug("[addAllMatch] bulkSave matchParticipant: {}ms ({}건)", System.currentTimeMillis() - t, allMatchParticipants.size());
 
         t = System.currentTimeMillis();
         challengesRepository.bulkSave(allChallenges);
@@ -122,6 +132,10 @@ public class MatchService {
         t = System.currentTimeMillis();
         matchTeamRepository.bulkSave(allMatchTeams);
         log.debug("[addAllMatch] bulkSave matchTeam: {}ms ({}건)", System.currentTimeMillis() - t, allMatchTeams.size());
+
+        t = System.currentTimeMillis();
+        matchBanRepository.bulkSave(allMatchBans);
+        log.debug("[addAllMatch] bulkSave matchBan: {}ms ({}건)", System.currentTimeMillis() - t, allMatchBans.size());
 
         if (timelineDtos != null && !timelineDtos.isEmpty()) {
             t = System.currentTimeMillis();

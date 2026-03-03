@@ -59,7 +59,7 @@ public class Summoner {
     public void initSummoner() {
         revisionInfo = new RevisionInfo(
                 LocalDateTime.of(2026, 1, 1, 0, 0),
-                LocalDateTime.now()
+                LocalDateTime.of(2026, 1, 1, 0, 0)
         );
     }
 }

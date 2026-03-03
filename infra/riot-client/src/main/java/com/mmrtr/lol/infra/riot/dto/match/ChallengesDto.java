@@ -128,4 +128,9 @@ public class ChallengesDto {
     private int wardTakedowns;
     private int wardTakedownsBefore20M;
     private int wardsGuarded;
+
+    // 누락된 필드 추가
+    private double healFromMapSources;
+    private double fastestLegendary;
+    private double shortestTimeToAceFromFirstTakedown;
 }
