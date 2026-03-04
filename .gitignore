@@ -39,6 +39,9 @@ out/
 
 ### Docker ###
 docker/*/
+!docker/clickhouse/
+!docker/clickhouse/init/
+docker/clickhouse/init/01_pg_source_tables.sql
 *.env
 !*.env.example
 
