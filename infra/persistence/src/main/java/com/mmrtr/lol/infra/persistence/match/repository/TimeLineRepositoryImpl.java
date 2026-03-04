@@ -112,7 +112,8 @@ public class TimeLineRepositoryImpl {
         String sql = "INSERT INTO item_event (" +
                 "match_id, item_id, participant_id, timestamp, type, after_id, before_id, gold_gain" +
                 ") VALUES (" +
-                ":matchId, :itemId, :participantId, :timestamp, :type, :afterId, :beforeId, :goldGain)";
+                ":matchId, :itemId, :participantId, :timestamp, :type, :afterId, :beforeId, :goldGain" +
+                ") ON CONFLICT (match_id, participant_id, item_id, timestamp, type) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
