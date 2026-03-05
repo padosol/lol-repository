@@ -8,7 +8,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Repository
 @RequiredArgsConstructor
@@ -110,10 +113,10 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO item_event (" +
-                "match_id, item_id, participant_id, timestamp, type, after_id, before_id, gold_gain" +
+                "match_id, item_id, participant_id, timestamp, type, after_id, before_id, gold_gain, event_index" +
                 ") VALUES (" +
-                ":matchId, :itemId, :participantId, :timestamp, :type, :afterId, :beforeId, :goldGain" +
-                ") ON CONFLICT (match_id, participant_id, item_id, timestamp, type) DO NOTHING";
+                ":matchId, :itemId, :participantId, :timestamp, :type, :afterId, :beforeId, :goldGain, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
@@ -124,7 +127,8 @@ public class TimeLineRepositoryImpl {
                         .addValue("type", e.getType())
                         .addValue("afterId", e.getAfterId())
                         .addValue("beforeId", e.getBeforeId())
-                        .addValue("goldGain", e.getGoldGain()))
+                        .addValue("goldGain", e.getGoldGain())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
@@ -134,9 +138,10 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO skill_level_up_event (" +
-                "match_id, skill_slot, participant_id, level_up_type, timestamp" +
+                "match_id, skill_slot, participant_id, level_up_type, timestamp, event_index" +
                 ") VALUES (" +
-                ":matchId, :skillSlot, :participantId, :levelUpType, :timestamp)";
+                ":matchId, :skillSlot, :participantId, :levelUpType, :timestamp, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
@@ -144,7 +149,8 @@ public class TimeLineRepositoryImpl {
                         .addValue("skillSlot", e.getSkillSlot())
                         .addValue("participantId", e.getParticipantId())
                         .addValue("levelUpType", e.getLevelUpType())
-                        .addValue("timestamp", e.getTimestamp()))
+                        .addValue("timestamp", e.getTimestamp())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
@@ -156,11 +162,12 @@ public class TimeLineRepositoryImpl {
         String sql = "INSERT INTO kill_event (" +
                 "match_id, assisting_participant_ids, bounty, kill_streak_length, " +
                 "killer_id, x, y, shutdown_bounty, victim_damage_dealt, victim_damage_received, " +
-                "victim_id, timestamp" +
+                "victim_id, timestamp, event_index" +
                 ") VALUES (" +
                 ":matchId, :assistingParticipantIds, :bounty, :killStreakLength, " +
                 ":killerId, :x, :y, :shutdownBounty, :victimDamageDealt, :victimDamageReceived, " +
-                ":victimId, :timestamp)";
+                ":victimId, :timestamp, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
@@ -175,7 +182,8 @@ public class TimeLineRepositoryImpl {
                         .addValue("victimDamageDealt", e.getVictimDamageDealt())
                         .addValue("victimDamageReceived", e.getVictimDamageReceived())
                         .addValue("victimId", e.getVictimId())
-                        .addValue("timestamp", e.getTimestamp()))
+                        .addValue("timestamp", e.getTimestamp())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
@@ -186,10 +194,11 @@ public class TimeLineRepositoryImpl {
 
         String sql = "INSERT INTO building_events (" +
                 "match_id, assisting_participant_ids, bounty, building_type, " +
-                "killer_id, lane_type, x, y, team_id, timestamp, tower_type" +
+                "killer_id, lane_type, x, y, team_id, timestamp, tower_type, event_index" +
                 ") VALUES (" +
                 ":matchId, :assistingParticipantIds, :bounty, :buildingType, " +
-                ":killerId, :laneType, :x, :y, :teamId, :timestamp, :towerType)";
+                ":killerId, :laneType, :x, :y, :teamId, :timestamp, :towerType, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
@@ -203,7 +212,8 @@ public class TimeLineRepositoryImpl {
                         .addValue("y", e.getPosition() != null ? e.getPosition().getY() : 0)
                         .addValue("teamId", e.getTeamId())
                         .addValue("timestamp", e.getTimestamp())
-                        .addValue("towerType", e.getTowerType()))
+                        .addValue("towerType", e.getTowerType())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
@@ -213,16 +223,18 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO ward_event (" +
-                "match_id, creator_id, ward_type, timestamp" +
+                "match_id, creator_id, ward_type, timestamp, event_index" +
                 ") VALUES (" +
-                ":matchId, :creatorId, :wardType, :timestamp)";
+                ":matchId, :creatorId, :wardType, :timestamp, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
                         .addValue("matchId", e.getMatchId())
                         .addValue("creatorId", e.getCreatorId())
                         .addValue("wardType", e.getWardType())
-                        .addValue("timestamp", e.getTimestamp()))
+                        .addValue("timestamp", e.getTimestamp())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
@@ -232,9 +244,10 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO game_end_event (" +
-                "match_id, timestamp, game_id, real_timestamp, winning_team" +
+                "match_id, timestamp, game_id, real_timestamp, winning_team, event_index" +
                 ") VALUES (" +
-                ":matchId, :timestamp, :gameId, :realTimestamp, :winningTeam)";
+                ":matchId, :timestamp, :gameId, :realTimestamp, :winningTeam, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
@@ -242,7 +255,8 @@ public class TimeLineRepositoryImpl {
                         .addValue("timestamp", e.getTimestamp())
                         .addValue("gameId", e.getGameId())
                         .addValue("realTimestamp", e.getRealTimestamp())
-                        .addValue("winningTeam", e.getWinningTeam()))
+                        .addValue("winningTeam", e.getWinningTeam())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
@@ -252,16 +266,18 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO level_up_event (" +
-                "match_id, level, participant_id, timestamp" +
+                "match_id, level, participant_id, timestamp, event_index" +
                 ") VALUES (" +
-                ":matchId, :level, :participantId, :timestamp)";
+                ":matchId, :level, :participantId, :timestamp, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
                         .addValue("matchId", e.getMatchId())
                         .addValue("level", e.getLevel())
                         .addValue("participantId", e.getParticipantId())
-                        .addValue("timestamp", e.getTimestamp()))
+                        .addValue("timestamp", e.getTimestamp())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
@@ -271,9 +287,10 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO champion_special_kill_event (" +
-                "match_id, kill_type, killer_id, multi_kill_length, x, y, timestamp" +
+                "match_id, kill_type, killer_id, multi_kill_length, x, y, timestamp, event_index" +
                 ") VALUES (" +
-                ":matchId, :killType, :killerId, :multiKillLength, :x, :y, :timestamp)";
+                ":matchId, :killType, :killerId, :multiKillLength, :x, :y, :timestamp, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
@@ -283,7 +300,8 @@ public class TimeLineRepositoryImpl {
                         .addValue("multiKillLength", e.getMultiKillLength())
                         .addValue("x", e.getPosition() != null ? e.getPosition().getX() : 0)
                         .addValue("y", e.getPosition() != null ? e.getPosition().getY() : 0)
-                        .addValue("timestamp", e.getTimestamp()))
+                        .addValue("timestamp", e.getTimestamp())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
@@ -293,9 +311,10 @@ public class TimeLineRepositoryImpl {
         if (entities.isEmpty()) return;
 
         String sql = "INSERT INTO turret_plate_destroyed_event (" +
-                "match_id, killer_id, lane_type, x, y, team_id, timestamp" +
+                "match_id, killer_id, lane_type, x, y, team_id, timestamp, event_index" +
                 ") VALUES (" +
-                ":matchId, :killerId, :laneType, :x, :y, :teamId, :timestamp)";
+                ":matchId, :killerId, :laneType, :x, :y, :teamId, :timestamp, :eventIndex" +
+                ") ON CONFLICT (match_id, event_index) DO NOTHING";
 
         SqlParameterSource[] params = entities.stream()
                 .map(e -> new MapSqlParameterSource()
@@ -305,9 +324,19 @@ public class TimeLineRepositoryImpl {
                         .addValue("x", e.getPosition() != null ? e.getPosition().getX() : 0)
                         .addValue("y", e.getPosition() != null ? e.getPosition().getY() : 0)
                         .addValue("teamId", e.getTeamId())
-                        .addValue("timestamp", e.getTimestamp()))
+                        .addValue("timestamp", e.getTimestamp())
+                        .addValue("eventIndex", e.getEventIndex()))
                 .toArray(SqlParameterSource[]::new);
 
         jdbcTemplate.batchUpdate(sql, params);
+    }
+
+    public Set<String> findExistingMatchIds(List<String> matchIds) {
+        if (matchIds.isEmpty()) return Collections.emptySet();
+
+        String sql = "SELECT DISTINCT match_id FROM item_event WHERE match_id IN (:matchIds)";
+        MapSqlParameterSource params = new MapSqlParameterSource("matchIds", matchIds);
+        List<String> result = jdbcTemplate.queryForList(sql, params, String.class);
+        return new HashSet<>(result);
     }
 }

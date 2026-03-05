@@ -36,4 +36,8 @@ public class ItemEventsEntity {
     private int beforeId;
     @Comment("획득 골드")
     private int goldGain;
+
+    @Comment("이벤트 인덱스")
+    @Column(name = "event_index", nullable = false)
+    private int eventIndex;
 }

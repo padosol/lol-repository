@@ -29,13 +29,12 @@ import java.time.LocalDateTime;
         name = "summoner_ranking",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "unique_puuid_queue_platform_id",
-                        columnNames = {"puuid", "queue", "platform_id"}
+                        name = "unique_platform_id_queue_puuid",
+                        columnNames = {"platform_id", "queue", "puuid"}
                 )
         },
         indexes = {
-                @Index(name = "idx_summoner_ranking_platform_queue_tier", columnList = "platform_id, queue, tier"),
-                @Index(name = "idx_summoner_ranking_puuid", columnList = "puuid")
+                @Index(name = "idx_summoner_ranking_platform_queue_tier", columnList = "platform_id, queue, tier")
         }
 )
 @EntityListeners(AuditingEntityListener.class)

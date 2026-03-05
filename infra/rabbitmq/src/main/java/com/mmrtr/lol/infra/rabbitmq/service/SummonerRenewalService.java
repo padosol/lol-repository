@@ -70,6 +70,9 @@ public class SummonerRenewalService {
         CompletableFuture<FetchNewMatchIdsResult> fetchResultFuture = matchDataFetcher
                 .fetchNewMatchIds(puuid, platform, revisionCheck.dbRevisionDateMillis(), requestExecutor);
 
+        // 여기서 match_id 1차 필터링 후 필터링된 매치만 api 호출
+        // 이때
+
         CompletableFuture<List<MatchDto>> matchListFuture = fetchResultFuture
                 .thenCompose(result -> matchDataFetcher.fetchMatchDetails(result.newMatchIds(), platform, requestExecutor));
         CompletableFuture<List<TimelineDto>> timelineListFuture = fetchResultFuture

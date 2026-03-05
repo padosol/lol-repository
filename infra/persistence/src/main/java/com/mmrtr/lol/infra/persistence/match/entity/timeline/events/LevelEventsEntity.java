@@ -27,4 +27,8 @@ public class LevelEventsEntity {
     private int level;
     @Comment("타임스탬프")
     private long timestamp;
+
+    @Comment("이벤트 인덱스")
+    @Column(name = "event_index", nullable = false)
+    private int eventIndex;
 }
