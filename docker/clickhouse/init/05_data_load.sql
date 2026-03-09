@@ -327,33 +327,6 @@ INSERT INTO legendary_items (item_id, item_name) VALUES
 (328020, '심연의 가면'),
 (667666, '징수의 총');
 
--- match_item_build_local 적재 (match_final_item_local에서 3코어 빌드 순서 추출)
--- 1) item_order <= 3인 행만 대상
--- 2) groupArray + arraySort로 item_order순 정렬 → arrayStringConcat
--- 3) 3코어 미만 게임은 HAVING count(*) = 3으로 제외
-INSERT INTO match_item_build_local
-SELECT
-    match_id, champion_id, team_position, win,
-    queue_id, platform_id, patch_version, tier,
-    arrayStringConcat(
-        arrayMap(
-            x -> toString(x.1),
-            arraySort(
-                x -> x.2,
-                groupArray(tuple(item_id, item_order))
-            )
-        ),
-        ','
-    ) AS item_build
-FROM match_final_item_local
-WHERE item_order <= 3
-  AND queue_id = 420
-  AND team_position != ''
-  AND match_id NOT IN (SELECT DISTINCT match_id FROM match_item_build_local)
-GROUP BY match_id, champion_id, team_position,
-         win, queue_id, platform_id, patch_version, tier
-HAVING count(*) = 3;
-
 -- match_final_item_local 적재 (전설급 아이템만, item_event JOIN으로 구매 순서 결정)
 -- 1) item0-item5에서 전설급 아이템 추출 (최종 빌드 기준)
 -- 2) pg_item_event ITEM_PURCHASED와 JOIN → 각 아이템의 MIN(timestamp) 획득
@@ -408,3 +381,30 @@ FROM (
                  fi.item_id
     ) AS joined
 ) AS ranked;
+
+-- match_item_build_local 적재 (match_final_item_local에서 3코어 빌드 순서 추출)
+-- 1) item_order <= 3인 행만 대상
+-- 2) groupArray + arraySort로 item_order순 정렬 → arrayStringConcat
+-- 3) 3코어 미만 게임은 HAVING count(*) = 3으로 제외
+INSERT INTO match_item_build_local
+SELECT
+    match_id, champion_id, team_position, win,
+    queue_id, platform_id, patch_version, tier,
+    arrayStringConcat(
+        arrayMap(
+            x -> toString(x.1),
+            arraySort(
+                x -> x.2,
+                groupArray(tuple(item_id, item_order))
+            )
+        ),
+        ','
+    ) AS item_build
+FROM match_final_item_local
+WHERE item_order <= 3
+  AND queue_id = 420
+  AND team_position != ''
+  AND match_id NOT IN (SELECT DISTINCT match_id FROM match_item_build_local)
+GROUP BY match_id, champion_id, team_position,
+         win, queue_id, platform_id, patch_version, tier
+HAVING count(*) = 3;
