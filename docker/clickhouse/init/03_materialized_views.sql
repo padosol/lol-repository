@@ -219,3 +219,88 @@ SELECT
 FROM match_start_item_build_local
 WHERE queue_id = 420 AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position, start_items;
+
+-- 8. 챔피언 3코어 아이템 빌드 순서 집계 (라인별 빌드 순서 승률/픽률)
+CREATE TABLE IF NOT EXISTS champion_item_build_stats_agg
+(
+    patch_version LowCardinality(String),
+    platform_id   LowCardinality(String),
+    tier          LowCardinality(String),
+    champion_id   Int32,
+    team_position LowCardinality(String),
+    item_build    LowCardinality(String),
+    games         UInt64,
+    wins          UInt64
+)
+ENGINE = SummingMergeTree((games, wins))
+PARTITION BY patch_version
+ORDER BY (patch_version, platform_id, tier, champion_id, team_position, item_build);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_champion_item_build_stats
+TO champion_item_build_stats_agg
+AS
+SELECT
+    patch_version, platform_id, tier, champion_id, team_position,
+    item_build,
+    count()  AS games,
+    sum(win) AS wins
+FROM match_item_build_local
+WHERE queue_id = 420 AND team_position != ''
+GROUP BY patch_version, platform_id, tier, champion_id, team_position, item_build;
+
+-- 9. 챔피언 완성 아이템 집계 (라인별 코어 순서별 아이템 승률/픽률)
+CREATE TABLE IF NOT EXISTS champion_item_stats_agg
+(
+    patch_version LowCardinality(String),
+    platform_id   LowCardinality(String),
+    tier          LowCardinality(String),
+    champion_id   Int32,
+    team_position LowCardinality(String),
+    item_id       Int32,
+    item_order    UInt8,
+    games         UInt64,
+    wins          UInt64
+)
+ENGINE = SummingMergeTree((games, wins))
+PARTITION BY patch_version
+ORDER BY (patch_version, platform_id, tier, champion_id, team_position, item_id, item_order);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_champion_item_stats
+TO champion_item_stats_agg
+AS
+SELECT
+    patch_version, platform_id, tier, champion_id, team_position,
+    item_id, item_order,
+    count()  AS games,
+    sum(win) AS wins
+FROM match_final_item_local
+WHERE queue_id = 420 AND team_position != ''
+GROUP BY patch_version, platform_id, tier, champion_id, team_position, item_id, item_order;
+
+-- 10. 챔피언 매치업 집계 (라인별 상대 챔피언 승률)
+CREATE TABLE IF NOT EXISTS champion_matchup_stats_agg
+(
+    patch_version        LowCardinality(String),
+    platform_id          LowCardinality(String),
+    tier                 LowCardinality(String),
+    champion_id          Int32,
+    team_position        LowCardinality(String),
+    opponent_champion_id Int32,
+    games                UInt64,
+    wins                 UInt64
+)
+ENGINE = SummingMergeTree((games, wins))
+PARTITION BY patch_version
+ORDER BY (patch_version, platform_id, tier, champion_id, team_position, opponent_champion_id);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_champion_matchup_stats
+TO champion_matchup_stats_agg
+AS
+SELECT
+    patch_version, platform_id, tier,
+    champion_id, team_position, opponent_champion_id,
+    count()  AS games,
+    sum(win) AS wins
+FROM match_matchup_local
+WHERE queue_id = 420 AND team_position != ''
+GROUP BY patch_version, platform_id, tier, champion_id, team_position, opponent_champion_id;

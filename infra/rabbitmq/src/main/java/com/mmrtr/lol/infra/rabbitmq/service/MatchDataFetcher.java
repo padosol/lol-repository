@@ -27,7 +27,7 @@ public class MatchDataFetcher {
     public record FetchNewMatchIdsResult(
             List<String> newMatchIds,
             boolean hasMoreMatches,
-            long dbRevisionDateMillis
+            long dbRevisionDateSeconds
     ) {}
 
     public CompletableFuture<FetchNewMatchIdsResult> fetchNewMatchIds(

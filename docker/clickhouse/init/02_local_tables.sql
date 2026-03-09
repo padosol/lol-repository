@@ -81,3 +81,66 @@ CREATE TABLE IF NOT EXISTS match_start_item_build_local
 ENGINE = ReplacingMergeTree()
 PARTITION BY patch_version
 ORDER BY (champion_id, team_position, match_id, start_items);
+
+-- 전설급 아이템 ID 참조 테이블 (패치마다 Data Dragon에서 업데이트)
+CREATE TABLE IF NOT EXISTS legendary_items
+(
+    item_id   Int32,
+    item_name String
+)
+ENGINE = MergeTree()
+ORDER BY item_id;
+
+-- 전설급 3코어 아이템 빌드 순서 팩트 테이블 (참가자당 1행)
+-- item_build: 구매 순서대로 3코어 아이템 ID (예: '3078,6632,3071')
+CREATE TABLE IF NOT EXISTS match_item_build_local
+(
+    match_id      String,
+    champion_id   Int32,
+    team_position LowCardinality(String),
+    win           UInt8,
+    queue_id      Int32,
+    platform_id   LowCardinality(String),
+    patch_version LowCardinality(String),
+    tier          LowCardinality(String),
+    item_build    LowCardinality(String)
+)
+ENGINE = ReplacingMergeTree()
+PARTITION BY patch_version
+ORDER BY (champion_id, team_position, match_id, item_build);
+
+-- 게임 종료 시 전설급 아이템 팩트 테이블 (참가자당 최대 6행, 비전설급 제외)
+-- item_order: 코어 순서 (1=1코어, 2=2코어, 3=3코어...), item_event 구매 타임스탬프 기준
+CREATE TABLE IF NOT EXISTS match_final_item_local
+(
+    match_id      String,
+    champion_id   Int32,
+    team_position LowCardinality(String),
+    win           UInt8,
+    queue_id      Int32,
+    platform_id   LowCardinality(String),
+    patch_version LowCardinality(String),
+    tier          LowCardinality(String),
+    item_id       Int32,
+    item_order    UInt8
+)
+ENGINE = ReplacingMergeTree()
+PARTITION BY patch_version
+ORDER BY (champion_id, team_position, item_order, match_id);
+
+-- 같은 라인 상대 챔피언 매치업 팩트 테이블 (참가자당 1행)
+CREATE TABLE IF NOT EXISTS match_matchup_local
+(
+    match_id             String,
+    champion_id          Int32,
+    opponent_champion_id Int32,
+    team_position        LowCardinality(String),
+    win                  UInt8,
+    queue_id             Int32,
+    platform_id          LowCardinality(String),
+    patch_version        LowCardinality(String),
+    tier                 LowCardinality(String)
+)
+ENGINE = ReplacingMergeTree()
+PARTITION BY patch_version
+ORDER BY (champion_id, team_position, match_id, opponent_champion_id);

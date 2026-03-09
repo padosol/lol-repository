@@ -68,7 +68,7 @@ public class SummonerRenewalService {
         CompletableFuture<Set<LeagueEntryDto>> leagueEntryDtoFuture = riotApiService
                 .getLeagueEntriesByPuuid(puuid, platform, requestExecutor);
         CompletableFuture<FetchNewMatchIdsResult> fetchResultFuture = matchDataFetcher
-                .fetchNewMatchIds(puuid, platform, revisionCheck.dbRevisionDateMillis(), requestExecutor);
+                .fetchNewMatchIds(puuid, platform, revisionCheck.dbRevisionDateSeconds(), requestExecutor);
 
         // 여기서 match_id 1차 필터링 후 필터링된 매치만 api 호출
         // 이때
@@ -114,7 +114,7 @@ public class SummonerRenewalService {
             rabbitTemplate.convertAndSend(
                     RabbitMqBinding.RENEWAL_MATCH_FIND.getExchange(),
                     RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey(),
-                    new SummonerRenewalMessage(puuid, platform.getPlatformId(), fetchResult.dbRevisionDateMillis())
+                    new SummonerRenewalMessage(puuid, platform.getPlatformId(), fetchResult.dbRevisionDateSeconds())
             );
         }
     }

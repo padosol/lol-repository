@@ -216,3 +216,111 @@ SELECT
 FROM item_stats AS its
 CROSS JOIN total AS t
 ORDER BY its.games DESC;
+
+
+-- =====================================================
+-- Section 6: 챔피언 3코어 아이템 빌드 순서 통계 조회
+-- =====================================================
+-- 특정 챔피언의 라인별 3코어 빌드 순서 승률/픽률 조회
+-- pick_rate 분모: 동일 챔피언/라인의 3코어 도달 게임 수
+-- 파라미터: patch_version, platform_id, tier, champion_id, team_position
+-- =====================================================
+
+WITH
+    build_stats AS (
+        SELECT item_build, sum(games) AS games, sum(wins) AS wins
+        FROM champion_item_build_stats_agg
+        WHERE patch_version = {patch_version:String}
+          AND platform_id   = {platform_id:String}
+          AND tier           = {tier:String}
+          AND champion_id    = {champion_id:Int32}
+          AND team_position  = {team_position:String}
+        GROUP BY item_build
+    ),
+    total AS (
+        SELECT sum(games) AS total_games FROM build_stats
+    )
+SELECT
+    bs.item_build,
+    bs.games,
+    bs.wins / bs.games       AS win_rate,
+    bs.games / t.total_games AS pick_rate
+FROM build_stats AS bs
+CROSS JOIN total AS t
+ORDER BY bs.games DESC;
+
+
+-- =====================================================
+-- Section 7: 챔피언 완성 아이템 통계 조회 (코어 순서별)
+-- =====================================================
+-- 특정 챔피언의 라인별 전설급 완성 아이템 승률/픽률 조회
+-- pick_rate 분모: champion_stats_agg 총 게임 수 (해당 챔피언 전체 게임 대비 아이템 구매율)
+-- item_order = 1 → 1코어 아이템 통계, item_order = 2 → 2코어, ...
+-- 파라미터: patch_version, platform_id, tier, champion_id, team_position, item_order
+-- =====================================================
+
+WITH
+    item_stats AS (
+        SELECT item_id, sum(games) AS games, sum(wins) AS wins
+        FROM champion_item_stats_agg
+        WHERE patch_version = {patch_version:String}
+          AND platform_id   = {platform_id:String}
+          AND tier           = {tier:String}
+          AND champion_id    = {champion_id:Int32}
+          AND team_position  = {team_position:String}
+          AND item_order     = {item_order:UInt8}
+        GROUP BY item_id
+    ),
+    total AS (
+        SELECT sum(games) AS total_games
+        FROM champion_stats_agg
+        WHERE patch_version = {patch_version:String}
+          AND platform_id   = {platform_id:String}
+          AND tier           = {tier:String}
+          AND champion_id    = {champion_id:Int32}
+          AND team_position  = {team_position:String}
+    )
+SELECT
+    its.item_id,
+    li.item_name,
+    its.games,
+    its.wins / its.games       AS win_rate,
+    its.games / t.total_games  AS pick_rate
+FROM item_stats AS its
+INNER JOIN legendary_items AS li ON its.item_id = li.item_id
+CROSS JOIN total AS t
+ORDER BY its.games DESC;
+
+
+-- =====================================================
+-- Section 8: 챔피언 매치업 통계 조회
+-- =====================================================
+-- 특정 챔피언의 라인별 상대 챔피언 승률/대면 비율 조회
+-- 파라미터: patch_version, platform_id, tier, champion_id, team_position
+-- =====================================================
+
+WITH
+    matchup_stats AS (
+        SELECT
+            opponent_champion_id,
+            sum(games) AS games,
+            sum(wins)  AS wins
+        FROM champion_matchup_stats_agg
+        WHERE patch_version = {patch_version:String}
+          AND platform_id   = {platform_id:String}
+          AND tier           = {tier:String}
+          AND champion_id    = {champion_id:Int32}
+          AND team_position  = {team_position:String}
+        GROUP BY opponent_champion_id
+    ),
+    total AS (
+        SELECT sum(games) AS total_games FROM matchup_stats
+    )
+SELECT
+    ms.opponent_champion_id,
+    ms.games,
+    ms.wins / ms.games       AS win_rate,
+    ms.games / t.total_games AS pick_rate
+FROM matchup_stats AS ms
+CROSS JOIN total AS t
+ORDER BY ms.games DESC;
