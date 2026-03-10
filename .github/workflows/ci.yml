@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Build
+        run: ./gradlew :app:bootJar -x test --no-daemon
+
+  notify:
+    name: Slack Notification
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: always()
+    steps:
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            text: "${{ contains(needs.*.result, 'failure') && '❌ CI 실패' || '✅ CI 성공' }}: ${{ github.repository }}"
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "${{ contains(needs.*.result, 'failure') && '❌ *CI 실패*' || '✅ *CI 성공*' }}\n*Repo:* ${{ github.repository }}\n*Branch:* ${{ github.head_ref || github.ref_name }}\n*PR:* <${{ github.event.pull_request.html_url || format('{0}/{1}/commit/{2}', github.server_url, github.repository, github.sha) }}|링크>\n*Author:* ${{ github.actor }}\n*Build:* ${{ needs.build.result }}"

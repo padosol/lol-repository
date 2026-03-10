@@ -1,0 +1,29 @@
+# Git
+.git
+.gitmodules
+
+# Gradle build cache
+.gradle
+**/build/
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Docker dev infrastructure
+docker/docker-compose*.yml
+docker/.env*
+docker/clickhouse/
+
+# CI/CD & docs
+.github/
+plans/
+scripts/
+.claude/
+*.md
+
+# Misc
+.DS_Store
+*.log
