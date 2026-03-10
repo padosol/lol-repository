@@ -14,6 +14,7 @@ COPY app app
 COPY core core
 COPY infra infra
 COPY support support
+COPY lol-db-schema lol-db-schema
 
 # 빌드 실행
 RUN ./gradlew :app:bootJar -x test --no-daemon
