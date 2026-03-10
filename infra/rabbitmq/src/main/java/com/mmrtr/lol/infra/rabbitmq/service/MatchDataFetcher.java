@@ -27,18 +27,18 @@ public class MatchDataFetcher {
     public record FetchNewMatchIdsResult(
             List<String> newMatchIds,
             boolean hasMoreMatches,
-            long dbRevisionDateMillis
+            long dbRevisionDateSeconds
     ) {}
 
     public CompletableFuture<FetchNewMatchIdsResult> fetchNewMatchIds(
-            String puuid, Platform platform, long dbRevisionDateMillis, Executor executor) {
+            String puuid, Platform platform, long dbRevisionDateSeconds, Executor executor) {
 
         CompletableFuture<List<String>> matchIdListFuture = riotApiService.getMatchListByPuuid(
-                puuid, platform, dbRevisionDateMillis, 0, MATCH_FETCH_COUNT, executor);
+                puuid, platform, dbRevisionDateSeconds, 0, MATCH_FETCH_COUNT, executor);
 
         return matchIdListFuture.thenApply(matchIds -> {
             if (matchIds == null || matchIds.isEmpty()) {
-                return new FetchNewMatchIdsResult(List.of(), false, dbRevisionDateMillis);
+                return new FetchNewMatchIdsResult(List.of(), false, dbRevisionDateSeconds);
             }
 
             boolean hasMoreMatches = matchIds.size() == MATCH_FETCH_COUNT;
@@ -49,7 +49,7 @@ public class MatchDataFetcher {
             List<MatchEntity> matchList = matchService.findAllMatch(matchIds);
             List<String> existMatchIds = matchList.stream().map(MatchEntity::getMatchId).toList();
             List<String> newMatchIds = matchIds.stream().filter(matchId -> !existMatchIds.contains(matchId)).toList();
-            return new FetchNewMatchIdsResult(newMatchIds, hasMoreMatches, dbRevisionDateMillis);
+            return new FetchNewMatchIdsResult(newMatchIds, hasMoreMatches, dbRevisionDateSeconds);
         });
     }
 

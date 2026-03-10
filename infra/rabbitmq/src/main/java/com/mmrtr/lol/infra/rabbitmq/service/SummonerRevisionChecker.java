@@ -22,9 +22,9 @@ public class SummonerRevisionChecker {
     public RevisionCheckResult check(String puuid, SummonerDto summonerDto) {
         Optional<Summoner> existingSummoner = summonerRepositoryPort.findByPuuid(puuid);
 
-        long dbRevisionDateMillis = existingSummoner
+        long dbRevisionDateSeconds = existingSummoner
                 .map(s -> s.getRevisionInfo().revisionDate()
-                        .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+                        .atZone(ZoneId.systemDefault()).toInstant().getEpochSecond())
                 .orElse(0L);
 
         if (existingSummoner.isPresent()) {
@@ -34,13 +34,13 @@ public class SummonerRevisionChecker {
             if (existingSummoner.get().getRevisionInfo().revisionDate().equals(riotRevisionDate)) {
                 log.info("revisionDate is same. No need to update. revision: {}", riotRevisionDate);
                 summonerRepositoryPort.updateLastRiotCallDate(puuid);
-                return new RevisionCheckResult(false, dbRevisionDateMillis);
+                return new RevisionCheckResult(false, dbRevisionDateSeconds);
             }
         }
 
-        return new RevisionCheckResult(true, dbRevisionDateMillis);
+        return new RevisionCheckResult(true, dbRevisionDateSeconds);
     }
 
-    public record RevisionCheckResult(boolean needsRenewal, long dbRevisionDateMillis) {
+    public record RevisionCheckResult(boolean needsRenewal, long dbRevisionDateSeconds) {
     }
 }

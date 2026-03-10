@@ -6,6 +6,7 @@ import com.mmrtr.lol.domain.summoner.domain.vo.RevisionInfo;
 import com.mmrtr.lol.domain.summoner.domain.vo.StatusInfo;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -22,7 +23,12 @@ import java.util.HashSet;
 @Builder(access = AccessLevel.PRIVATE)
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "summoner")
+@Table(
+        name = "summoner",
+        indexes = {
+                @Index(name = "idx_summoner_platform_id_search_name", columnList = "platform_id, search_name")
+        }
+)
 public class SummonerEntity {
 
     @Id

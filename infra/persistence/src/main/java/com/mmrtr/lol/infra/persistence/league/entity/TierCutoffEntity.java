@@ -27,8 +27,8 @@ import java.time.LocalDateTime;
         name = "tier_cutoff",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "unique_queue_tier_platform_id",
-                        columnNames = {"queue", "tier", "platform_id"}
+                        name = "unique_platform_id_queue_tier",
+                        columnNames = {"platform_id", "queue", "tier"}
                 )
         }
 )

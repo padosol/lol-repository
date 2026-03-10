@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -37,6 +38,10 @@ public class TimeLineService {
         Map<String, MatchEntity> matchEntityMap = matchEntities.stream()
                 .collect(Collectors.toMap(MatchEntity::getMatchId, Function.identity()));
 
+        Set<String> existingMatchIds = timeLineRepository.findExistingMatchIds(
+                matchEntities.stream().map(MatchEntity::getMatchId).toList()
+        );
+
         List<ParticipantFrameEntity> allParticipantFrames = new ArrayList<>();
         List<ItemEventsEntity> allItemEvents = new ArrayList<>();
         List<SkillEventsEntity> allSkillEvents = new ArrayList<>();
@@ -55,8 +60,15 @@ public class TimeLineService {
             MatchEntity matchEntity = matchEntityMap.get(matchId);
             if (matchEntity == null) continue;
 
+            if (existingMatchIds.contains(matchId)) {
+                log.debug("[timeline] matchId {} 이미 존재, 스킵", matchId);
+                continue;
+            }
+
             List<FramesTimeLineDto> frames = timelineDto.getInfo().getFrames();
             if (frames == null) continue;
+
+            int eventIndex = 0;
 
             for (FramesTimeLineDto frame : frames) {
                 // Participant frames
@@ -74,29 +86,33 @@ public class TimeLineService {
 
                 for (EventsTimeLineDto event : events) {
                     String type = event.getType();
-                    if (type == null) continue;
+                    if (type == null) {
+                        eventIndex++;
+                        continue;
+                    }
 
                     switch (type) {
                         case "ITEM_PURCHASED", "ITEM_SOLD", "ITEM_DESTROYED", "ITEM_UNDO" ->
-                                allItemEvents.add(toItemEventsEntity(matchEntity.getMatchId(), event));
+                                allItemEvents.add(toItemEventsEntity(matchEntity.getMatchId(), event, eventIndex));
                         case "SKILL_LEVEL_UP" ->
-                                allSkillEvents.add(toSkillEventsEntity(matchEntity.getMatchId(), event));
+                                allSkillEvents.add(toSkillEventsEntity(matchEntity.getMatchId(), event, eventIndex));
                         case "CHAMPION_KILL" ->
-                                allKillEvents.add(toKillEventsEntity(matchEntity.getMatchId(), event));
+                                allKillEvents.add(toKillEventsEntity(matchEntity.getMatchId(), event, eventIndex));
                         case "BUILDING_KILL", "ELITE_MONSTER_KILL" ->
-                                allBuildingEvents.add(toBuildingEventsEntity(matchEntity.getMatchId(), event));
+                                allBuildingEvents.add(toBuildingEventsEntity(matchEntity.getMatchId(), event, eventIndex));
                         case "WARD_PLACED", "WARD_KILL" ->
-                                allWardEvents.add(toWardEventsEntity(matchEntity.getMatchId(), event));
+                                allWardEvents.add(toWardEventsEntity(matchEntity.getMatchId(), event, eventIndex));
                         case "GAME_END" ->
-                                allGameEvents.add(toGameEventsEntity(matchEntity.getMatchId(), event, timelineDto));
+                                allGameEvents.add(toGameEventsEntity(matchEntity.getMatchId(), event, timelineDto, eventIndex));
                         case "LEVEL_UP" ->
-                                allLevelEvents.add(toLevelEventsEntity(matchEntity.getMatchId(), event));
+                                allLevelEvents.add(toLevelEventsEntity(matchEntity.getMatchId(), event, eventIndex));
                         case "CHAMPION_SPECIAL_KILL" ->
-                                allChampionSpecialKillEvents.add(toChampionSpecialKillEventEntity(matchEntity.getMatchId(), event));
+                                allChampionSpecialKillEvents.add(toChampionSpecialKillEventEntity(matchEntity.getMatchId(), event, eventIndex));
                         case "TURRET_PLATE_DESTROYED" ->
-                                allTurretPlateDestroyedEvents.add(toTurretPlateDestroyedEventEntity(matchEntity.getMatchId(), event));
+                                allTurretPlateDestroyedEvents.add(toTurretPlateDestroyedEventEntity(matchEntity.getMatchId(), event, eventIndex));
                         default -> { }
                     }
+                    eventIndex++;
                 }
             }
         }
@@ -224,7 +240,7 @@ public class TimeLineService {
                 .build();
     }
 
-    private ItemEventsEntity toItemEventsEntity(String matchId, EventsTimeLineDto event) {
+    private ItemEventsEntity toItemEventsEntity(String matchId, EventsTimeLineDto event, int eventIndex) {
         return ItemEventsEntity.builder()
                 .matchId(matchId)
                 .itemId(event.getItemId())
@@ -234,20 +250,22 @@ public class TimeLineService {
                 .afterId(event.getAfterId())
                 .beforeId(event.getBeforeId())
                 .goldGain(event.getGoldGain())
+                .eventIndex(eventIndex)
                 .build();
     }
 
-    private SkillEventsEntity toSkillEventsEntity(String matchId, EventsTimeLineDto event) {
+    private SkillEventsEntity toSkillEventsEntity(String matchId, EventsTimeLineDto event, int eventIndex) {
         return SkillEventsEntity.builder()
                 .matchId(matchId)
                 .skillSlot(event.getSkillSlot())
                 .participantId(event.getParticipantId())
                 .levelUpType(event.getLevelUpType())
                 .timestamp(event.getTimestamp())
+                .eventIndex(eventIndex)
                 .build();
     }
 
-    private KillEventsEntity toKillEventsEntity(String matchId, EventsTimeLineDto event) {
+    private KillEventsEntity toKillEventsEntity(String matchId, EventsTimeLineDto event, int eventIndex) {
         return KillEventsEntity.builder()
                 .matchId(matchId)
                 .killerId(event.getKillerId())
@@ -262,10 +280,11 @@ public class TimeLineService {
                 .victimDamageDealt(null)
                 .victimDamageReceived(null)
                 .timestamp(event.getTimestamp())
+                .eventIndex(eventIndex)
                 .build();
     }
 
-    private BuildingEventsEntity toBuildingEventsEntity(String matchId, EventsTimeLineDto event) {
+    private BuildingEventsEntity toBuildingEventsEntity(String matchId, EventsTimeLineDto event, int eventIndex) {
         return BuildingEventsEntity.builder()
                 .matchId(matchId)
                 .assistingParticipantIds(convertAssistingIds(event.getAssistingParticipantIds()))
@@ -280,38 +299,42 @@ public class TimeLineService {
                 .timestamp(event.getTimestamp())
                 .towerType(event.getTowerType())
                 .type(event.getType())
+                .eventIndex(eventIndex)
                 .build();
     }
 
-    private WardEventsEntity toWardEventsEntity(String matchId, EventsTimeLineDto event) {
+    private WardEventsEntity toWardEventsEntity(String matchId, EventsTimeLineDto event, int eventIndex) {
         return WardEventsEntity.builder()
                 .matchId(matchId)
                 .creatorId(event.getCreatorId() != 0 ? event.getCreatorId() : event.getParticipantId())
                 .wardType(event.getWardType())
                 .timestamp(event.getTimestamp())
+                .eventIndex(eventIndex)
                 .build();
     }
 
-    private GameEventsEntity toGameEventsEntity(String matchId, EventsTimeLineDto event, TimelineDto timelineDto) {
+    private GameEventsEntity toGameEventsEntity(String matchId, EventsTimeLineDto event, TimelineDto timelineDto, int eventIndex) {
         return GameEventsEntity.builder()
                 .matchId(matchId)
                 .timestamp(event.getTimestamp())
                 .gameId(timelineDto.getInfo().getGameId())
                 .realTimestamp(event.getRealTimestamp())
                 .winningTeam(event.getWinningTeam())
+                .eventIndex(eventIndex)
                 .build();
     }
 
-    private LevelEventsEntity toLevelEventsEntity(String matchId, EventsTimeLineDto event) {
+    private LevelEventsEntity toLevelEventsEntity(String matchId, EventsTimeLineDto event, int eventIndex) {
         return LevelEventsEntity.builder()
                 .matchId(matchId)
                 .level(event.getLevel())
                 .participantId(event.getParticipantId())
                 .timestamp(event.getTimestamp())
+                .eventIndex(eventIndex)
                 .build();
     }
 
-    private ChampionSpecialKillEventEntity toChampionSpecialKillEventEntity(String matchId, EventsTimeLineDto event) {
+    private ChampionSpecialKillEventEntity toChampionSpecialKillEventEntity(String matchId, EventsTimeLineDto event, int eventIndex) {
         return ChampionSpecialKillEventEntity.builder()
                 .matchId(matchId)
                 .killType(event.getKillType())
@@ -321,10 +344,11 @@ public class TimeLineService {
                         ? PositionValue.builder().x(event.getPosition().getX()).y(event.getPosition().getY()).build()
                         : new PositionValue())
                 .timestamp(event.getTimestamp())
+                .eventIndex(eventIndex)
                 .build();
     }
 
-    private TurretPlateDestroyedEventEntity toTurretPlateDestroyedEventEntity(String matchId, EventsTimeLineDto event) {
+    private TurretPlateDestroyedEventEntity toTurretPlateDestroyedEventEntity(String matchId, EventsTimeLineDto event, int eventIndex) {
         return TurretPlateDestroyedEventEntity.builder()
                 .matchId(matchId)
                 .killerId(event.getKillerId())
@@ -335,6 +359,7 @@ public class TimeLineService {
                 .teamId(event.getTeamId())
                 .timestamp(event.getTimestamp())
                 .type(event.getType())
+                .eventIndex(eventIndex)
                 .build();
     }
 

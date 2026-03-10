@@ -34,4 +34,8 @@ public class TurretPlateDestroyedEventEntity {
     private long timestamp;
     @Comment("이벤트 타입")
     private String type;
+
+    @Comment("이벤트 인덱스")
+    @Column(name = "event_index", nullable = false)
+    private int eventIndex;
 }
