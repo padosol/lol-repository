@@ -54,9 +54,7 @@ public class SummonerRankingCalculationService {
             summonerRankingRepositoryPort.deleteByQueue(queue);
 
             // 3. 플랫폼 목록 (Platform enum 기반)
-            List<String> platformIds = Arrays.stream(Platform.values())
-                    .map(Platform::getPlatformId)
-                    .toList();
+            List<Platform> platforms = Arrays.asList(Platform.values());
 
             // 티어 커트라인 계산을 위한 데이터 수집 (platformId별)
             Map<String, Integer> minChallengerLPByPlatformId = new HashMap<>();
@@ -67,7 +65,8 @@ public class SummonerRankingCalculationService {
             long totalProcessed = 0;
 
             // 4. 플랫폼별로 순위 계산
-            for (String platformId : platformIds) {
+            for (Platform platform : platforms) {
+                String platformId = platform.getPlatformId();
                 long regionCount = leagueSummonerJpaRepository.countRankingByQueueAndPlatformId(queue, platformId);
                 if (regionCount == 0) {
                     continue;
@@ -147,7 +146,7 @@ public class SummonerRankingCalculationService {
             // 6. 백업 테이블 정리
             summonerRankingRepositoryPort.clearBackup(queue);
 
-            log.info("큐 {} 랭킹 처리 완료: {} 명 ({} 개 플랫폼)", queue, totalProcessed, platformIds.size());
+            log.info("큐 {} 랭킹 처리 완료: {} 명 ({} 개 플랫폼)", queue, totalProcessed, platforms.size());
 
             // 7. 티어 커트라인 저장 (platformId별)
             List<TierCutoff> cutoffs = new ArrayList<>();

@@ -8,10 +8,18 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.task.support.TaskExecutorAdapter;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Configuration
 @EnableRabbit
@@ -126,15 +134,34 @@ public class RabbitMqConfig {
         return new Jackson2JsonMessageConverter();
     }
 
+    @Bean(name = "rabbitListenerExecutor", destroyMethod = "close")
+    @ConditionalOnProperty(name = "lol.vt.executors.enabled", havingValue = "true", matchIfMissing = true)
+    public ExecutorService rabbitListenerExecutor() {
+        return Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual()
+                        .name("rabbit-listener-vt-", 0)
+                        .factory()
+        );
+    }
+
+    @Bean(name = "rabbitListenerTaskExecutor")
+    @ConditionalOnProperty(name = "lol.vt.executors.enabled", havingValue = "true", matchIfMissing = true)
+    public TaskExecutor rabbitListenerTaskExecutor(ExecutorService rabbitListenerExecutor) {
+        return new TaskExecutorAdapter(rabbitListenerExecutor);
+    }
+
     @Bean
     public SimpleRabbitListenerContainerFactory simpleRabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
-            ConnectionFactory factory
+            ConnectionFactory factory,
+            @Qualifier("rabbitListenerTaskExecutor")
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
     ) {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
 
         simpleFactory.setChannelTransacted(true);
+        rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
 
         simpleFactory.setConcurrentConsumers(1);
         simpleFactory.setMaxConcurrentConsumers(1);
@@ -148,11 +175,14 @@ public class RabbitMqConfig {
     @Bean
     public SimpleRabbitListenerContainerFactory findQueueSimpleRabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
-            ConnectionFactory factory
+            ConnectionFactory factory,
+            @Qualifier("rabbitListenerTaskExecutor")
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
     ) {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
 
+        rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
         simpleFactory.setConcurrentConsumers(5);
         simpleFactory.setMaxConcurrentConsumers(5);
 
@@ -165,12 +195,15 @@ public class RabbitMqConfig {
     @Bean
     public SimpleRabbitListenerContainerFactory batchRabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
-            ConnectionFactory factory
+            ConnectionFactory factory,
+            @Qualifier("rabbitListenerTaskExecutor")
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
     ) {
 
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
 
+        rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
         simpleFactory.setConcurrentConsumers(20);
         simpleFactory.setMaxConcurrentConsumers(20);
 

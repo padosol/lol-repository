@@ -23,7 +23,7 @@ subprojects {
 
     java {
         toolchain {
-            languageVersion = JavaLanguageVersion.of(17)
+            languageVersion = JavaLanguageVersion.of(21)
         }
     }
 
@@ -54,10 +54,13 @@ subprojects {
         enabled = false
     }
 
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs += ['-parameters']
+    }
+
     bootRun {
         String activeProfile = System.properties['spring.profiles.active']
         systemProperty "spring.profiles.active", activeProfile
     }
 
 }
-
