@@ -22,4 +22,14 @@ dependencies {
     // Jackson (캐시 직렬화)
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     runtimeOnly 'org.postgresql:postgresql'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testRuntimeOnly 'org.postgresql:postgresql'
+}
+
+tasks.named('test') {
+    enabled = true
 }
