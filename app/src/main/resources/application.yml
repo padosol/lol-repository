@@ -14,6 +14,9 @@ spring:
     time-zone: Asia/Seoul
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  threads:
+    virtual:
+      enabled: ${LOL_VT_ENABLED:true}
 
 server:
   shutdown: graceful
@@ -22,9 +25,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info, metrics, prometheus
+        include: ${MANAGEMENT_ENDPOINTS_EXPOSURE_INCLUDE:health,info,metrics,prometheus,threaddump}
   endpoint:
     health:
       show-details: when_authorized
       probes:
         enabled: true
+
+lol:
+  vt:
+    executors:
+      enabled: ${LOL_VT_EXECUTORS_ENABLED:${LOL_VT_ENABLED:true}}
