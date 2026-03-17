@@ -22,6 +22,7 @@ public class SummonerRepositoryImpl implements SummonerRepositoryPort {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<Summoner> findByPuuid(String puuid) {
         return jpaRepository.findById(puuid)
                 .map(SummonerEntity::toDomain);
