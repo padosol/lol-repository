@@ -6,6 +6,9 @@ dependencies {
     implementation 'org.springframework:spring-context'
     implementation 'org.springframework:spring-tx'
 
+    // Jackson (ReadModel DTO 어노테이션)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
     // Logging
     implementation 'org.slf4j:slf4j-api'
 }

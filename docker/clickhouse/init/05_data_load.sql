@@ -37,7 +37,7 @@ WHERE m.queue_id = 420
   AND mp.tier IS NOT NULL
   AND m.patch_version IS NOT NULL
   AND mp.team_position != ''
-  AND m.match_id NOT IN (SELECT DISTINCT match_id FROM match_participant_local);
+  AND NOT EXISTS (SELECT 1 FROM match_participant_local AS existing WHERE existing.match_id = m.match_id);
 
 -- match_matchup_local 적재 (같은 매치, 같은 라인, 다른 팀 셀프조인)
 INSERT INTO match_matchup_local
@@ -58,7 +58,7 @@ INNER JOIN match_participant_local AS p2
     AND p1.team_id       != p2.team_id
 WHERE p1.queue_id = 420
   AND p1.team_position != ''
-  AND p1.match_id NOT IN (SELECT DISTINCT match_id FROM match_matchup_local);
+  AND NOT EXISTS (SELECT 1 FROM match_matchup_local AS existing WHERE existing.match_id = p1.match_id);
 
 -- match_ban_local 적재
 INSERT INTO match_ban_local
@@ -79,7 +79,7 @@ INNER JOIN pg_match_participant AS mp
 WHERE m.queue_id = 420
   AND mp.tier IS NOT NULL
   AND m.patch_version IS NOT NULL
-  AND m.match_id NOT IN (SELECT DISTINCT match_id FROM match_ban_local);
+  AND NOT EXISTS (SELECT 1 FROM match_ban_local AS existing WHERE existing.match_id = m.match_id);
 
 -- match_skill_build_local 적재
 INSERT INTO match_skill_build_local
@@ -134,7 +134,7 @@ FROM (
           AND mp.tier IS NOT NULL
           AND m.patch_version IS NOT NULL
           AND mp.team_position != ''
-          AND sk.match_id NOT IN (SELECT DISTINCT match_id FROM match_skill_build_local)
+          AND NOT EXISTS (SELECT 1 FROM match_skill_build_local AS existing WHERE existing.match_id = sk.match_id)
         ORDER BY sk.match_id, sk.participant_id, sk.timestamp ASC
     ) AS ordered
     GROUP BY
@@ -199,7 +199,7 @@ FROM (
           AND mp.tier IS NOT NULL
           AND m.patch_version IS NOT NULL
           AND mp.team_position != ''
-          AND ie.match_id NOT IN (SELECT DISTINCT match_id FROM match_start_item_build_local)
+          AND NOT EXISTS (SELECT 1 FROM match_start_item_build_local AS existing WHERE existing.match_id = ie.match_id)
         GROUP BY ie.match_id, ie.participant_id,
                  CASE
                      WHEN ie.type = 'ITEM_PURCHASED' THEN ie.item_id
@@ -328,8 +328,49 @@ INSERT INTO legendary_items (item_id, item_name) VALUES
 (667666, '징수의 총');
 
 -- match_final_item_local 적재 (전설급 아이템만, item_event JOIN으로 구매 순서 결정)
+-- 단계별 로컬 적재: 원격 PostgreSQL 테이블을 한 번에 JOIN하지 않고
+-- 필요한 데이터를 먼저 로컬 임시 테이블로 가져온 뒤 로컬에서 JOIN
+-- 증분 로드: 아래 Step 1의 WHERE 절에 patch_version 필터 추가 가능
+--   예) AND m.patch_version = '15.1'
+
+-- Step 1: 아직 적재되지 않은 match_id 목록 확보 (pg_match에서 필터링)
+DROP TABLE IF EXISTS _tmp_new_match_ids;
+CREATE TABLE _tmp_new_match_ids ENGINE = Memory AS
+SELECT m.match_id
+FROM pg_match AS m
+WHERE m.queue_id = 420
+  AND m.patch_version IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM match_final_item_local AS existing
+      WHERE existing.match_id = m.match_id
+  );
+
+-- Step 2: 필요한 match_participant만 로컬로 가져오기 (필터링된 match_id만)
+DROP TABLE IF EXISTS _tmp_final_item_participants;
+CREATE TABLE _tmp_final_item_participants ENGINE = Memory AS
+SELECT
+    mp.match_id, mp.participant_id,
+    mp.champion_id, mp.team_position, mp.win,
+    m.queue_id, m.platform_id, m.patch_version,
+    assumeNotNull(mp.tier) AS tier,
+    mp.item0, mp.item1, mp.item2, mp.item3, mp.item4, mp.item5
+FROM pg_match_participant AS mp
+INNER JOIN pg_match AS m ON mp.match_id = m.match_id
+WHERE mp.match_id IN (SELECT match_id FROM _tmp_new_match_ids)
+  AND mp.tier IS NOT NULL
+  AND mp.team_position != '';
+
+-- Step 3: 필요한 item_event만 로컬로 가져오기 (ITEM_PURCHASED만)
+DROP TABLE IF EXISTS _tmp_final_item_events;
+CREATE TABLE _tmp_final_item_events ENGINE = Memory AS
+SELECT ie.match_id, ie.participant_id, ie.item_id, ie.timestamp
+FROM pg_item_event AS ie
+WHERE ie.match_id IN (SELECT match_id FROM _tmp_new_match_ids)
+  AND ie.type = 'ITEM_PURCHASED';
+
+-- Step 4: 로컬 테이블끼리 JOIN하여 최종 적재 (네트워크 비용 제로)
 -- 1) item0-item5에서 전설급 아이템 추출 (최종 빌드 기준)
--- 2) pg_item_event ITEM_PURCHASED와 JOIN → 각 아이템의 MIN(timestamp) 획득
+-- 2) _tmp_final_item_events와 JOIN → 각 아이템의 MIN(timestamp) 획득
 -- 3) ROW_NUMBER()로 코어 순서 부여
 INSERT INTO match_final_item_local
 SELECT
@@ -354,26 +395,18 @@ FROM (
             min(ie.timestamp) AS purchase_ts
         FROM (
             SELECT
-                m.match_id, mp.participant_id,
-                mp.champion_id, mp.team_position, mp.win,
-                m.queue_id, m.platform_id, m.patch_version,
-                assumeNotNull(mp.tier) AS tier,
+                p.match_id, p.participant_id,
+                p.champion_id, p.team_position, p.win,
+                p.queue_id, p.platform_id, p.patch_version, p.tier,
                 arrayJoin(
-                    arrayFilter(x -> x != 0, [mp.item0, mp.item1, mp.item2, mp.item3, mp.item4, mp.item5])
+                    arrayFilter(x -> x != 0, [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5])
                 ) AS item_id
-            FROM pg_match AS m
-            INNER JOIN pg_match_participant AS mp ON m.match_id = mp.match_id
-            WHERE m.queue_id = 420
-              AND mp.tier IS NOT NULL
-              AND m.patch_version IS NOT NULL
-              AND mp.team_position != ''
-              AND m.match_id NOT IN (SELECT DISTINCT match_id FROM match_final_item_local)
+            FROM _tmp_final_item_participants AS p
         ) AS fi
-        INNER JOIN pg_item_event AS ie
+        INNER JOIN _tmp_final_item_events AS ie
             ON fi.match_id = ie.match_id
            AND fi.participant_id = ie.participant_id
            AND fi.item_id = ie.item_id
-           AND ie.type = 'ITEM_PURCHASED'
         WHERE fi.item_id IN (SELECT item_id FROM legendary_items)
         GROUP BY fi.match_id, fi.participant_id,
                  fi.champion_id, fi.team_position, fi.win,
@@ -381,6 +414,11 @@ FROM (
                  fi.item_id
     ) AS joined
 ) AS ranked;
+
+-- 임시 테이블 정리
+DROP TABLE IF EXISTS _tmp_final_item_events;
+DROP TABLE IF EXISTS _tmp_final_item_participants;
+DROP TABLE IF EXISTS _tmp_new_match_ids;
 
 -- match_item_build_local 적재 (match_final_item_local에서 3코어 빌드 순서 추출)
 -- 1) item_order <= 3인 행만 대상
@@ -404,7 +442,7 @@ FROM match_final_item_local
 WHERE item_order <= 3
   AND queue_id = 420
   AND team_position != ''
-  AND match_id NOT IN (SELECT DISTINCT match_id FROM match_item_build_local)
+  AND NOT EXISTS (SELECT 1 FROM match_item_build_local AS existing WHERE existing.match_id = match_final_item_local.match_id)
 GROUP BY match_id, champion_id, team_position,
          win, queue_id, platform_id, patch_version, tier
 HAVING count(*) = 3;

@@ -1,8 +1,8 @@
 package com.mmrtr.lol.infra.persistence.match.entity;
 
-import com.mmrtr.lol.infra.riot.dto.match.FeatsDto;
-import com.mmrtr.lol.infra.riot.dto.match.ObjectivesDto;
-import com.mmrtr.lol.infra.riot.dto.match.TeamDto;
+import com.mmrtr.lol.domain.match.readmodel.FeatsDto;
+import com.mmrtr.lol.domain.match.readmodel.ObjectivesDto;
+import com.mmrtr.lol.domain.match.readmodel.TeamDto;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

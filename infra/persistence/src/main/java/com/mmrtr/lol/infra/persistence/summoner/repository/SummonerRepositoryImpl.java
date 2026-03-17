@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.persistence.summoner.repository;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
-import com.mmrtr.lol.domain.summoner.repository.SummonerRepositoryPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.infra.persistence.summoner.entity.SummonerEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;

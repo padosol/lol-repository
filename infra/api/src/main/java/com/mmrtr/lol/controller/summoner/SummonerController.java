@@ -2,7 +2,7 @@ package com.mmrtr.lol.controller.summoner;
 
 import com.mmrtr.lol.controller.summoner.dto.response.SummonerResponse;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
-import com.mmrtr.lol.domain.summoner.service.SummonerService;
+import com.mmrtr.lol.domain.summoner.application.SummonerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;

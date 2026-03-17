@@ -7,7 +7,7 @@ import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.ChampionStats
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.DamageStatsValue;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.PositionValue;
 import com.mmrtr.lol.infra.persistence.match.repository.TimeLineRepositoryImpl;
-import com.mmrtr.lol.infra.riot.dto.match_timeline.*;
+import com.mmrtr.lol.domain.match.readmodel.timeline.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

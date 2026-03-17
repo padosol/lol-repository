@@ -6,7 +6,7 @@ import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
 import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
 import com.mmrtr.lol.domain.summoner.domain.vo.RevisionInfo;
 import com.mmrtr.lol.domain.summoner.domain.vo.StatusInfo;
-import com.mmrtr.lol.domain.summoner.service.port.SummonerApiPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
 import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;

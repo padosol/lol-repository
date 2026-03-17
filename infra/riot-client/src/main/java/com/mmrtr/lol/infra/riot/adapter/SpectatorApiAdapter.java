@@ -5,7 +5,7 @@ import com.mmrtr.lol.domain.spectator.domain.ActiveGame;
 import com.mmrtr.lol.domain.spectator.domain.BannedChampion;
 import com.mmrtr.lol.domain.spectator.domain.GameParticipant;
 import com.mmrtr.lol.domain.spectator.domain.GamePerks;
-import com.mmrtr.lol.domain.spectator.service.port.SpectatorApiPort;
+import com.mmrtr.lol.domain.spectator.application.port.SpectatorApiPort;
 import com.mmrtr.lol.infra.riot.dto.spectator.BannedChampionVO;
 import com.mmrtr.lol.infra.riot.dto.spectator.CurrentGameInfoVO;
 import com.mmrtr.lol.infra.riot.dto.spectator.ParticipantVO;

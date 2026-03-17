@@ -1,6 +1,6 @@
 package com.mmrtr.lol.infra.persistence.match.entity;
 
-import com.mmrtr.lol.infra.riot.dto.match.BanDto;
+import com.mmrtr.lol.domain.match.readmodel.BanDto;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

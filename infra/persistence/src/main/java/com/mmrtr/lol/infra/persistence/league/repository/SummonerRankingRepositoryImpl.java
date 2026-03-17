@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.persistence.league.repository;
 
 import com.mmrtr.lol.domain.league.domain.SummonerRanking;
-import com.mmrtr.lol.domain.league.repository.SummonerRankingRepositoryPort;
+import com.mmrtr.lol.domain.league.application.port.SummonerRankingRepositoryPort;
 import com.mmrtr.lol.infra.persistence.league.entity.SummonerRankingEntity;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;

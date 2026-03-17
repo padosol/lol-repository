@@ -1,11 +1,10 @@
 package com.mmrtr.lol.infra.rabbitmq.listener;
 
-import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
-import com.mmrtr.lol.infra.persistence.match.service.MatchService;
+import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
+import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.common.type.Platform;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,19 +16,19 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MatchFindListener {
 
-    private final MatchService matchService;
+    private final MatchRepositoryPort matchRepositoryPort;
     private final MessageSender messageSender;
-    private final RiotApiService riotApiService;
+    private final MatchApiPort matchApiPort;
     private final Executor matchFindExecutor;
 
 
@@ -50,8 +49,8 @@ public class MatchFindListener {
         int retry = 0;
         boolean hasMoreMatches = true;
         while (retry < 10 && hasMoreMatches) {
-            List<String> fetchedMatchIds = riotApiService
-                    .getMatchListByPuuid(puuid, platform, revisionDate, offset, count, matchFindExecutor).join();
+            List<String> fetchedMatchIds = matchApiPort
+                    .fetchMatchIdsByPuuid(puuid, platform.name(), revisionDate, offset, count, matchFindExecutor).join();
 
             if (fetchedMatchIds == null || fetchedMatchIds.isEmpty()) {
                 log.debug("No more match IDs found for puuid: {} at offset: {}. Ending search.", puuid, offset);
@@ -74,11 +73,11 @@ public class MatchFindListener {
             return;
         }
 
-        List<MatchEntity> existingMatches = matchService.findAllMatch(allFetchedMatchIds);
-        Set<String> existingMatchIds = existingMatches.stream().map(MatchEntity::getMatchId).collect(Collectors.toSet());
+        List<String> existingMatchIds = matchRepositoryPort.findExistingMatchIds(allFetchedMatchIds);
+        Set<String> existingMatchIdSet = new HashSet<>(existingMatchIds);
 
         List<String> newMatchIds = allFetchedMatchIds.stream()
-                .filter(matchId -> !existingMatchIds.contains(matchId))
+                .filter(matchId -> !existingMatchIdSet.contains(matchId))
                 .toList();
 
         log.info("Found {} total matches, {} of which are new. Sending to queue.", allFetchedMatchIds.size(), newMatchIds.size());

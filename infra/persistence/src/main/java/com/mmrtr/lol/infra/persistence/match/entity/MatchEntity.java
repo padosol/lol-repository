@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.persistence.match.entity;
 
 
-import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
+import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

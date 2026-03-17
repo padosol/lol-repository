@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.persistence.league.repository;
 
 import com.mmrtr.lol.domain.league.domain.League;
-import com.mmrtr.lol.domain.league.repository.LeagueRepositoryPort;
+import com.mmrtr.lol.domain.league.application.port.LeagueRepositoryPort;
 import com.mmrtr.lol.infra.persistence.league.entity.LeagueEntity;
 import com.mmrtr.lol.infra.redis.service.RedisLockHandler;
 import lombok.RequiredArgsConstructor;
