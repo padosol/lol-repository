@@ -8,7 +8,6 @@ import com.mmrtr.lol.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.concurrent.Executor;
 
@@ -21,7 +20,6 @@ public class SummonerService {
     private final SaveSummonerDataUseCase saveSummonerDataUseCase;
     private final Executor requestExecutor;
 
-    @Transactional
     public Summoner getSummonerInfoV2(String regionType, String gameName, String tagLine) {
         try {
             Summoner summoner = summonerApiPort
@@ -42,7 +40,6 @@ public class SummonerService {
         }
     }
 
-    @Transactional
     public Summoner getSummonerByPuuid(String regionType, String puuid) {
         try {
             Summoner summoner = summonerApiPort

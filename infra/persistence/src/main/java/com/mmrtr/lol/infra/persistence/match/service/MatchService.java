@@ -143,6 +143,7 @@ public class MatchService implements MatchRepositoryPort {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<String> findExistingMatchIds(List<String> matchIds) {
         return matchRepository.findAllByIds(matchIds).stream()
                 .map(MatchEntity::getMatchId)
