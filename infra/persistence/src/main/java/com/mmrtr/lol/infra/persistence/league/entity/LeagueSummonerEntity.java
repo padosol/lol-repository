@@ -110,6 +110,7 @@ public class LeagueSummonerEntity {
                 .veteran(this.veteran)
                 .freshBlood(this.freshBlood)
                 .inactive(this.inactive)
+                .absolutePoints(this.absolutePoints)
                 .build();
     }
 

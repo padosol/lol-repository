@@ -1,11 +1,10 @@
 package com.mmrtr.lol.infra.rabbitmq.service;
 
 import com.mmrtr.lol.common.type.Platform;
-import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
-import com.mmrtr.lol.infra.persistence.match.service.MatchService;
-import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
-import com.mmrtr.lol.infra.riot.dto.match_timeline.TimelineDto;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
+import com.mmrtr.lol.domain.match.readmodel.MatchDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
+import com.mmrtr.lol.domain.match.repository.MatchRepositoryPort;
+import com.mmrtr.lol.domain.match.service.port.MatchApiPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -21,8 +20,8 @@ public class MatchDataFetcher {
 
     private static final int MATCH_FETCH_COUNT = 20;
 
-    private final RiotApiService riotApiService;
-    private final MatchService matchService;
+    private final MatchApiPort matchApiPort;
+    private final MatchRepositoryPort matchRepositoryPort;
 
     public record FetchNewMatchIdsResult(
             List<String> newMatchIds,
@@ -33,8 +32,8 @@ public class MatchDataFetcher {
     public CompletableFuture<FetchNewMatchIdsResult> fetchNewMatchIds(
             String puuid, Platform platform, long dbRevisionDateSeconds, Executor executor) {
 
-        CompletableFuture<List<String>> matchIdListFuture = riotApiService.getMatchListByPuuid(
-                puuid, platform, dbRevisionDateSeconds, 0, MATCH_FETCH_COUNT, executor);
+        CompletableFuture<List<String>> matchIdListFuture = matchApiPort.fetchMatchIdsByPuuid(
+                puuid, platform.name(), dbRevisionDateSeconds, 0, MATCH_FETCH_COUNT, executor);
 
         return matchIdListFuture.thenApply(matchIds -> {
             if (matchIds == null || matchIds.isEmpty()) {
@@ -46,8 +45,7 @@ public class MatchDataFetcher {
                 log.debug("matchIds size is 20. more matchIds will be searched after renewal completes");
             }
 
-            List<MatchEntity> matchList = matchService.findAllMatch(matchIds);
-            List<String> existMatchIds = matchList.stream().map(MatchEntity::getMatchId).toList();
+            List<String> existMatchIds = matchRepositoryPort.findExistingMatchIds(matchIds);
             List<String> newMatchIds = matchIds.stream().filter(matchId -> !existMatchIds.contains(matchId)).toList();
             return new FetchNewMatchIdsResult(newMatchIds, hasMoreMatches, dbRevisionDateSeconds);
         });
@@ -57,7 +55,7 @@ public class MatchDataFetcher {
             List<String> matchIds, Platform platform, Executor executor) {
 
         List<CompletableFuture<MatchDto>> matchAllOfFuture = matchIds.stream()
-                .map(matchId -> riotApiService.getMatchById(matchId, platform, executor))
+                .map(matchId -> matchApiPort.fetchMatchById(matchId, platform.name(), executor))
                 .toList();
 
         CompletableFuture<Void> allOfFuture = CompletableFuture.allOf(matchAllOfFuture.toArray(new CompletableFuture[0]));
@@ -71,7 +69,7 @@ public class MatchDataFetcher {
             List<String> matchIds, Platform platform, Executor executor) {
 
         List<CompletableFuture<TimelineDto>> timelineAllOfFuture = matchIds.stream()
-                .map(matchId -> riotApiService.getTimelineById(matchId, platform, executor))
+                .map(matchId -> matchApiPort.fetchTimelineById(matchId, platform.name(), executor))
                 .toList();
 
         CompletableFuture<Void> allOfFuture = CompletableFuture.allOf(timelineAllOfFuture.toArray(new CompletableFuture[0]));

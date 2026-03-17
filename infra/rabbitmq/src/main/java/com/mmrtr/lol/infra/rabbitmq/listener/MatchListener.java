@@ -1,11 +1,10 @@
 package com.mmrtr.lol.infra.rabbitmq.listener;
 
-import com.mmrtr.lol.infra.persistence.match.service.MatchService;
-import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
-import com.mmrtr.lol.infra.riot.dto.match_timeline.TimelineDto;
+import com.mmrtr.lol.domain.match.readmodel.MatchDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
+import com.mmrtr.lol.domain.match.service.port.MatchApiPort;
+import com.mmrtr.lol.domain.match.service.usecase.SaveMatchDataUseCase;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
-import com.mmrtr.lol.common.type.Platform;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,8 +30,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class MatchListener {
 
     private final MessageConverter messageConverter;
-    private final RiotApiService riotApiService;
-    private final MatchService matchService;
+    private final MatchApiPort matchApiPort;
+    private final SaveMatchDataUseCase saveMatchDataUseCase;
     private final Executor riotApiExecutor;
     private final RRateLimiter globalApiRateLimiter;
     private final BlockingQueue<Pair<MatchDto, TimelineDto>> queue = new LinkedBlockingQueue<>();
@@ -51,7 +50,7 @@ public class MatchListener {
                 timelineDtos.add(pair.getSecond());
             }
 
-            matchService.addAllMatch(matchDtos, timelineDtos);
+            saveMatchDataUseCase.execute(matchDtos, timelineDtos);
         }
     }
 
@@ -68,17 +67,15 @@ public class MatchListener {
 
         globalApiRateLimiter.acquire(1);
 
-        Platform platform = Platform.valueOfName(message.getMessageProperties().getHeader("region"));
+        String platformName = message.getMessageProperties().getHeader("region");
         String matchId = messageConverter.fromMessage(message).toString();
 
-        CompletableFuture<MatchDto> matchDtoFuture = riotApiService.getMatchById(matchId, platform, riotApiExecutor);
-        CompletableFuture<TimelineDto> timelineDtoFuture = riotApiService.getTimelineById(matchId, platform, riotApiExecutor);
+        CompletableFuture<MatchDto> matchDtoFuture = matchApiPort.fetchMatchById(matchId, platformName, riotApiExecutor);
+        CompletableFuture<TimelineDto> timelineDtoFuture = matchApiPort.fetchTimelineById(matchId, platformName, riotApiExecutor);
 
         CompletableFuture<Pair<MatchDto, TimelineDto>> completableFuture = CompletableFuture.allOf(matchDtoFuture, timelineDtoFuture)
                 .thenApply(v -> Pair.of(matchDtoFuture.join(), timelineDtoFuture.join()))
                 .exceptionally(throwable -> {
-                    // DLQ 에 matchId를 넣는다.
-
                     log.warn("Failed to fetch data for matchId {}: {}", matchId, throwable.getMessage());
                     return null;
                 });

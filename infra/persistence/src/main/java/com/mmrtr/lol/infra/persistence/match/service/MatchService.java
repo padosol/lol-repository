@@ -1,8 +1,14 @@
 package com.mmrtr.lol.infra.persistence.match.service;
 
 import com.mmrtr.lol.common.type.Queue;
-import com.mmrtr.lol.infra.persistence.league.entity.LeagueSummonerEntity;
-import com.mmrtr.lol.infra.persistence.league.repository.LeagueSummonerJpaRepository;
+import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.match.readmodel.BanDto;
+import com.mmrtr.lol.domain.match.readmodel.ChallengesDto;
+import com.mmrtr.lol.domain.match.readmodel.MatchDto;
+import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
+import com.mmrtr.lol.domain.match.readmodel.TeamDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
+import com.mmrtr.lol.domain.match.repository.MatchRepositoryPort;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchBanEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchParticipantChallengesEntity;
@@ -13,25 +19,17 @@ import com.mmrtr.lol.infra.persistence.match.repository.MatchBanRepositoryImpl;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchRepositoryImpl;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerRepositoryImpl;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchTeamRepositoryImpl;
-import com.mmrtr.lol.infra.riot.dto.match.BanDto;
-import com.mmrtr.lol.infra.riot.dto.match.ChallengesDto;
-import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
-import com.mmrtr.lol.infra.riot.dto.match.ParticipantDto;
-import com.mmrtr.lol.infra.riot.dto.match.TeamDto;
-import com.mmrtr.lol.infra.riot.dto.match_timeline.TimelineDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class MatchService {
+public class MatchService implements MatchRepositoryPort {
 
     private final MatchRepositoryImpl matchRepository;
     private final MatchSummonerRepositoryImpl matchSummonerRepository;
@@ -39,10 +37,11 @@ public class MatchService {
     private final MatchTeamRepositoryImpl matchTeamRepository;
     private final MatchBanRepositoryImpl matchBanRepository;
     private final TimeLineService timeLineService;
-    private final LeagueSummonerJpaRepository leagueSummonerJpaRepository;
 
+    @Override
     @Transactional
-    public void addAllMatch(List<MatchDto> matchDtos, List<TimelineDto> timelineDtos) {
+    public void saveAll(List<MatchDto> matchDtos, List<TimelineDto> timelineDtos,
+                        Map<String, Map<String, LeagueSummoner>> leagueByQueueAndPuuid) {
         long start = System.currentTimeMillis();
 
         // 엔티티 매핑
@@ -50,10 +49,7 @@ public class MatchService {
         List<MatchEntity> matchEntities = matchDtos.stream()
                 .map(MatchEntity::new)
                 .toList();
-
-        // queueId별로 참가자 puuid를 수집하고 league 데이터를 배치 조회
-        Map<String, Map<String, LeagueSummonerEntity>> leagueByQueueAndPuuid = buildLeagueMap(matchDtos);
-        log.debug("[addAllMatch] 엔티티 매핑+buildLeagueMap: {}ms", System.currentTimeMillis() - t);
+        log.debug("[saveAll] 엔티티 매핑: {}ms", System.currentTimeMillis() - t);
 
         List<MatchParticipantEntity> allMatchParticipants = new ArrayList<>();
         List<MatchParticipantChallengesEntity> allChallenges = new ArrayList<>();
@@ -65,7 +61,7 @@ public class MatchService {
             MatchEntity match = matchEntities.get(i);
 
             Queue queue = Queue.fromQueueId(matchDto.getInfo().getQueueId());
-            Map<String, LeagueSummonerEntity> leagueMap = (queue != null)
+            Map<String, LeagueSummoner> leagueMap = (queue != null)
                     ? leagueByQueueAndPuuid.getOrDefault(queue.name(), Collections.emptyMap())
                     : Collections.emptyMap();
 
@@ -73,7 +69,7 @@ public class MatchService {
             List<Integer> absolutePointsList = new ArrayList<>();
 
             for (ParticipantDto participant : participants) {
-                LeagueSummonerEntity league = leagueMap.get(participant.getPuuid());
+                LeagueSummoner league = leagueMap.get(participant.getPuuid());
 
                 String tier = null;
                 String tierRank = null;
@@ -119,69 +115,37 @@ public class MatchService {
 
         t = System.currentTimeMillis();
         matchRepository.bulkSave(matchEntities);
-        log.debug("[addAllMatch] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
+        log.debug("[saveAll] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
 
         t = System.currentTimeMillis();
         matchSummonerRepository.bulkSave(allMatchParticipants);
-        log.debug("[addAllMatch] bulkSave matchParticipant: {}ms ({}건)", System.currentTimeMillis() - t, allMatchParticipants.size());
+        log.debug("[saveAll] bulkSave matchParticipant: {}ms ({}건)", System.currentTimeMillis() - t, allMatchParticipants.size());
 
         t = System.currentTimeMillis();
         challengesRepository.bulkSave(allChallenges);
-        log.debug("[addAllMatch] bulkSave challenges: {}ms ({}건)", System.currentTimeMillis() - t, allChallenges.size());
+        log.debug("[saveAll] bulkSave challenges: {}ms ({}건)", System.currentTimeMillis() - t, allChallenges.size());
 
         t = System.currentTimeMillis();
         matchTeamRepository.bulkSave(allMatchTeams);
-        log.debug("[addAllMatch] bulkSave matchTeam: {}ms ({}건)", System.currentTimeMillis() - t, allMatchTeams.size());
+        log.debug("[saveAll] bulkSave matchTeam: {}ms ({}건)", System.currentTimeMillis() - t, allMatchTeams.size());
 
         t = System.currentTimeMillis();
         matchBanRepository.bulkSave(allMatchBans);
-        log.debug("[addAllMatch] bulkSave matchBan: {}ms ({}건)", System.currentTimeMillis() - t, allMatchBans.size());
+        log.debug("[saveAll] bulkSave matchBan: {}ms ({}건)", System.currentTimeMillis() - t, allMatchBans.size());
 
         if (timelineDtos != null && !timelineDtos.isEmpty()) {
             t = System.currentTimeMillis();
             timeLineService.saveAll(matchEntities, timelineDtos);
-            log.debug("[addAllMatch] saveAll timelines: {}ms", System.currentTimeMillis() - t);
+            log.debug("[saveAll] saveAll timelines: {}ms", System.currentTimeMillis() - t);
         }
 
-        log.debug("[addAllMatch] 총 소요: {}ms", System.currentTimeMillis() - start);
+        log.debug("[saveAll] 총 소요: {}ms", System.currentTimeMillis() - start);
     }
 
-    private Map<String, Map<String, LeagueSummonerEntity>> buildLeagueMap(List<MatchDto> matchDtos) {
-        // queueName -> Set<puuid> 수집
-        Map<String, Set<String>> puuidsByQueue = new HashMap<>();
-
-        for (MatchDto matchDto : matchDtos) {
-            Queue queue = Queue.fromQueueId(matchDto.getInfo().getQueueId());
-            if (queue == null) {
-                continue;
-            }
-
-            Set<String> puuids = puuidsByQueue.computeIfAbsent(queue.name(), k -> new HashSet<>());
-            for (ParticipantDto participant : matchDto.getInfo().getParticipants()) {
-                puuids.add(participant.getPuuid());
-            }
-        }
-
-        // queueName -> (puuid -> LeagueSummonerEntity) 맵 구성
-        Map<String, Map<String, LeagueSummonerEntity>> result = new HashMap<>();
-
-        for (Map.Entry<String, Set<String>> entry : puuidsByQueue.entrySet()) {
-            String queueName = entry.getKey();
-            Set<String> puuids = entry.getValue();
-
-            List<LeagueSummonerEntity> leagueEntities =
-                    leagueSummonerJpaRepository.findAllByPuuidInAndQueue(puuids, queueName);
-
-            Map<String, LeagueSummonerEntity> byPuuid = leagueEntities.stream()
-                    .collect(Collectors.toMap(LeagueSummonerEntity::getPuuid, Function.identity()));
-
-            result.put(queueName, byPuuid);
-        }
-
-        return result;
-    }
-
-    public List<MatchEntity> findAllMatch(List<String> matchIds) {
-        return matchRepository.findAllByIds(matchIds);
+    @Override
+    public List<String> findExistingMatchIds(List<String> matchIds) {
+        return matchRepository.findAllByIds(matchIds).stream()
+                .map(MatchEntity::getMatchId)
+                .toList();
     }
 }

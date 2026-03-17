@@ -23,4 +23,5 @@ public class LeagueSummoner {
     private boolean veteran;
     private boolean freshBlood;
     private boolean inactive;
+    private int absolutePoints;
 }

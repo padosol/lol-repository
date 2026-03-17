@@ -1,6 +1,6 @@
 package com.mmrtr.lol.infra.persistence.match.entity.value.matchsummoner;
 
-import com.mmrtr.lol.infra.riot.dto.match.ParticipantDto;
+import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
 import jakarta.persistence.Embeddable;
 import lombok.*;
 import org.hibernate.annotations.Comment;

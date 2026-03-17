@@ -7,7 +7,9 @@ import com.mmrtr.lol.infra.persistence.league.entity.LeagueSummonerHistoryEntity
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 @RequiredArgsConstructor
@@ -46,5 +48,12 @@ public class LeagueSummonerRepositoryImpl implements LeagueSummonerRepositoryPor
     public Optional<LeagueSummoner> findByPuuidAndQueue(String puuid, String queue) {
         return jpaRepository.findAllByPuuidAndQueue(puuid, queue)
                 .map(LeagueSummonerEntity::toDomain);
+    }
+
+    @Override
+    public List<LeagueSummoner> findAllByPuuidsAndQueue(Set<String> puuids, String queue) {
+        return jpaRepository.findAllByPuuidInAndQueue(puuids, queue).stream()
+                .map(LeagueSummonerEntity::toDomain)
+                .toList();
     }
 }

@@ -3,7 +3,7 @@ package com.mmrtr.lol.infra.persistence.match.entity;
 import com.mmrtr.lol.infra.persistence.match.entity.value.matchsummoner.ItemValue;
 import com.mmrtr.lol.infra.persistence.match.entity.value.matchsummoner.PerkValue;
 import com.mmrtr.lol.infra.persistence.match.entity.value.matchsummoner.ArenaValue;
-import com.mmrtr.lol.infra.riot.dto.match.ParticipantDto;
+import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

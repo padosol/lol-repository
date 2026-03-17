@@ -1,17 +1,17 @@
 package com.mmrtr.lol.infra.rabbitmq.service;
 
 import com.mmrtr.lol.common.type.Platform;
+import com.mmrtr.lol.domain.match.readmodel.MatchDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
+import com.mmrtr.lol.domain.match.service.usecase.SaveMatchDataUseCase;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.service.usecase.SaveSummonerDataUseCase;
-import com.mmrtr.lol.infra.persistence.match.service.MatchService;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchDataFetcher.FetchNewMatchIdsResult;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker.RevisionCheckResult;
 import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
-import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
-import com.mmrtr.lol.infra.riot.dto.match_timeline.TimelineDto;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +30,7 @@ import java.util.concurrent.Executor;
 public class SummonerRenewalService {
 
     private final RiotApiService riotApiService;
-    private final MatchService matchService;
+    private final SaveMatchDataUseCase saveMatchDataUseCase;
     private final SaveSummonerDataUseCase saveSummonerDataUseCase;
     private final Executor requestExecutor;
     private final SummonerRevisionChecker summonerRevisionChecker;
@@ -70,9 +70,6 @@ public class SummonerRenewalService {
         CompletableFuture<FetchNewMatchIdsResult> fetchResultFuture = matchDataFetcher
                 .fetchNewMatchIds(puuid, platform, revisionCheck.dbRevisionDateSeconds(), requestExecutor);
 
-        // 여기서 match_id 1차 필터링 후 필터링된 매치만 api 호출
-        // 이때
-
         CompletableFuture<List<MatchDto>> matchListFuture = fetchResultFuture
                 .thenCompose(result -> matchDataFetcher.fetchMatchDetails(result.newMatchIds(), platform, requestExecutor));
         CompletableFuture<List<TimelineDto>> timelineListFuture = fetchResultFuture
@@ -102,8 +99,8 @@ public class SummonerRenewalService {
         // 7) Match 저장
         if (matchDtos != null && !matchDtos.isEmpty()) {
             t = System.currentTimeMillis();
-            matchService.addAllMatch(matchDtos, timelineDtos);
-            log.debug("[6/6] addAllMatch: {}ms", System.currentTimeMillis() - t);
+            saveMatchDataUseCase.execute(matchDtos, timelineDtos);
+            log.debug("[6/6] saveMatchData: {}ms", System.currentTimeMillis() - t);
         }
 
         log.info("[갱신 완료] puuid={}, 총 소요: {}ms", puuid, System.currentTimeMillis() - totalStart);

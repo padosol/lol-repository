@@ -1,6 +1,6 @@
 package com.mmrtr.lol.infra.persistence.match.entity;
 
-import com.mmrtr.lol.infra.riot.dto.match.ChallengesDto;
+import com.mmrtr.lol.domain.match.readmodel.ChallengesDto;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.Comment;

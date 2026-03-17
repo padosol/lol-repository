@@ -1,11 +1,9 @@
 package com.mmrtr.lol.infra.riot.adapter;
 
 import com.mmrtr.lol.common.type.Platform;
-import com.mmrtr.lol.domain.match.domain.Match;
-import com.mmrtr.lol.domain.match.domain.MatchTimeline;
+import com.mmrtr.lol.domain.match.readmodel.MatchDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.domain.match.service.port.MatchApiPort;
-import com.mmrtr.lol.infra.riot.dto.match.MatchDto;
-import com.mmrtr.lol.infra.riot.dto.match_timeline.TimelineDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,32 +35,14 @@ public class MatchApiAdapter implements MatchApiPort {
     }
 
     @Override
-    public CompletableFuture<Match> fetchMatchById(String matchId, String platformName, Executor executor) {
+    public CompletableFuture<MatchDto> fetchMatchById(String matchId, String platformName, Executor executor) {
         Platform platform = Platform.valueOfName(platformName);
-        return riotApiService.getMatchById(matchId, platform, executor)
-                .thenApply(this::toDomain);
+        return riotApiService.getMatchById(matchId, platform, executor);
     }
 
     @Override
-    public CompletableFuture<MatchTimeline> fetchTimelineById(String matchId, String platformName, Executor executor) {
+    public CompletableFuture<TimelineDto> fetchTimelineById(String matchId, String platformName, Executor executor) {
         Platform platform = Platform.valueOfName(platformName);
-        return riotApiService.getTimelineById(matchId, platform, executor)
-                .thenApply(this::toTimelineDomain);
-    }
-
-    private Match toDomain(MatchDto matchDto) {
-        return Match.builder()
-                .matchId(matchDto.getMetadata().getMatchId())
-                .metadata(matchDto.getMetadata())
-                .info(matchDto.getInfo())
-                .build();
-    }
-
-    private MatchTimeline toTimelineDomain(TimelineDto timelineDto) {
-        return MatchTimeline.builder()
-                .matchId(timelineDto.getMetadata().getMatchId())
-                .metadata(timelineDto.getMetadata())
-                .info(timelineDto.getInfo())
-                .build();
+        return riotApiService.getTimelineById(matchId, platform, executor);
     }
 }
