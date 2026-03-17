@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.rabbitmq.listener;
 
 import com.mmrtr.lol.domain.match.repository.MatchRepositoryPort;
-import com.mmrtr.lol.domain.match.service.port.MatchApiPort;
+import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;

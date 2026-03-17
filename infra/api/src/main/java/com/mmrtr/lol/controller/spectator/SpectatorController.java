@@ -1,7 +1,7 @@
 package com.mmrtr.lol.controller.spectator;
 
 import com.mmrtr.lol.controller.spectator.response.ActiveGameResponse;
-import com.mmrtr.lol.domain.spectator.service.SpectatorService;
+import com.mmrtr.lol.domain.spectator.application.SpectatorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

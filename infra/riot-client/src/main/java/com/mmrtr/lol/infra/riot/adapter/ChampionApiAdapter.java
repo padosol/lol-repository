@@ -2,7 +2,7 @@ package com.mmrtr.lol.infra.riot.adapter;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.champion.domain.ChampionRotation;
-import com.mmrtr.lol.domain.champion.service.port.ChampionApiPort;
+import com.mmrtr.lol.domain.champion.application.port.ChampionApiPort;
 import com.mmrtr.lol.infra.riot.dto.champion.ChampionInfo;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import lombok.RequiredArgsConstructor;

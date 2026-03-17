@@ -1,7 +1,7 @@
-package com.mmrtr.lol.domain.spectator.service;
+package com.mmrtr.lol.domain.spectator.application;
 
 import com.mmrtr.lol.domain.spectator.domain.ActiveGame;
-import com.mmrtr.lol.domain.spectator.service.port.SpectatorApiPort;
+import com.mmrtr.lol.domain.spectator.application.port.SpectatorApiPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

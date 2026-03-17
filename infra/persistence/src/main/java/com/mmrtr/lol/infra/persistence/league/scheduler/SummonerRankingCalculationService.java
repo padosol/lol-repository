@@ -5,7 +5,7 @@ import com.mmrtr.lol.domain.league.domain.SummonerRanking;
 import com.mmrtr.lol.domain.league.domain.TierCutoff;
 import com.mmrtr.lol.domain.league.repository.SummonerRankingRepositoryPort;
 import com.mmrtr.lol.domain.league.repository.TierCutoffRepositoryPort;
-import com.mmrtr.lol.domain.league.service.usecase.SaveTierCutoffUseCase;
+import com.mmrtr.lol.domain.league.application.usecase.SaveTierCutoffUseCase;
 import com.mmrtr.lol.infra.persistence.league.repository.LeagueSummonerJpaRepository;
 import com.mmrtr.lol.infra.persistence.league.repository.MostChampionProjection;
 import com.mmrtr.lol.infra.persistence.league.repository.SummonerRankingProjection;

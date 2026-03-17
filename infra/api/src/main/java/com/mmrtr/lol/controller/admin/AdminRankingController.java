@@ -1,7 +1,7 @@
 package com.mmrtr.lol.controller.admin;
 
 import com.mmrtr.lol.controller.admin.response.RankingCalculateResponse;
-import com.mmrtr.lol.domain.league.service.usecase.TriggerSummonerRankingCalculationUseCase;
+import com.mmrtr.lol.domain.league.application.usecase.TriggerSummonerRankingCalculationUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;

@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.match.service.usecase;
+package com.mmrtr.lol.domain.match.application.usecase;
 
 import com.mmrtr.lol.common.type.Queue;
 import com.mmrtr.lol.domain.league.domain.LeagueSummoner;

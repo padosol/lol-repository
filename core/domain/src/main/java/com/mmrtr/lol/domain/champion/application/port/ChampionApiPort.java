@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.champion.service.port;
+package com.mmrtr.lol.domain.champion.application.port;
 
 import com.mmrtr.lol.domain.champion.domain.ChampionRotation;
 

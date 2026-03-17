@@ -1,7 +1,7 @@
-package com.mmrtr.lol.domain.champion.service;
+package com.mmrtr.lol.domain.champion.application;
 
 import com.mmrtr.lol.domain.champion.domain.ChampionRotation;
-import com.mmrtr.lol.domain.champion.service.port.ChampionApiPort;
+import com.mmrtr.lol.domain.champion.application.port.ChampionApiPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.summoner.service.usecase;
+package com.mmrtr.lol.domain.summoner.application.usecase;
 
 import com.mmrtr.lol.domain.league.domain.League;
 import com.mmrtr.lol.domain.league.domain.LeagueSummoner;

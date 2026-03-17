@@ -23,7 +23,7 @@ lol-repository (루트)
 ├── app                    # Spring Boot 애플리케이션 진입점 (LolRepositoryApplication.java)
 ├── lol-db-schema/         # Git 서브모듈 (padosol/lol-db-schema) - Flyway 마이그레이션 SQL
 ├── core/
-│   ├── domain             # DDD 도메인 비즈니스 로직 (Port 인터페이스, UseCase, Service)
+│   ├── domain             # DDD 도메인 비즈니스 로직 (Port 인터페이스, UseCase, Application Service)
 │   └── enum               # 공유 enum 타입들 (Region, Platform 등)
 ├── infra/
 │   ├── api                # REST API 컨트롤러
@@ -38,6 +38,12 @@ lol-repository (루트)
 
 ```
 com.mmrtr.lol.domain/
+├── {domain}/
+│   ├── application/       # Application Service (유스케이스 오케스트레이션)
+│   │   ├── port/          # 외부 API Port 인터페이스
+│   │   └── usecase/       # UseCase 인터페이스
+│   ├── model/             # 도메인 모델
+│   └── repository/        # Repository Port 인터페이스
 ├── summoner/    # 소환사 데이터
 ├── match/       # 매치 데이터 및 타임라인 이벤트
 ├── league/      # 리그/랭킹 데이터

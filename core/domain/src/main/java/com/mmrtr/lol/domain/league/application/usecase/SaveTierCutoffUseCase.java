@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.league.service.usecase;
+package com.mmrtr.lol.domain.league.application.usecase;
 
 import com.mmrtr.lol.domain.league.domain.TierCutoff;
 import com.mmrtr.lol.domain.league.repository.TierCutoffRepositoryPort;

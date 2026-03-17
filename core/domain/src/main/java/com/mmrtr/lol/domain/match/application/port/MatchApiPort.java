@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.match.service.port;
+package com.mmrtr.lol.domain.match.application.port;
 
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;

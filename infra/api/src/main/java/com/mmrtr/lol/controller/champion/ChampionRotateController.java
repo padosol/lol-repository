@@ -2,7 +2,7 @@ package com.mmrtr.lol.controller.champion;
 
 import com.mmrtr.lol.controller.champion.response.ChampionRotateResponse;
 import com.mmrtr.lol.domain.champion.domain.ChampionRotation;
-import com.mmrtr.lol.domain.champion.service.ChampionRotateService;
+import com.mmrtr.lol.domain.champion.application.ChampionRotateService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

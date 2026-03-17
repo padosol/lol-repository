@@ -4,7 +4,7 @@ import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.domain.match.repository.MatchRepositoryPort;
-import com.mmrtr.lol.domain.match.service.port.MatchApiPort;
+import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

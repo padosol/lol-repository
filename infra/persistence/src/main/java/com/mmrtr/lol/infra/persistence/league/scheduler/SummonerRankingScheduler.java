@@ -1,6 +1,6 @@
 package com.mmrtr.lol.infra.persistence.league.scheduler;
 
-import com.mmrtr.lol.domain.league.service.usecase.TriggerSummonerRankingCalculationUseCase;
+import com.mmrtr.lol.domain.league.application.usecase.TriggerSummonerRankingCalculationUseCase;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;

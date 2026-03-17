@@ -1,8 +1,8 @@
-package com.mmrtr.lol.domain.summoner.service;
+package com.mmrtr.lol.domain.summoner.application;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
-import com.mmrtr.lol.domain.summoner.service.port.SummonerApiPort;
-import com.mmrtr.lol.domain.summoner.service.usecase.SaveSummonerDataUseCase;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
+import com.mmrtr.lol.domain.summoner.application.usecase.SaveSummonerDataUseCase;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;

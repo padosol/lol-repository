@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.spectator.service.port;
+package com.mmrtr.lol.domain.spectator.application.port;
 
 import com.mmrtr.lol.domain.spectator.domain.ActiveGame;
 
