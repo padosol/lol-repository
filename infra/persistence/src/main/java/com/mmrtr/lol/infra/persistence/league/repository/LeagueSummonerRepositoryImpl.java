@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.persistence.league.repository;
 
 import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
-import com.mmrtr.lol.domain.league.repository.LeagueSummonerRepositoryPort;
+import com.mmrtr.lol.domain.league.application.port.LeagueSummonerRepositoryPort;
 import com.mmrtr.lol.infra.persistence.league.entity.LeagueSummonerEntity;
 import com.mmrtr.lol.infra.persistence.league.entity.LeagueSummonerHistoryEntity;
 import lombok.RequiredArgsConstructor;

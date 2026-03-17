@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.rabbitmq.service;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
-import com.mmrtr.lol.domain.summoner.repository.SummonerRepositoryPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

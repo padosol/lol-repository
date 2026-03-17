@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.summoner.repository;
+package com.mmrtr.lol.domain.summoner.application.port;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 

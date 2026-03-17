@@ -1,7 +1,7 @@
 package com.mmrtr.lol.domain.league.application.usecase;
 
 import com.mmrtr.lol.domain.league.domain.TierCutoff;
-import com.mmrtr.lol.domain.league.repository.TierCutoffRepositoryPort;
+import com.mmrtr.lol.domain.league.application.port.TierCutoffRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

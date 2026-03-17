@@ -8,7 +8,7 @@ import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
 import com.mmrtr.lol.domain.match.readmodel.TeamDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
-import com.mmrtr.lol.domain.match.repository.MatchRepositoryPort;
+import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchBanEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchParticipantChallengesEntity;

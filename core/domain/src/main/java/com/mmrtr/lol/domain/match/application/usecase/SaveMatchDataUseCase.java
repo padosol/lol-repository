@@ -2,11 +2,11 @@ package com.mmrtr.lol.domain.match.application.usecase;
 
 import com.mmrtr.lol.common.type.Queue;
 import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
-import com.mmrtr.lol.domain.league.repository.LeagueSummonerRepositoryPort;
+import com.mmrtr.lol.domain.league.application.port.LeagueSummonerRepositoryPort;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
-import com.mmrtr.lol.domain.match.repository.MatchRepositoryPort;
+import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

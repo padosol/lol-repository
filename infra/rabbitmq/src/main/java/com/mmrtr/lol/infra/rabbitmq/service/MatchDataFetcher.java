@@ -3,7 +3,7 @@ package com.mmrtr.lol.infra.rabbitmq.service;
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
-import com.mmrtr.lol.domain.match.repository.MatchRepositoryPort;
+import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

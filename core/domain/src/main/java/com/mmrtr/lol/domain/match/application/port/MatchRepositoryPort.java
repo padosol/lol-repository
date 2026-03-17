@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.match.repository;
+package com.mmrtr.lol.domain.match.application.port;
 
 import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;

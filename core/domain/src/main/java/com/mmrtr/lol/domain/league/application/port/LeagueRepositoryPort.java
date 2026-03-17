@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.league.repository;
+package com.mmrtr.lol.domain.league.application.port;
 
 import com.mmrtr.lol.domain.league.domain.League;
 

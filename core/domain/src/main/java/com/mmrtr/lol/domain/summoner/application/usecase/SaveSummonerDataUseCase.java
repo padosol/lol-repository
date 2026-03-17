@@ -2,11 +2,11 @@ package com.mmrtr.lol.domain.summoner.application.usecase;
 
 import com.mmrtr.lol.domain.league.domain.League;
 import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
-import com.mmrtr.lol.domain.league.repository.LeagueRepositoryPort;
-import com.mmrtr.lol.domain.league.repository.LeagueSummonerRepositoryPort;
+import com.mmrtr.lol.domain.league.application.port.LeagueRepositoryPort;
+import com.mmrtr.lol.domain.league.application.port.LeagueSummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
-import com.mmrtr.lol.domain.summoner.repository.SummonerRepositoryPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

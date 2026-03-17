@@ -40,10 +40,9 @@ lol-repository (루트)
 com.mmrtr.lol.domain/
 ├── {domain}/
 │   ├── application/       # Application Service (유스케이스 오케스트레이션)
-│   │   ├── port/          # 외부 API Port 인터페이스
+│   │   ├── port/          # Outbound Port 인터페이스 (API Port + Repository Port)
 │   │   └── usecase/       # UseCase 인터페이스
-│   ├── model/             # 도메인 모델
-│   └── repository/        # Repository Port 인터페이스
+│   └── model/             # 도메인 모델
 ├── summoner/    # 소환사 데이터
 ├── match/       # 매치 데이터 및 타임라인 이벤트
 ├── league/      # 리그/랭킹 데이터
