@@ -32,7 +32,7 @@ public class MatchRepositoryImpl {
         return matchJpaRepository.findAllByMatchIdIn(matchIds);
     }
 
-    public MatchEntity save(MatchEntity match){
+    public MatchEntity save(MatchEntity match) {
         return matchJpaRepository.save(match);
     }
 

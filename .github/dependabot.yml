@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Gradle 의존성
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework.boot*"
+          - "org.springframework:*"
+          - "io.spring.dependency-management"
+      testing:
+        patterns:
+          - "org.testcontainers:*"
+          - "org.junit*"
+      redis:
+        patterns:
+          - "org.redisson:*"
+          - "org.springframework.boot:spring-boot-starter-data-redis"
+
+  # GitHub Actions 의존성
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"

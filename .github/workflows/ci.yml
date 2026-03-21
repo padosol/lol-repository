@@ -8,8 +8,10 @@ on:
 
 jobs:
   build:
-    name: Build
+    name: Build & Test
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -22,8 +24,27 @@ jobs:
           java-version: 21
           cache: gradle
 
-      - name: Build
-        run: ./gradlew :app:bootJar -x test --no-daemon
+      - name: Build & Test
+        run: ./gradlew :app:bootJar --no-daemon
+
+      - name: Checkstyle
+        if: always()
+        run: ./gradlew checkstyleMain --no-daemon
+
+      - name: Generate JaCoCo Report
+        if: always()
+        run: ./gradlew jacocoTestReport --no-daemon
+
+      - name: Add Coverage to PR
+        if: github.event_name == 'pull_request'
+        uses: madrapps/jacoco-report@v1.7.1
+        with:
+          paths: '**/build/reports/jacoco/test/jacocoTestReport.xml'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 0
+          min-coverage-changed-files: 0
+          title: 'Code Coverage Report'
+          update-comment: true
 
   notify:
     name: Slack Notification
