@@ -29,7 +29,7 @@ SELECT
     count()    AS games,
     sum(win)   AS wins
 FROM match_participant_local
-WHERE queue_id = 420
+WHERE queue_id IN (420, 440)
   AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position;
 
@@ -56,7 +56,7 @@ SELECT
     champion_id,
     count() AS bans
 FROM match_ban_local
-WHERE queue_id = 420
+WHERE queue_id IN (420, 440)
   AND champion_id > 0
 GROUP BY patch_version, platform_id, tier, champion_id;
 
@@ -83,7 +83,7 @@ SELECT
     team_position,
     count() AS participant_rows
 FROM match_participant_local
-WHERE queue_id = 420
+WHERE queue_id IN (420, 440)
   AND team_position != ''
 GROUP BY patch_version, platform_id, tier, team_position;
 
@@ -127,7 +127,7 @@ SELECT
     count()  AS games,
     sum(win) AS wins
 FROM match_participant_local
-WHERE queue_id = 420 AND team_position != ''
+WHERE queue_id IN (420, 440) AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position,
          primary_style_id, primary_perk0, primary_perk1, primary_perk2, primary_perk3,
          sub_style_id, sub_perk0, sub_perk1,
@@ -160,7 +160,7 @@ SELECT
     count()  AS games,
     sum(win) AS wins
 FROM match_participant_local
-WHERE queue_id = 420 AND team_position != ''
+WHERE queue_id IN (420, 440) AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position,
          summoner1id, summoner2id;
 
@@ -189,7 +189,7 @@ SELECT
     count()  AS games,
     sum(win) AS wins
 FROM match_skill_build_local
-WHERE queue_id = 420 AND team_position != ''
+WHERE queue_id IN (420, 440) AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position, skill_build;
 
 -- 7. 챔피언 시작 아이템 빌드 집계 (라인별 시작 아이템 승률/픽률)
@@ -217,7 +217,7 @@ SELECT
     count()  AS games,
     sum(win) AS wins
 FROM match_start_item_build_local
-WHERE queue_id = 420 AND team_position != ''
+WHERE queue_id IN (420, 440) AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position, start_items;
 
 -- 8. 챔피언 3코어 아이템 빌드 순서 집계 (라인별 빌드 순서 승률/픽률)
@@ -245,7 +245,7 @@ SELECT
     count()  AS games,
     sum(win) AS wins
 FROM match_item_build_local
-WHERE queue_id = 420 AND team_position != ''
+WHERE queue_id IN (420, 440) AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position, item_build;
 
 -- 9. 챔피언 완성 아이템 집계 (라인별 코어 순서별 아이템 승률/픽률)
@@ -274,7 +274,7 @@ SELECT
     count()  AS games,
     sum(win) AS wins
 FROM match_final_item_local
-WHERE queue_id = 420 AND team_position != ''
+WHERE queue_id IN (420, 440) AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position, item_id, item_order;
 
 -- 10. 챔피언 매치업 집계 (라인별 상대 챔피언 승률)
@@ -302,5 +302,5 @@ SELECT
     count()  AS games,
     sum(win) AS wins
 FROM match_matchup_local
-WHERE queue_id = 420 AND team_position != ''
+WHERE queue_id IN (420, 440) AND team_position != ''
 GROUP BY patch_version, platform_id, tier, champion_id, team_position, opponent_champion_id;
