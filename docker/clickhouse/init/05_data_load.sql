@@ -405,7 +405,7 @@ FROM (
                 arrayFlatten(
                     groupArray(
                         arrayWithConstant(
-                            toUInt32(net.net_count),
+                            assumeNotNull(toUInt32(net.net_count)),
                             toString(net.effective_item_id)
                         )
                     )
@@ -424,6 +424,7 @@ FROM (
             sum(CASE
                 WHEN ie.type = 'ITEM_PURCHASED' THEN 1
                 WHEN ie.type = 'ITEM_UNDO'      THEN -1
+                ELSE 0
             END) AS net_count,
             any(p.champion_id)     AS champion_id,
             any(p.team_position)   AS team_position,
