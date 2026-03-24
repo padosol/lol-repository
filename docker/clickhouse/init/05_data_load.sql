@@ -2,218 +2,171 @@
 -- 05: PostgreSQL → ClickHouse 데이터 적재 (수동 실행)
 -- =====================================================
 -- 01_pg_source_tables.sql 실행 후 사용하세요.
--- 증분 로드: WHERE 절에 patch_version 필터를 추가하여 특정 패치만 로드 가능
---   예) AND m.patch_version = '15.1'
+-- 반복 실행 가능: 워터마크 기반 증분 로딩으로 매번 새 데이터만 처리합니다.
+--
+-- [2-Stage 로딩 전략]
+-- Stage 1: match PK 워터마크로 배치 범위 결정 (LIMIT으로 배치 크기 제어)
+-- Stage 2: PostgreSQL View를 통해 match PK 범위로 관련 데이터 조회 (LIMIT 없음, 정합성 보장)
+--   - platform_id, queue_id 필터 push-down → idx_match_platform_queue_season_patch 활용
+--   - 수집 대상: 솔로랭크(420), 자유랭크(440), 칼바람(450), 아레나(1700)
+--
+-- [벌크 로드 시 MV 관리]
+-- 초기 적재나 대량 재처리 시, DETACH/ATTACH 블록의 주석을 해제하세요.
 -- =====================================================
 
--- match_participant_local 적재
-INSERT INTO match_participant_local
-SELECT
-    m.match_id,
-    mp.champion_id,
-    mp.team_position,
-    mp.team_id,
-    mp.win,
-    m.queue_id,
-    m.platform_id,
-    m.patch_version,
-    assumeNotNull(mp.tier) AS tier,
-    assumeNotNull(mp.primary_style_id) AS primary_style_id,
-    assumeNotNull(mp.primary_perk0) AS primary_perk0,
-    assumeNotNull(mp.primary_perk1) AS primary_perk1,
-    assumeNotNull(mp.primary_perk2) AS primary_perk2,
-    assumeNotNull(mp.primary_perk3) AS primary_perk3,
-    assumeNotNull(mp.sub_style_id) AS sub_style_id,
-    assumeNotNull(mp.sub_perk0) AS sub_perk0,
-    assumeNotNull(mp.sub_perk1) AS sub_perk1,
-    assumeNotNull(mp.stat_perk_defense) AS stat_perk_defense,
-    assumeNotNull(mp.stat_perk_flex) AS stat_perk_flex,
-    assumeNotNull(mp.stat_perk_offense) AS stat_perk_offense,
-    mp.summoner1id,
-    mp.summoner2id
-FROM pg_match AS m
-INNER JOIN pg_match_participant AS mp ON m.match_id = mp.match_id
-WHERE m.queue_id = 420
-  AND mp.tier IS NOT NULL
-  AND m.patch_version IS NOT NULL
-  AND mp.team_position != ''
-  AND NOT EXISTS (SELECT 1 FROM match_participant_local AS existing WHERE existing.match_id = m.match_id);
+-- =====================================================
+-- 세션 설정 (벌크 로드 최적화)
+-- =====================================================
+SET max_memory_usage = 4000000000;            -- 4GB (스테이징이 디스크 기반이므로 낮춤)
+SET max_insert_block_size = 1048576;          -- 1M rows/block (MV 트리거 횟수 감소)
+SET min_insert_block_size_rows = 1048576;
+SET optimize_on_insert = 0;                   -- 벌크 로드 시 dedup 지연
 
--- match_matchup_local 적재 (같은 매치, 같은 라인, 다른 팀 셀프조인)
-INSERT INTO match_matchup_local
-SELECT
-    p1.match_id,
-    p1.champion_id,
-    p2.champion_id AS opponent_champion_id,
-    p1.team_position,
-    p1.win,
-    p1.queue_id,
-    p1.platform_id,
-    p1.patch_version,
-    p1.tier
-FROM match_participant_local AS p1
-INNER JOIN match_participant_local AS p2
-    ON  p1.match_id      = p2.match_id
-    AND p1.team_position  = p2.team_position
-    AND p1.team_id       != p2.team_id
-WHERE p1.queue_id = 420
-  AND p1.team_position != ''
-  AND NOT EXISTS (SELECT 1 FROM match_matchup_local AS existing WHERE existing.match_id = p1.match_id);
+-- =====================================================
+-- [선택] 벌크 로드 시 Materialized View DETACH
+-- =====================================================
+-- DETACH TABLE mv_champion_stats;
+-- DETACH TABLE mv_champion_bans;
+-- DETACH TABLE mv_match_count;
+-- DETACH TABLE mv_champion_rune_stats;
+-- DETACH TABLE mv_champion_spell_stats;
+-- DETACH TABLE mv_champion_skill_build_stats;
+-- DETACH TABLE mv_champion_start_item_stats;
+-- DETACH TABLE mv_champion_item_build_stats;
+-- DETACH TABLE mv_champion_item_stats;
+-- DETACH TABLE mv_champion_matchup_stats;
 
--- match_ban_local 적재
-INSERT INTO match_ban_local
-SELECT
-    m.match_id,
-    mb.champion_id,
-    mb.team_id,
-    mb.pick_turn,
-    m.queue_id,
-    m.platform_id,
-    m.patch_version,
-    assumeNotNull(mp.tier) AS tier
-FROM pg_match AS m
-INNER JOIN pg_match_ban AS mb ON m.match_id = mb.match_id
-INNER JOIN pg_match_participant AS mp
-    ON mb.match_id = mp.match_id
-   AND mp.participant_id = mb.pick_turn
-WHERE m.queue_id = 420
-  AND mp.tier IS NOT NULL
-  AND m.patch_version IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM match_ban_local AS existing WHERE existing.match_id = m.match_id);
+-- =====================================================
+-- 워터마크 읽기 (match PK 단일 워터마크)
+-- =====================================================
+DROP TABLE IF EXISTS _watermarks;
+CREATE TABLE _watermarks ENGINE = Memory AS
+SELECT source_table, last_id
+FROM etl_watermarks FINAL;
 
--- match_skill_build_local 적재
-INSERT INTO match_skill_build_local
-SELECT
-    sub.match_id,
-    sub.champion_id,
-    sub.team_position,
-    sub.win,
-    sub.queue_id,
-    sub.platform_id,
-    sub.patch_version,
-    sub.tier,
-    sub.skill_build
-FROM (
-    SELECT
-        ordered.match_id,
-        ordered.champion_id,
-        ordered.team_position,
-        ordered.win,
-        ordered.queue_id,
-        ordered.platform_id,
-        ordered.patch_version,
-        ordered.tier,
-        ordered.participant_id,
-        arrayStringConcat(
-            arraySlice(
-                groupArray(toString(ordered.skill_slot)),
-                1, 15
-            ),
-            ','
-        ) AS skill_build
-    FROM (
-        SELECT
-            sk.match_id AS match_id,
-            sk.participant_id AS participant_id,
-            sk.skill_slot AS skill_slot,
-            sk.timestamp AS timestamp,
-            mp.champion_id AS champion_id,
-            mp.team_position AS team_position,
-            mp.win AS win,
-            m.queue_id AS queue_id,
-            m.platform_id AS platform_id,
-            m.patch_version AS patch_version,
-            assumeNotNull(mp.tier) AS tier
-        FROM pg_skill_events_flat AS sk
-        INNER JOIN pg_match_participant AS mp
-            ON sk.match_id = mp.match_id
-           AND sk.participant_id = mp.participant_id
-        INNER JOIN pg_match AS m
-            ON sk.match_id = m.match_id
-        WHERE m.queue_id = 420
-          AND mp.tier IS NOT NULL
-          AND m.patch_version IS NOT NULL
-          AND mp.team_position != ''
-          AND NOT EXISTS (SELECT 1 FROM match_skill_build_local AS existing WHERE existing.match_id = sk.match_id)
-        ORDER BY sk.match_id, sk.participant_id, sk.timestamp ASC
-    ) AS ordered
-    GROUP BY
-        ordered.match_id, ordered.champion_id, ordered.team_position,
-        ordered.win, ordered.queue_id, ordered.platform_id, ordered.patch_version,
-        ordered.tier, ordered.participant_id
-    HAVING count(*) >= 15
-) AS sub;
+-- =====================================================
+-- Stage 1: Match 데이터 + 배치 범위 결정
+-- =====================================================
+-- 모든 queue_id를 포함합니다 (워터마크가 정확히 전진하려면 id 범위를 건너뛸 수 없음).
+-- queue_id 필터는 Fact 테이블 INSERT 시 로컬에서 적용합니다.
+DROP TABLE IF EXISTS _stg_matches;
+CREATE TABLE _stg_matches ENGINE = MergeTree ORDER BY id AS
+SELECT id, match_id, queue_id, platform_id, season, patch_version
+FROM pg_match
+WHERE id > (SELECT coalesce(max(last_id), 0) FROM _watermarks WHERE source_table = 'match')
+ORDER BY id
+LIMIT 10000;
 
--- match_start_item_build_local 적재 (ITEM_UNDO 처리 포함)
-INSERT INTO match_start_item_build_local
+-- 배치 범위 결정 (Stage 2에서 사용)
+DROP TABLE IF EXISTS _batch_range;
+CREATE TABLE _batch_range ENGINE = Memory AS
 SELECT
-    agg.match_id, agg.champion_id, agg.team_position, agg.win,
-    agg.queue_id, agg.platform_id, agg.patch_version, agg.tier,
-    agg.start_items
-FROM (
-    SELECT
-        net.match_id, net.champion_id, net.team_position, net.win,
-        net.queue_id, net.platform_id, net.patch_version, net.tier,
-        net.participant_id,
-        arrayStringConcat(
-            arraySort(
-                arrayFlatten(
-                    groupArray(
-                        arrayWithConstant(
-                            assumeNotNull(toUInt32(net.net_count)),
-                            toString(net.effective_item_id)
-                        )
-                    )
-                )
-            ),
-            ','
-        ) AS start_items
-    FROM (
-        SELECT
-            ie.match_id AS match_id,
-            ie.participant_id AS participant_id,
-            CASE
-                WHEN ie.type = 'ITEM_PURCHASED' THEN ie.item_id
-                WHEN ie.type = 'ITEM_UNDO'      THEN ie.before_id
-            END AS effective_item_id,
-            sum(CASE
-                WHEN ie.type = 'ITEM_PURCHASED' THEN 1
-                WHEN ie.type = 'ITEM_UNDO'      THEN -1
-            END) AS net_count,
-            any(mp.champion_id)              AS champion_id,
-            any(mp.team_position)            AS team_position,
-            any(mp.win)                      AS win,
-            any(m.queue_id)                  AS queue_id,
-            any(m.platform_id)               AS platform_id,
-            any(m.patch_version)             AS patch_version,
-            any(assumeNotNull(mp.tier))      AS tier
-        FROM pg_item_event AS ie
-        INNER JOIN pg_match_participant AS mp
-            ON ie.match_id = mp.match_id AND ie.participant_id = mp.participant_id
-        INNER JOIN pg_match AS m
-            ON ie.match_id = m.match_id
-        WHERE ie.timestamp <= 60000
-          AND ie.type IN ('ITEM_PURCHASED', 'ITEM_UNDO')
-          AND ie.item_id NOT IN (3340, 3363, 3364)    -- 장신구 제외
-          AND m.queue_id = 420
-          AND mp.tier IS NOT NULL
-          AND m.patch_version IS NOT NULL
-          AND mp.team_position != ''
-          AND NOT EXISTS (SELECT 1 FROM match_start_item_build_local AS existing WHERE existing.match_id = ie.match_id)
-        GROUP BY ie.match_id, ie.participant_id,
-                 CASE
-                     WHEN ie.type = 'ITEM_PURCHASED' THEN ie.item_id
-                     WHEN ie.type = 'ITEM_UNDO'      THEN ie.before_id
-                 END
-        HAVING net_count > 0
-    ) AS net
-    GROUP BY net.match_id, net.participant_id,
-             net.champion_id, net.team_position, net.win,
-             net.queue_id, net.platform_id, net.patch_version, net.tier
-    HAVING start_items != ''
-) AS agg;
+    (SELECT coalesce(max(last_id), 0) FROM _watermarks WHERE source_table = 'match') AS batch_min_id,
+    (SELECT max(id) FROM _stg_matches) AS batch_max_id;
 
+-- =====================================================
+-- Stage 2a: Participant 데이터 (View 기반, match PK 범위 + 인덱스 필터)
+-- =====================================================
+DROP TABLE IF EXISTS _stg_participants_raw;
+CREATE TABLE _stg_participants_raw ENGINE = MergeTree ORDER BY (match_id, participant_id) AS
+SELECT
+    match_id, queue_id, platform_id, season, patch_version,
+    participant_id, champion_id, team_position, team_id, win, tier,
+    primary_style_id, primary_perk0, primary_perk1, primary_perk2, primary_perk3,
+    sub_style_id, sub_perk0, sub_perk1,
+    stat_perk_defense, stat_perk_flex, stat_perk_offense,
+    summoner1id, summoner2id,
+    item0, item1, item2, item3, item4, item5
+FROM pg_v_match_participant
+WHERE match_pk > (SELECT batch_min_id FROM _batch_range)
+  AND match_pk <= (SELECT batch_max_id FROM _batch_range)
+  AND platform_id = 'KR'
+  AND queue_id IN (420, 440, 450, 1700);
+
+-- 랭크용 필터 (tier/position 필수)
+DROP TABLE IF EXISTS _stg_participants;
+CREATE TABLE _stg_participants ENGINE = MergeTree ORDER BY (match_id, participant_id) AS
+SELECT
+    match_id, queue_id, platform_id, season, patch_version,
+    participant_id, champion_id,
+    assumeNotNull(team_position) AS team_position,
+    team_id, win,
+    assumeNotNull(tier) AS tier,
+    assumeNotNull(primary_style_id) AS primary_style_id,
+    assumeNotNull(primary_perk0) AS primary_perk0,
+    assumeNotNull(primary_perk1) AS primary_perk1,
+    assumeNotNull(primary_perk2) AS primary_perk2,
+    assumeNotNull(primary_perk3) AS primary_perk3,
+    assumeNotNull(sub_style_id) AS sub_style_id,
+    assumeNotNull(sub_perk0) AS sub_perk0,
+    assumeNotNull(sub_perk1) AS sub_perk1,
+    assumeNotNull(stat_perk_defense) AS stat_perk_defense,
+    assumeNotNull(stat_perk_flex) AS stat_perk_flex,
+    assumeNotNull(stat_perk_offense) AS stat_perk_offense,
+    summoner1id, summoner2id,
+    item0, item1, item2, item3, item4, item5
+FROM _stg_participants_raw
+WHERE tier IS NOT NULL
+  AND team_position IS NOT NULL AND team_position != ''
+  AND queue_id IN (420, 440);
+
+-- =====================================================
+-- Stage 2b: Ban 데이터 (View 기반, match PK 범위)
+-- =====================================================
+DROP TABLE IF EXISTS _stg_bans;
+CREATE TABLE _stg_bans ENGINE = MergeTree ORDER BY (match_id, pick_turn) AS
+SELECT
+    match_id, queue_id, platform_id, season, patch_version,
+    team_id, champion_id, pick_turn
+FROM pg_v_match_ban
+WHERE match_pk > (SELECT batch_min_id FROM _batch_range)
+  AND match_pk <= (SELECT batch_max_id FROM _batch_range)
+  AND platform_id = 'KR'
+  AND queue_id IN (420, 440, 1700);
+
+-- =====================================================
+-- Stage 2c: Skill 이벤트 (View 기반, match PK 범위)
+-- =====================================================
+DROP TABLE IF EXISTS _stg_skill_events_raw;
+CREATE TABLE _stg_skill_events_raw ENGINE = MergeTree ORDER BY (match_id, participant_id) AS
+SELECT
+    match_id, queue_id, platform_id, season, patch_version,
+    participant_id, skill_slot, level_up_type, timestamp
+FROM pg_v_match_skill_event
+WHERE match_pk > (SELECT batch_min_id FROM _batch_range)
+  AND match_pk <= (SELECT batch_max_id FROM _batch_range)
+  AND platform_id = 'KR'
+  AND queue_id IN (420, 440);
+
+DROP TABLE IF EXISTS _stg_skill_events;
+CREATE TABLE _stg_skill_events ENGINE = MergeTree ORDER BY (match_id, participant_id) AS
+SELECT match_id, participant_id, skill_slot, timestamp
+FROM _stg_skill_events_raw
+WHERE level_up_type = 'NORMAL';
+
+-- =====================================================
+-- Stage 2d: Item 이벤트 (View 기반, match PK 범위)
+-- =====================================================
+DROP TABLE IF EXISTS _stg_item_events_raw;
+CREATE TABLE _stg_item_events_raw ENGINE = MergeTree ORDER BY (match_id, participant_id) AS
+SELECT
+    match_id, queue_id, platform_id, season, patch_version,
+    type, item_id, participant_id, timestamp, before_id
+FROM pg_v_match_item_event
+WHERE match_pk > (SELECT batch_min_id FROM _batch_range)
+  AND match_pk <= (SELECT batch_max_id FROM _batch_range)
+  AND platform_id = 'KR'
+  AND queue_id IN (420, 440);
+
+DROP TABLE IF EXISTS _stg_item_events;
+CREATE TABLE _stg_item_events ENGINE = MergeTree ORDER BY (match_id, participant_id) AS
+SELECT match_id, type, item_id, participant_id, timestamp, before_id
+FROM _stg_item_events_raw
+WHERE type IN ('ITEM_PURCHASED', 'ITEM_UNDO');
+
+-- =====================================================
 -- legendary_items 참조 데이터 적재 (전체 교체)
+-- =====================================================
 TRUNCATE TABLE IF EXISTS legendary_items;
 
 INSERT INTO legendary_items (item_id, item_name) VALUES
@@ -327,107 +280,235 @@ INSERT INTO legendary_items (item_id, item_name) VALUES
 (328020, '심연의 가면'),
 (667666, '징수의 총');
 
--- match_final_item_local 적재 (전설급 아이템만, item_event JOIN으로 구매 순서 결정)
--- 단계별 로컬 적재: 원격 PostgreSQL 테이블을 한 번에 JOIN하지 않고
--- 필요한 데이터를 먼저 로컬 임시 테이블로 가져온 뒤 로컬에서 JOIN
--- 증분 로드: 아래 Step 1의 WHERE 절에 patch_version 필터 추가 가능
---   예) AND m.patch_version = '15.1'
-
--- Step 1: 아직 적재되지 않은 match_id 목록 확보 (pg_match에서 필터링)
-DROP TABLE IF EXISTS _tmp_new_match_ids;
-CREATE TABLE _tmp_new_match_ids ENGINE = Memory AS
-SELECT m.match_id
-FROM pg_match AS m
-WHERE m.queue_id = 420
-  AND m.patch_version IS NOT NULL
-  AND NOT EXISTS (
-      SELECT 1 FROM match_final_item_local AS existing
-      WHERE existing.match_id = m.match_id
-  );
-
--- Step 2: 필요한 match_participant만 로컬로 가져오기 (필터링된 match_id만)
-DROP TABLE IF EXISTS _tmp_final_item_participants;
-CREATE TABLE _tmp_final_item_participants ENGINE = Memory AS
+-- =====================================================
+-- [솔로랭크 + 자유랭크] 1. match_participant_local 적재
+-- =====================================================
+-- stg에 이미 match 메타 포함 → match JOIN 불필요
+INSERT INTO match_participant_local
 SELECT
-    mp.match_id, mp.participant_id,
-    mp.champion_id, mp.team_position, mp.win,
-    m.queue_id, m.platform_id, m.patch_version,
-    assumeNotNull(mp.tier) AS tier,
-    mp.item0, mp.item1, mp.item2, mp.item3, mp.item4, mp.item5
-FROM pg_match_participant AS mp
-INNER JOIN pg_match AS m ON mp.match_id = m.match_id
-WHERE mp.match_id IN (SELECT match_id FROM _tmp_new_match_ids)
-  AND mp.tier IS NOT NULL
-  AND mp.team_position != '';
+    match_id, champion_id, team_position, team_id, win,
+    queue_id, platform_id, season, patch_version, tier,
+    primary_style_id, primary_perk0, primary_perk1, primary_perk2, primary_perk3,
+    sub_style_id, sub_perk0, sub_perk1,
+    stat_perk_defense, stat_perk_flex, stat_perk_offense,
+    summoner1id, summoner2id
+FROM _stg_participants
+WHERE patch_version IS NOT NULL;
 
--- Step 3: 필요한 item_event만 로컬로 가져오기 (ITEM_PURCHASED만)
-DROP TABLE IF EXISTS _tmp_final_item_events;
-CREATE TABLE _tmp_final_item_events ENGINE = Memory AS
-SELECT ie.match_id, ie.participant_id, ie.item_id, ie.timestamp
-FROM pg_item_event AS ie
-WHERE ie.match_id IN (SELECT match_id FROM _tmp_new_match_ids)
-  AND ie.type = 'ITEM_PURCHASED';
+-- =====================================================
+-- [솔로랭크 + 자유랭크] 2. match_matchup_local 적재 (셀프조인)
+-- =====================================================
+INSERT INTO match_matchup_local
+SELECT
+    p1.match_id,
+    p1.champion_id,
+    p2.champion_id AS opponent_champion_id,
+    p1.team_position,
+    p1.win,
+    p1.queue_id,
+    p1.platform_id,
+    p1.season,
+    p1.patch_version,
+    p1.tier
+FROM _stg_participants AS p1
+INNER JOIN _stg_participants AS p2
+    ON  p1.match_id      = p2.match_id
+    AND p1.team_position  = p2.team_position
+    AND p1.team_id       != p2.team_id
+WHERE p1.team_position != ''
+  AND p1.patch_version IS NOT NULL;
 
--- Step 4: 로컬 테이블끼리 JOIN하여 최종 적재 (네트워크 비용 제로)
--- 1) item0-item5에서 전설급 아이템 추출 (최종 빌드 기준)
--- 2) _tmp_final_item_events와 JOIN → 각 아이템의 MIN(timestamp) 획득
--- 3) ROW_NUMBER()로 코어 순서 부여
+-- =====================================================
+-- [솔로랭크 + 자유랭크] 3. match_ban_local 적재
+-- =====================================================
+INSERT INTO match_ban_local
+SELECT
+    b.match_id,
+    b.champion_id,
+    b.team_id,
+    b.pick_turn,
+    b.queue_id,
+    b.platform_id,
+    b.season,
+    b.patch_version,
+    p.tier
+FROM _stg_bans AS b
+INNER JOIN _stg_participants AS p
+    ON b.match_id = p.match_id
+   AND p.participant_id = b.pick_turn
+WHERE b.queue_id IN (420, 440)
+  AND b.patch_version IS NOT NULL;
+
+-- =====================================================
+-- [솔로랭크 + 자유랭크] 4. match_skill_build_local 적재
+-- =====================================================
+INSERT INTO match_skill_build_local
+SELECT
+    sub.match_id, sub.champion_id, sub.team_position, sub.win,
+    sub.queue_id, sub.platform_id, sub.season, sub.patch_version,
+    sub.tier, sub.skill_build
+FROM (
+    SELECT
+        o.match_id, o.champion_id, o.team_position, o.win,
+        o.queue_id, o.platform_id, o.season, o.patch_version,
+        o.tier, o.participant_id,
+        arrayStringConcat(
+            arraySlice(
+                groupArray(toString(o.skill_slot)),
+                1, 15
+            ),
+            ','
+        ) AS skill_build
+    FROM (
+        SELECT
+            sk.match_id,
+            sk.participant_id,
+            sk.skill_slot,
+            sk.timestamp,
+            p.champion_id,
+            p.team_position,
+            p.win,
+            p.queue_id,
+            p.platform_id,
+            p.season,
+            p.patch_version,
+            p.tier
+        FROM _stg_skill_events AS sk
+        INNER JOIN _stg_participants AS p
+            ON sk.match_id = p.match_id
+           AND sk.participant_id = p.participant_id
+        WHERE p.patch_version IS NOT NULL
+        ORDER BY sk.match_id, sk.participant_id, sk.timestamp ASC
+    ) AS o
+    GROUP BY
+        o.match_id, o.champion_id, o.team_position,
+        o.win, o.queue_id, o.platform_id, o.season, o.patch_version,
+        o.tier, o.participant_id
+    HAVING count(*) >= 15
+) AS sub;
+
+-- =====================================================
+-- [솔로랭크 + 자유랭크] 5. match_start_item_build_local 적재
+-- =====================================================
+INSERT INTO match_start_item_build_local
+SELECT
+    agg.match_id, agg.champion_id, agg.team_position, agg.win,
+    agg.queue_id, agg.platform_id, agg.season, agg.patch_version, agg.tier,
+    agg.start_items
+FROM (
+    SELECT
+        net.match_id, net.champion_id, net.team_position, net.win,
+        net.queue_id, net.platform_id, net.season, net.patch_version, net.tier,
+        net.participant_id,
+        arrayStringConcat(
+            arraySort(
+                arrayFlatten(
+                    groupArray(
+                        arrayWithConstant(
+                            toUInt32(net.net_count),
+                            toString(net.effective_item_id)
+                        )
+                    )
+                )
+            ),
+            ','
+        ) AS start_items
+    FROM (
+        SELECT
+            ie.match_id,
+            ie.participant_id,
+            CASE
+                WHEN ie.type = 'ITEM_PURCHASED' THEN ie.item_id
+                WHEN ie.type = 'ITEM_UNDO'      THEN ie.before_id
+            END AS effective_item_id,
+            sum(CASE
+                WHEN ie.type = 'ITEM_PURCHASED' THEN 1
+                WHEN ie.type = 'ITEM_UNDO'      THEN -1
+            END) AS net_count,
+            any(p.champion_id)     AS champion_id,
+            any(p.team_position)   AS team_position,
+            any(p.win)             AS win,
+            any(p.queue_id)        AS queue_id,
+            any(p.platform_id)     AS platform_id,
+            any(p.season)          AS season,
+            any(p.patch_version)   AS patch_version,
+            any(p.tier)            AS tier
+        FROM _stg_item_events AS ie
+        INNER JOIN _stg_participants AS p
+            ON ie.match_id = p.match_id
+           AND ie.participant_id = p.participant_id
+        WHERE ie.timestamp <= 60000
+          AND ie.type IN ('ITEM_PURCHASED', 'ITEM_UNDO')
+          AND ie.item_id NOT IN (3340, 3363, 3364)
+          AND p.patch_version IS NOT NULL
+        GROUP BY ie.match_id, ie.participant_id,
+            CASE
+                WHEN ie.type = 'ITEM_PURCHASED' THEN ie.item_id
+                WHEN ie.type = 'ITEM_UNDO'      THEN ie.before_id
+            END
+        HAVING net_count > 0
+    ) AS net
+    GROUP BY net.match_id, net.participant_id,
+             net.champion_id, net.team_position, net.win,
+             net.queue_id, net.platform_id, net.season, net.patch_version, net.tier
+    HAVING start_items != ''
+) AS agg;
+
+-- =====================================================
+-- [솔로랭크 + 자유랭크] 6. match_final_item_local 적재
+-- =====================================================
 INSERT INTO match_final_item_local
 SELECT
     ranked.match_id, ranked.champion_id, ranked.team_position, ranked.win,
-    ranked.queue_id, ranked.platform_id, ranked.patch_version, ranked.tier,
+    ranked.queue_id, ranked.platform_id, ranked.season, ranked.patch_version, ranked.tier,
     ranked.item_id, ranked.item_order
 FROM (
     SELECT
         joined.match_id, joined.champion_id, joined.team_position, joined.win,
-        joined.queue_id, joined.platform_id, joined.patch_version, joined.tier,
+        joined.queue_id, joined.platform_id, joined.season, joined.patch_version, joined.tier,
         joined.item_id,
-        row_number() OVER (
+        toUInt8(row_number() OVER (
             PARTITION BY joined.match_id, joined.participant_id
             ORDER BY joined.purchase_ts ASC
-        ) AS item_order
+        )) AS item_order
     FROM (
         SELECT
             fi.match_id, fi.participant_id,
             fi.champion_id, fi.team_position, fi.win,
-            fi.queue_id, fi.platform_id, fi.patch_version, fi.tier,
+            fi.queue_id, fi.platform_id, fi.season, fi.patch_version, fi.tier,
             fi.item_id,
             min(ie.timestamp) AS purchase_ts
         FROM (
             SELECT
                 p.match_id, p.participant_id,
                 p.champion_id, p.team_position, p.win,
-                p.queue_id, p.platform_id, p.patch_version, p.tier,
+                p.queue_id, p.platform_id, p.season, p.patch_version, p.tier,
                 arrayJoin(
                     arrayFilter(x -> x != 0, [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5])
                 ) AS item_id
-            FROM _tmp_final_item_participants AS p
+            FROM _stg_participants AS p
         ) AS fi
-        INNER JOIN _tmp_final_item_events AS ie
+        INNER JOIN _stg_item_events AS ie
             ON fi.match_id = ie.match_id
            AND fi.participant_id = ie.participant_id
            AND fi.item_id = ie.item_id
         WHERE fi.item_id IN (SELECT item_id FROM legendary_items)
+          AND ie.type = 'ITEM_PURCHASED'
+          AND fi.patch_version IS NOT NULL
         GROUP BY fi.match_id, fi.participant_id,
                  fi.champion_id, fi.team_position, fi.win,
-                 fi.queue_id, fi.platform_id, fi.patch_version, fi.tier,
+                 fi.queue_id, fi.platform_id, fi.season, fi.patch_version, fi.tier,
                  fi.item_id
     ) AS joined
 ) AS ranked;
 
--- 임시 테이블 정리
-DROP TABLE IF EXISTS _tmp_final_item_events;
-DROP TABLE IF EXISTS _tmp_final_item_participants;
-DROP TABLE IF EXISTS _tmp_new_match_ids;
-
--- match_item_build_local 적재 (match_final_item_local에서 3코어 빌드 순서 추출)
--- 1) item_order <= 3인 행만 대상
--- 2) groupArray + arraySort로 item_order순 정렬 → arrayStringConcat
--- 3) 3코어 미만 게임은 HAVING count(*) = 3으로 제외
+-- =====================================================
+-- [솔로랭크 + 자유랭크] 7. match_item_build_local 적재 (3코어 빌드 순서)
+-- =====================================================
 INSERT INTO match_item_build_local
 SELECT
     match_id, champion_id, team_position, win,
-    queue_id, platform_id, patch_version, tier,
+    queue_id, platform_id, season, patch_version, tier,
     arrayStringConcat(
         arrayMap(
             x -> toString(x.1),
@@ -440,9 +521,171 @@ SELECT
     ) AS item_build
 FROM match_final_item_local
 WHERE item_order <= 3
-  AND queue_id = 420
+  AND queue_id IN (420, 440)
   AND team_position != ''
-  AND NOT EXISTS (SELECT 1 FROM match_item_build_local AS existing WHERE existing.match_id = match_final_item_local.match_id)
+  AND match_id IN (SELECT match_id FROM _stg_matches WHERE queue_id IN (420, 440))
 GROUP BY match_id, champion_id, team_position,
-         win, queue_id, platform_id, patch_version, tier
+         win, queue_id, platform_id, season, patch_version, tier
 HAVING count(*) = 3;
+
+-- =====================================================
+-- [칼바람] aram_participant_local 적재 (queue_id=450)
+-- =====================================================
+INSERT INTO aram_participant_local
+SELECT
+    match_id, champion_id, team_id, win,
+    queue_id, platform_id, season, patch_version,
+    assumeNotNull(tier) AS tier,
+    assumeNotNull(primary_style_id) AS primary_style_id,
+    assumeNotNull(primary_perk0) AS primary_perk0,
+    assumeNotNull(primary_perk1) AS primary_perk1,
+    assumeNotNull(primary_perk2) AS primary_perk2,
+    assumeNotNull(primary_perk3) AS primary_perk3,
+    assumeNotNull(sub_style_id) AS sub_style_id,
+    assumeNotNull(sub_perk0) AS sub_perk0,
+    assumeNotNull(sub_perk1) AS sub_perk1,
+    assumeNotNull(stat_perk_defense) AS stat_perk_defense,
+    assumeNotNull(stat_perk_flex) AS stat_perk_flex,
+    assumeNotNull(stat_perk_offense) AS stat_perk_offense,
+    summoner1id, summoner2id
+FROM _stg_participants_raw
+WHERE queue_id = 450
+  AND tier IS NOT NULL
+  AND patch_version IS NOT NULL;
+
+-- =====================================================
+-- [아레나] arena_participant_local 적재 (queue_id=1700)
+-- =====================================================
+INSERT INTO arena_participant_local
+SELECT
+    match_id, champion_id, team_id, win,
+    queue_id, platform_id, season, patch_version,
+    assumeNotNull(tier) AS tier,
+    assumeNotNull(primary_style_id) AS primary_style_id,
+    assumeNotNull(primary_perk0) AS primary_perk0,
+    assumeNotNull(primary_perk1) AS primary_perk1,
+    assumeNotNull(primary_perk2) AS primary_perk2,
+    assumeNotNull(primary_perk3) AS primary_perk3,
+    assumeNotNull(sub_style_id) AS sub_style_id,
+    assumeNotNull(sub_perk0) AS sub_perk0,
+    assumeNotNull(sub_perk1) AS sub_perk1,
+    assumeNotNull(stat_perk_defense) AS stat_perk_defense,
+    assumeNotNull(stat_perk_flex) AS stat_perk_flex,
+    assumeNotNull(stat_perk_offense) AS stat_perk_offense,
+    summoner1id, summoner2id
+FROM _stg_participants_raw
+WHERE queue_id = 1700
+  AND tier IS NOT NULL
+  AND patch_version IS NOT NULL;
+
+-- =====================================================
+-- 워터마크 갱신 (match PK 단일 워터마크)
+-- =====================================================
+INSERT INTO etl_watermarks (source_table, last_id, updated_at)
+SELECT 'match', batch_max_id, now() FROM _batch_range
+WHERE (SELECT count() FROM _stg_matches) > 0;
+
+OPTIMIZE TABLE etl_watermarks FINAL;
+
+-- =====================================================
+-- 스테이징 테이블 정리
+-- =====================================================
+DROP TABLE IF EXISTS _stg_item_events;
+DROP TABLE IF EXISTS _stg_item_events_raw;
+DROP TABLE IF EXISTS _stg_skill_events;
+DROP TABLE IF EXISTS _stg_skill_events_raw;
+DROP TABLE IF EXISTS _stg_bans;
+DROP TABLE IF EXISTS _stg_participants;
+DROP TABLE IF EXISTS _stg_participants_raw;
+DROP TABLE IF EXISTS _stg_matches;
+DROP TABLE IF EXISTS _batch_range;
+DROP TABLE IF EXISTS _watermarks;
+
+-- =====================================================
+-- [선택] 벌크 로드 시 Materialized View ATTACH + 집계 백필
+-- =====================================================
+-- ATTACH TABLE mv_champion_stats;
+-- ATTACH TABLE mv_champion_bans;
+-- ATTACH TABLE mv_match_count;
+-- ATTACH TABLE mv_champion_rune_stats;
+-- ATTACH TABLE mv_champion_spell_stats;
+-- ATTACH TABLE mv_champion_skill_build_stats;
+-- ATTACH TABLE mv_champion_start_item_stats;
+-- ATTACH TABLE mv_champion_item_build_stats;
+-- ATTACH TABLE mv_champion_item_stats;
+-- ATTACH TABLE mv_champion_matchup_stats;
+--
+-- INSERT INTO champion_stats_agg
+-- SELECT patch_version, platform_id, tier, champion_id, team_position,
+--        count() AS games, sum(win) AS wins
+-- FROM match_participant_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, champion_id, team_position;
+--
+-- INSERT INTO champion_bans_agg
+-- SELECT patch_version, platform_id, tier, champion_id, count() AS bans
+-- FROM match_ban_local
+-- WHERE queue_id IN (420, 440) AND champion_id > 0
+-- GROUP BY patch_version, platform_id, tier, champion_id;
+--
+-- INSERT INTO match_count_agg
+-- SELECT patch_version, platform_id, tier, team_position, count() AS participant_rows
+-- FROM match_participant_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, team_position;
+--
+-- INSERT INTO champion_rune_stats_agg
+-- SELECT patch_version, platform_id, tier, champion_id, team_position,
+--        primary_style_id, primary_perk0, primary_perk1, primary_perk2, primary_perk3,
+--        sub_style_id, sub_perk0, sub_perk1,
+--        stat_perk_defense, stat_perk_flex, stat_perk_offense,
+--        count() AS games, sum(win) AS wins
+-- FROM match_participant_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, champion_id, team_position,
+--          primary_style_id, primary_perk0, primary_perk1, primary_perk2, primary_perk3,
+--          sub_style_id, sub_perk0, sub_perk1,
+--          stat_perk_defense, stat_perk_flex, stat_perk_offense;
+--
+-- INSERT INTO champion_spell_stats_agg
+-- SELECT patch_version, platform_id, tier, champion_id, team_position,
+--        summoner1id, summoner2id, count() AS games, sum(win) AS wins
+-- FROM match_participant_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, champion_id, team_position,
+--          summoner1id, summoner2id;
+--
+-- INSERT INTO champion_skill_build_stats_agg
+-- SELECT patch_version, platform_id, tier, champion_id, team_position,
+--        skill_build, count() AS games, sum(win) AS wins
+-- FROM match_skill_build_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, champion_id, team_position, skill_build;
+--
+-- INSERT INTO champion_start_item_stats_agg
+-- SELECT patch_version, platform_id, tier, champion_id, team_position,
+--        start_items, count() AS games, sum(win) AS wins
+-- FROM match_start_item_build_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, champion_id, team_position, start_items;
+--
+-- INSERT INTO champion_item_build_stats_agg
+-- SELECT patch_version, platform_id, tier, champion_id, team_position,
+--        item_build, count() AS games, sum(win) AS wins
+-- FROM match_item_build_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, champion_id, team_position, item_build;
+--
+-- INSERT INTO champion_item_stats_agg
+-- SELECT patch_version, platform_id, tier, champion_id, team_position,
+--        item_id, item_order, count() AS games, sum(win) AS wins
+-- FROM match_final_item_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, champion_id, team_position, item_id, item_order;
+--
+-- INSERT INTO champion_matchup_stats_agg
+-- SELECT patch_version, platform_id, tier, champion_id, team_position,
+--        opponent_champion_id, count() AS games, sum(win) AS wins
+-- FROM match_matchup_local
+-- WHERE queue_id IN (420, 440) AND team_position != ''
+-- GROUP BY patch_version, platform_id, tier, champion_id, team_position, opponent_champion_id;

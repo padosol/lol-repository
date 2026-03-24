@@ -18,4 +18,9 @@ TRUNCATE TABLE IF EXISTS match_start_item_build_local;
 TRUNCATE TABLE IF EXISTS match_item_build_local;
 TRUNCATE TABLE IF EXISTS match_final_item_local;
 TRUNCATE TABLE IF EXISTS match_matchup_local;
+TRUNCATE TABLE IF EXISTS aram_participant_local;
+TRUNCATE TABLE IF EXISTS arena_participant_local;
 -- legendary_items는 참조 데이터이므로 TRUNCATE하지 않음
+
+-- 워터마크 테이블 TRUNCATE
+TRUNCATE TABLE IF EXISTS etl_watermarks;
