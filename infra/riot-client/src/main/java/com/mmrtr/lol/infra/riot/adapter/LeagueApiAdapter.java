@@ -1,0 +1,61 @@
+package com.mmrtr.lol.infra.riot.adapter;
+
+import com.mmrtr.lol.common.type.Platform;
+import com.mmrtr.lol.common.type.Tier;
+import com.mmrtr.lol.domain.league.application.port.LeagueApiPort;
+import com.mmrtr.lol.infra.riot.dto.league.LeagueListDto;
+import com.mmrtr.lol.infra.riot.service.RiotApiService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class LeagueApiAdapter implements LeagueApiPort {
+
+    private final RiotApiService riotApiService;
+    private final Executor requestExecutor;
+
+    @Override
+    public Map<Tier, List<LeagueEntry>> getApexEntries(String queue, String platformName) {
+        Platform platform = Platform.valueOfName(platformName);
+        log.debug("getApexEntries queue={} platform={}", queue, platformName);
+
+        CompletableFuture<LeagueListDto> challengerFuture =
+                riotApiService.getApexLeague("challengerleagues", queue, platform, requestExecutor);
+        CompletableFuture<LeagueListDto> grandmasterFuture =
+                riotApiService.getApexLeague("grandmasterleagues", queue, platform, requestExecutor);
+
+        CompletableFuture.allOf(challengerFuture, grandmasterFuture).join();
+
+        return Map.of(
+                Tier.CHALLENGER, toEntries(challengerFuture.join()),
+                Tier.GRANDMASTER, toEntries(grandmasterFuture.join())
+        );
+    }
+
+    private List<LeagueEntry> toEntries(LeagueListDto dto) {
+        if (dto == null || dto.getEntries() == null) {
+            return List.of();
+        }
+        return dto.getEntries().stream()
+                .map(item -> new LeagueEntry(
+                        item.getPuuid(),
+                        item.getLeaguePoints(),
+                        item.getRank(),
+                        item.getWins(),
+                        item.getLosses(),
+                        item.isVeteran(),
+                        item.isInactive(),
+                        item.isFreshBlood(),
+                        item.isHotStreak()
+                ))
+                .toList();
+    }
+}

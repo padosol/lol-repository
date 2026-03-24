@@ -55,4 +55,17 @@ public class TierCutoffRepositoryImpl implements TierCutoffRepositoryPort {
     public void clearBackup(String queue) {
         jpaRepository.clearBackup(queue);
     }
+
+    @Override
+    @Transactional
+    public void replaceAllCutoffs(String queue, List<TierCutoff> cutoffs) {
+        jpaRepository.deleteByQueue(queue);
+
+        List<TierCutoffEntity> entities = cutoffs.stream()
+                .map(TierCutoffEntity::fromDomain)
+                .toList();
+        jpaRepository.saveAll(entities);
+
+        jpaRepository.updateLpChangesFromBackup(queue);
+    }
 }
