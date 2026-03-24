@@ -73,4 +73,31 @@ public class SummonerRankingRepositoryImpl implements SummonerRankingRepositoryP
     public void clearBackup(String queue) {
         jpaRepository.clearBackup(queue);
     }
+
+    @Override
+    @Transactional
+    public void replaceAllRankings(String queue, List<SummonerRanking> rankings) {
+        jpaRepository.deleteByQueue(queue);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<SummonerRankingEntity> entities = rankings.stream()
+                .map(SummonerRankingEntity::fromDomain)
+                .toList();
+
+        for (int i = 0; i < entities.size(); i++) {
+            entityManager.persist(entities.get(i));
+            if ((i + 1) % BATCH_SIZE == 0) {
+                entityManager.flush();
+                entityManager.clear();
+            }
+        }
+
+        if (entities.size() % BATCH_SIZE != 0) {
+            entityManager.flush();
+            entityManager.clear();
+        }
+
+        jpaRepository.updateRankChangesFromBackup(queue);
+    }
 }

@@ -4,6 +4,7 @@ import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
 import com.mmrtr.lol.infra.riot.dto.champion.ChampionInfo;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
+import com.mmrtr.lol.infra.riot.dto.league.LeagueListDto;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.infra.riot.dto.spectator.CurrentGameInfoVO;
@@ -129,6 +130,18 @@ public class RiotApiService {
                                 .retrieve()
                                 .body(TimelineDto.class)
                 , executor
+        );
+    }
+
+    public CompletableFuture<LeagueListDto> getApexLeague(
+            String tierPath, String queue, Platform platform, Executor executor) {
+        String path = String.format("/lol/league/v4/%s/by-queue/%s", tierPath, queue);
+        return CompletableFuture.supplyAsync(() ->
+                        riotRestClient.get()
+                                .uri(platform.getPlatformHost() + path)
+                                .retrieve()
+                                .body(LeagueListDto.class),
+                executor
         );
     }
 
