@@ -164,8 +164,8 @@ public class RabbitMqConfig {
         simpleFactory.setChannelTransacted(true);
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
 
-        simpleFactory.setConcurrentConsumers(3);
-        simpleFactory.setMaxConcurrentConsumers(3);
+        simpleFactory.setConcurrentConsumers(20);
+        simpleFactory.setMaxConcurrentConsumers(20);
 
         simpleFactory.setPrefetchCount(1);
         simpleFactory.setReceiveTimeout(1000L);
