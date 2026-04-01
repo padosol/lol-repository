@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.riot.adapter;
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.common.type.Tier;
 import com.mmrtr.lol.domain.league.application.port.LeagueApiPort;
+import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueListDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import lombok.RequiredArgsConstructor;
@@ -11,8 +12,10 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -21,6 +24,28 @@ public class LeagueApiAdapter implements LeagueApiPort {
 
     private final RiotApiService riotApiService;
     private final Executor requestExecutor;
+
+    @Override
+    public Set<LeagueEntry> getLeagueEntries(String queue, String tier, String division, int page, String platformName) {
+        Platform platform = Platform.valueOfName(platformName);
+        Set<LeagueEntryDto> entries = riotApiService.getLeagueEntries(queue, tier, division, page, platform);
+        if (entries == null || entries.isEmpty()) {
+            return Set.of();
+        }
+        return entries.stream()
+                .map(dto -> new LeagueEntry(
+                        dto.getPuuid(),
+                        dto.getLeaguePoints(),
+                        dto.getRank(),
+                        dto.getWins(),
+                        dto.getLosses(),
+                        dto.isVeteran(),
+                        dto.isInactive(),
+                        dto.isFreshBlood(),
+                        dto.isHotStreak()
+                ))
+                .collect(Collectors.toSet());
+    }
 
     @Override
     public Map<Tier, List<LeagueEntry>> getApexEntries(String queue, String platformName) {

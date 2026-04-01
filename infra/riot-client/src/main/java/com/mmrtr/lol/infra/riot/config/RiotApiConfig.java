@@ -1,6 +1,7 @@
 package com.mmrtr.lol.infra.riot.config;
 
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
+import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.infra.riot.interceptor.RateLimitInterceptor;
 import com.mmrtr.lol.infra.riot.interceptor.RetryInterceptor;
@@ -18,8 +19,10 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.concurrent.Semaphore;
 
 @Slf4j
 @Configuration
@@ -50,24 +53,46 @@ public class RiotApiConfig {
         RateLimitInterceptor rateLimitInterceptor = new RateLimitInterceptor(
                 redissonClient, hostRateLimitResolver);
 
+        Semaphore concurrencyLimiter = new Semaphore(30);
+        ClientHttpRequestInterceptor concurrencyInterceptor = (request, body, execution) -> {
+            try {
+                concurrencyLimiter.acquire();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while waiting for concurrency permit", e);
+            }
+            try {
+                return execution.execute(request, body);
+            } finally {
+                concurrencyLimiter.release();
+            }
+        };
+
         // Interceptor 실행 순서: 등록 역순
         // 1. retryInterceptor (가장 바깥 - Retry 래핑)
         // 2. rateLimitInterceptor (Rate Limit 체크)
         // 3. logRequest (로깅)
+        // 4. concurrencyInterceptor (동시 요청 수 제한 - 가장 안쪽)
         return RestClient.builder()
                 .requestFactory(new JdkClientHttpRequestFactory(httpClient))
                 .defaultHeader("X-Riot-Token", riotAPIProperties.getApiKey())
                 .defaultHeader("User-Agent", "MMRTR")
                 .defaultHeader("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
                 .defaultHeader("Accept-Charset", "application/x-www-form-urlencoded; charset=UTF-8")
-                .requestInterceptor(retryInterceptor)
+//                .requestInterceptor(retryInterceptor)
                 .requestInterceptor(rateLimitInterceptor)
                 .requestInterceptor(logRequest())
+                .requestInterceptor(concurrencyInterceptor)
+                .defaultStatusHandler(status -> status.value() == 404, (request, response) -> {
+                    throw new RiotClientNotFoundException(
+                            response.getStatusCode(), response.getStatusText(), LogLevel.WARN);
+                })
                 .defaultStatusHandler(HttpStatusCode::is4xxClientError, (request, response) -> {
                     throw new RiotClientException(
                             response.getStatusCode(), response.getStatusText(), LogLevel.WARN);
                 })
                 .defaultStatusHandler(HttpStatusCode::is5xxServerError, (request, response) -> {
+                    log.warn("5xx error headers: {}", response.getHeaders());
                     throw new RiotServerException(response.getStatusCode(), response.getStatusText());
                 })
                 .build();

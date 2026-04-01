@@ -35,6 +35,7 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
                 }
 
                 if (response.getStatusCode().is5xxServerError()) {
+                    log.error("{}", response.getHeaders());
                     throw new CoreException(ErrorType.DEFAULT_ERROR, "예상치 못한 서버에러가 발생했습니다.");
                 }
 

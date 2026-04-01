@@ -10,7 +10,7 @@ server:
 logging:
   level:
     root: INFO
-    com.mmrtr.lol: DEBUG
+    com.mmrtr.lol: INFO
 
 ---
 spring:
