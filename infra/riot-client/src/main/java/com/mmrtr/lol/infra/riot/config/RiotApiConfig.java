@@ -4,7 +4,6 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.infra.riot.interceptor.RateLimitInterceptor;
-import com.mmrtr.lol.infra.riot.interceptor.RetryInterceptor;
 import com.mmrtr.lol.infra.riot.ratelimit.HostRateLimitResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,11 +48,11 @@ public class RiotApiConfig {
                 .connectTimeout(Duration.ofSeconds(riotAPIProperties.getTimeout()))
                 .build();
 
-        RetryInterceptor retryInterceptor = new RetryInterceptor(retryTemplate());
+//        RetryInterceptor retryInterceptor = new RetryInterceptor(retryTemplate());
         RateLimitInterceptor rateLimitInterceptor = new RateLimitInterceptor(
                 redissonClient, hostRateLimitResolver);
 
-        Semaphore concurrencyLimiter = new Semaphore(30);
+        Semaphore concurrencyLimiter = new Semaphore(20);
         ClientHttpRequestInterceptor concurrencyInterceptor = (request, body, execution) -> {
             try {
                 concurrencyLimiter.acquire();
