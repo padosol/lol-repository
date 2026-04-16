@@ -5,9 +5,9 @@ import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRenewalService;
 import com.mmrtr.lol.infra.redis.service.RedisLockHandler;
+import com.mmrtr.lol.support.aop.TraceLogging;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
@@ -17,6 +17,7 @@ import java.time.Duration;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@TraceLogging
 public class SummonerRenewalListener {
 
     private static final Duration LOCK_TIMEOUT = Duration.ofMinutes(3L);
@@ -31,9 +32,7 @@ public class SummonerRenewalListener {
         Platform platform = Platform.valueOfName(summonerMessage.getPlatformId());
         if (platform == null) {
             log.error("유효하지 않은 platform: {}, message: {}", summonerMessage.getPlatformId(), summonerMessage);
-            throw new AmqpRejectAndDontRequeueException(
-                    "유효하지 않은 platform: " + summonerMessage.getPlatformId()
-            );
+            return;
         }
 
         String puuid = summonerMessage.getPuuid();
@@ -44,6 +43,8 @@ public class SummonerRenewalListener {
 
         try {
             summonerRenewalService.renewSummoner(puuid, platform);
+        } catch (Exception e) {
+            log.error(e.getMessage());
         } finally {
             log.info("전적 갱신 요청 완료 {}", summonerMessage);
             redisLockHandler.deleteSummonerRenewal(puuid);

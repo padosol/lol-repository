@@ -15,6 +15,7 @@ import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -37,7 +38,7 @@ public class RateLimitInterceptor implements ClientHttpRequestInterceptor {
         RateLimitType type = resolver.resolve(request.getURI());
         RRateLimiter limiter = getOrCreateRateLimiter(type);
 
-        if (!limiter.tryAcquire(1)) {
+        if (!limiter.tryAcquire(1, Duration.ofSeconds(3))) {
             log.warn("Rate limit exceeded for [{}]", type.getBeanName());
             throw new RiotClientException(HttpStatus.TOO_MANY_REQUESTS, "Rate limit 초과", LogLevel.WARN);
         }
@@ -50,7 +51,7 @@ public class RateLimitInterceptor implements ClientHttpRequestInterceptor {
             log.debug("RateLimiter Lazy Load: {}", type.getBeanName());
             RRateLimiter limiter = redissonClient.getRateLimiter(type.getKey());
 
-            limiter.trySetRate(
+            limiter.setRate(
                     RateType.OVERALL,
                     type.getRateLimit(),
                     type.getDuration()

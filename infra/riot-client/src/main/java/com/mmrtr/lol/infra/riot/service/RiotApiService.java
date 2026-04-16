@@ -133,6 +133,16 @@ public class RiotApiService {
         );
     }
 
+    public Set<LeagueEntryDto> getLeagueEntries(
+            String queue, String tier, String division, int page, Platform platform) {
+        String path = String.format("/lol/league/v4/entries/%s/%s/%s", queue, tier, division);
+        return riotRestClient.get()
+                .uri(platform.getPlatformHost() + path, uriBuilder ->
+                        uriBuilder.queryParam("page", page).build())
+                .retrieve()
+                .body(new ParameterizedTypeReference<Set<LeagueEntryDto>>() {});
+    }
+
     public CompletableFuture<LeagueListDto> getApexLeague(
             String tierPath, String queue, Platform platform, Executor executor) {
         String path = String.format("/lol/league/v4/%s/by-queue/%s", tierPath, queue);

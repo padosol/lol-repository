@@ -33,7 +33,6 @@ public class SummonerRevisionChecker {
             log.info("revision 비교 - DB: {}, RIOT: {}", existingSummoner.get().getRevisionInfo().revisionDate(), riotRevisionDate);
             if (existingSummoner.get().getRevisionInfo().revisionDate().equals(riotRevisionDate)) {
                 log.info("revisionDate is same. No need to update. revision: {}", riotRevisionDate);
-                summonerRepositoryPort.updateLastRiotCallDate(puuid);
                 return new RevisionCheckResult(false, dbRevisionDateSeconds);
             }
         }

@@ -17,7 +17,7 @@ public class ListenerRateLimiterConfig {
     public RRateLimiter globalApiRateLimiter(RedissonClient redissonClient) {
         RRateLimiter limiter = redissonClient.getRateLimiter("global:api:call:limiter");
 
-        limiter.trySetRate(
+        limiter.setRate(
                 RateType.OVERALL,
                 GLOBAL_RATE_LIMIT,
                 Duration.ofSeconds(1)

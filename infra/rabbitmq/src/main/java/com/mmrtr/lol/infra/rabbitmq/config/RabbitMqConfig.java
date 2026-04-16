@@ -118,6 +118,7 @@ public class RabbitMqConfig {
         connectionFactory.setPort(rabbitmqPort);
         connectionFactory.setUsername(rabbitmqUsername);
         connectionFactory.setPassword(rabbitmqPassword);
+        connectionFactory.setRequestedHeartBeat(60);
 
         return connectionFactory;
     }
@@ -163,8 +164,8 @@ public class RabbitMqConfig {
         simpleFactory.setChannelTransacted(true);
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
 
-        simpleFactory.setConcurrentConsumers(1);
-        simpleFactory.setMaxConcurrentConsumers(1);
+        simpleFactory.setConcurrentConsumers(20);
+        simpleFactory.setMaxConcurrentConsumers(20);
 
         simpleFactory.setPrefetchCount(1);
         simpleFactory.setReceiveTimeout(1000L);
@@ -183,8 +184,8 @@ public class RabbitMqConfig {
         configurer.configure(simpleFactory, factory);
 
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
-        simpleFactory.setConcurrentConsumers(5);
-        simpleFactory.setMaxConcurrentConsumers(5);
+        simpleFactory.setConcurrentConsumers(1);
+        simpleFactory.setMaxConcurrentConsumers(1);
 
         simpleFactory.setPrefetchCount(1);
         simpleFactory.setReceiveTimeout(1000L);
