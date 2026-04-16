@@ -25,6 +25,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 @Slf4j
 @Service
@@ -37,6 +40,7 @@ public class MatchService implements MatchRepositoryPort {
     private final MatchTeamRepositoryImpl matchTeamRepository;
     private final MatchBanRepositoryImpl matchBanRepository;
     private final TimeLineService timeLineService;
+    private final Executor timelineSaveExecutor;
 
     @Override
     @Transactional
@@ -117,21 +121,13 @@ public class MatchService implements MatchRepositoryPort {
         matchRepository.bulkSave(matchEntities);
         log.debug("[saveAll] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
 
-        t = System.currentTimeMillis();
-        matchSummonerRepository.bulkSave(allMatchParticipants);
-        log.debug("[saveAll] bulkSave matchParticipant: {}ms ({}건)", System.currentTimeMillis() - t, allMatchParticipants.size());
-
-        t = System.currentTimeMillis();
-        challengesRepository.bulkSave(allChallenges);
-        log.debug("[saveAll] bulkSave challenges: {}ms ({}건)", System.currentTimeMillis() - t, allChallenges.size());
-
-        t = System.currentTimeMillis();
-        matchTeamRepository.bulkSave(allMatchTeams);
-        log.debug("[saveAll] bulkSave matchTeam: {}ms ({}건)", System.currentTimeMillis() - t, allMatchTeams.size());
-
-        t = System.currentTimeMillis();
-        matchBanRepository.bulkSave(allMatchBans);
-        log.debug("[saveAll] bulkSave matchBan: {}ms ({}건)", System.currentTimeMillis() - t, allMatchBans.size());
+        CompletableFuture<?>[] futures = {
+            runBulkSave("matchParticipant", allMatchParticipants, matchSummonerRepository::bulkSave),
+            runBulkSave("challenges", allChallenges, challengesRepository::bulkSave),
+            runBulkSave("matchTeam", allMatchTeams, matchTeamRepository::bulkSave),
+            runBulkSave("matchBan", allMatchBans, matchBanRepository::bulkSave),
+        };
+        CompletableFuture.allOf(futures).join();
 
         if (timelineDtos != null && !timelineDtos.isEmpty()) {
             t = System.currentTimeMillis();
@@ -139,7 +135,20 @@ public class MatchService implements MatchRepositoryPort {
             log.debug("[saveAll] saveAll timelines: {}ms", System.currentTimeMillis() - t);
         }
 
-        log.debug("[saveAll] 총 소요: {}ms", System.currentTimeMillis() - start);
+        log.info("[saveAll] 총 소요: {}ms", System.currentTimeMillis() - start);
+    }
+
+    private <T> CompletableFuture<Void> runBulkSave(String name, List<T> entities,
+                                                      Consumer<List<T>> saveFunction) {
+        if (entities.isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return CompletableFuture.runAsync(() -> {
+            long t = System.currentTimeMillis();
+            saveFunction.accept(entities);
+            log.debug("[saveAll] bulkSave {}: {}ms ({}건)", name,
+                    System.currentTimeMillis() - t, entities.size());
+        }, timelineSaveExecutor);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.mmrtr.lol.infra.riot.config;
 
+import com.mmrtr.lol.support.mdc.MdcAwareExecutorService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -57,11 +58,12 @@ public class AsyncConfig {
     }
 
     private ExecutorService newVirtualThreadExecutor(String prefix, long startIndex) {
-        return Executors.newThreadPerTaskExecutor(
+        ExecutorService delegate = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual()
                         .name(prefix, startIndex)
                         .factory()
         );
+        return new MdcAwareExecutorService(delegate);
     }
 
     private ThreadPoolTaskExecutor newPlatformThreadPoolExecutor(

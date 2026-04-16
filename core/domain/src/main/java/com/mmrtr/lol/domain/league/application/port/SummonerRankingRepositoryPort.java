@@ -17,4 +17,6 @@ public interface SummonerRankingRepositoryPort {
     void updateRankChangesFromBackup(String queue);
 
     void clearBackup(String queue);
+
+    void replaceAllRankings(String queue, List<SummonerRanking> rankings);
 }

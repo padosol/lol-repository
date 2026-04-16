@@ -14,6 +14,7 @@ spring:
     port: 5672
     username: guest
     password: guest
+    requested-heartbeat: 60
 
 ---
 spring:
@@ -26,6 +27,7 @@ spring:
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
     connection-timeout: 30000ms
+    requested-heartbeat: 60
 
 ---
 spring:
@@ -38,3 +40,4 @@ spring:
     username: guest
     password: guest
     connection-timeout: 30000ms
+    requested-heartbeat: 60

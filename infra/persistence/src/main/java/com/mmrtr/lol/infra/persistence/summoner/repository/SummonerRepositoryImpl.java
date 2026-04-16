@@ -8,7 +8,10 @@ import org.springframework.stereotype.Repository;
 
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -26,6 +29,14 @@ public class SummonerRepositoryImpl implements SummonerRepositoryPort {
     public Optional<Summoner> findByPuuid(String puuid) {
         return jpaRepository.findById(puuid)
                 .map(SummonerEntity::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Summoner> findAllByPuuidIn(Collection<String> puuids) {
+        return jpaRepository.findAllByPuuidIn(puuids).stream()
+                .map(SummonerEntity::toDomain)
+                .collect(Collectors.toMap(Summoner::getPuuid, summoner -> summoner));
     }
 
     @Override

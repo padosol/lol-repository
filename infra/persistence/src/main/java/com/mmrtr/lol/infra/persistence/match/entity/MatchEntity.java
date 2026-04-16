@@ -39,33 +39,33 @@ public class MatchEntity {
     @Comment("게임 종료 결과")
     private String endOfGameResult;
     @Comment("게임 생성 타임스탬프")
-    private	long gameCreation;
+    private    long gameCreation;
     @Comment("게임 진행 시간 (초)")
-    private	long gameDuration;
+    private    long gameDuration;
     @Comment("게임 종료 타임스탬프")
-    private	long gameEndTimestamp;
+    private    long gameEndTimestamp;
     @Comment("게임 시작 타임스탬프")
-    private	long gameStartTimestamp;
+    private    long gameStartTimestamp;
     @Comment("게임 ID")
-    private	long gameId;
+    private    long gameId;
     @Comment("게임 모드")
-    private	String gameMode;
+    private    String gameMode;
     @Comment("게임 이름")
-    private	String gameName;
+    private    String gameName;
     @Comment("게임 타입")
-    private	String gameType;
+    private    String gameType;
 
     @Comment("게임 버전")
-    private	String gameVersion;
+    private    String gameVersion;
 
     @Comment("맵 ID")
-    private	int mapId;
+    private    int mapId;
     @Comment("큐 ID")
-    private	int queueId;
+    private    int queueId;
     @Comment("플랫폼 ID")
-    private	String platformId;
+    private    String platformId;
     @Comment("토너먼트 코드")
-    private	String tournamentCode;
+    private    String tournamentCode;
 
     // 시즌
     @Comment("시즌")

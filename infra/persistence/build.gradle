@@ -28,7 +28,3 @@ dependencies {
     testImplementation 'org.testcontainers:junit-jupiter'
     testRuntimeOnly 'org.postgresql:postgresql'
 }
-
-tasks.named('test') {
-    enabled = true
-}

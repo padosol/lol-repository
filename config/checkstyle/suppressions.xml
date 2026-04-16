@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+    <!-- Repository 구현체의 긴 파일 허용 -->
+    <suppress checks="FileLength" files=".*RepositoryImpl\.java"/>
+    <!-- Entity 클래스의 긴 파일 허용 -->
+    <suppress checks="FileLength" files=".*Entity\.java"/>
+    <!-- Service 클래스의 긴 파일 허용 -->
+    <suppress checks="FileLength" files=".*Service\.java"/>
+</suppressions>

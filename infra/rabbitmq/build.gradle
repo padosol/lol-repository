@@ -3,6 +3,7 @@ dependencies {
     implementation project(':core:enum')
     implementation project(':infra:redis')
     implementation project(':infra:riot-client')  // 비매치 API (account, summoner, league)
+    implementation project(':support')
 
     // RabbitMQ
     implementation 'org.springframework.boot:spring-boot-starter-amqp'

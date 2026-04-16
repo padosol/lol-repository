@@ -15,4 +15,6 @@ public interface TierCutoffRepositoryPort {
     void updateLpChangesFromBackup(String queue);
 
     void clearBackup(String queue);
+
+    void replaceAllCutoffs(String queue, List<TierCutoff> cutoffs);
 }
