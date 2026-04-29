@@ -6,6 +6,11 @@ spring:
       - classpath:application-redis.yml
       - classpath:application-rabbitmq.yml
       - classpath:application-riot.yml
+  batch:
+    jdbc:
+      initialize-schema: never
+    job:
+      enabled: false
   jackson:
     deserialization:
       fail-on-unknown-properties: false
@@ -36,3 +41,18 @@ lol:
   vt:
     executors:
       enabled: ${LOL_VT_EXECUTORS_ENABLED:${LOL_VT_ENABLED:true}}
+  backfill:
+    match-participant-build:
+      range:
+        start-id: ${BACKFILL_MP_BUILD_START_ID:1}
+        end-id: ${BACKFILL_MP_BUILD_END_ID:1}
+      chunk:
+        size: ${BACKFILL_MP_BUILD_CHUNK_SIZE:100000}
+        parallelism: ${BACKFILL_MP_BUILD_PARALLELISM:2}
+        fetch-size: ${BACKFILL_MP_BUILD_FETCH_SIZE:1000}
+      filter:
+        season: ${BACKFILL_MP_BUILD_SEASON:16}
+        queue-ids: ${BACKFILL_MP_BUILD_QUEUE_IDS:420,440}
+      gcs:
+        bucket: ${BACKFILL_MP_BUILD_GCS_BUCKET:}
+        prefix: ${BACKFILL_MP_BUILD_GCS_PREFIX:match_participant_build/backfill}
