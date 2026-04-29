@@ -75,6 +75,9 @@ git submodule update --remote lol-db-schema
 # 테스트 실행
 ./gradlew test
 
+# 코드 스타일 검증 (Checkstyle)
+./gradlew check
+
 # 특정 모듈 빌드
 ./gradlew :app:build
 ./gradlew :core:domain:build
@@ -117,3 +120,28 @@ git submodule update --remote lol-db-schema
 테스트 작성 시 [테스트 가이드](./docs/testing-guide.md)를 참조합니다.
 - 레이어별 테스트 전략, 어노테이션, 모킹 규칙 등을 정의
 - 기존 패턴: `infra/persistence`의 `SummonerRankingJpaRepositoryTest` 참조
+
+## 7. 코드 변경 후 검증 (필수)
+
+Java 코드를 추가/수정한 뒤에는 **반드시** 아래 중 하나를 실행해 검증한다.
+컴파일 통과만으로는 부족 — 이 프로젝트는 Checkstyle 을 build 단계에서
+강제하므로 위반이 있으면 CI 가 실패한다.
+
+```bash
+# 권장: 모듈 전체 검증 (compile + checkstyle + test)
+./gradlew check
+
+# 빠르게 단일 모듈만
+./gradlew :app:check
+
+# 배포 직전 풀 빌드
+./gradlew build
+```
+
+`./gradlew :app:compileJava` 만 실행하면 **Checkstyle 이 돌지 않는다**.
+컴파일 통과를 작업 완료의 기준으로 삼지 말 것.
+
+가장 흔한 위반:
+- `UnusedImports` — 미사용 import (특히 record 로 리팩토링 후 도우미 클래스 import 가 남는 경우)
+- 미사용 변수 / 매개변수
+- 라인 길이 초과

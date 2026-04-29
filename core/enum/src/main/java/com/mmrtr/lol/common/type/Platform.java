@@ -27,9 +27,11 @@ public enum Platform {
     ;
 
     private static final Map<String, Platform> PLATFORM_NAME = new HashMap<>();
+    private static final Map<String, Platform> PLATFORM_ID_MAP = new HashMap<>();
     static {
         for (Platform p : values()) {
             PLATFORM_NAME.put(p.name(), p);
+            PLATFORM_ID_MAP.put(p.platformId.toUpperCase(), p);
         }
     }
 
@@ -48,5 +50,10 @@ public enum Platform {
     public static Platform valueOfName(String name) {
         if (name == null) return null;
         return PLATFORM_NAME.get(name.toUpperCase());
+    }
+
+    public static Platform valueOfPlatformId(String platformId) {
+        if (platformId == null) return null;
+        return PLATFORM_ID_MAP.get(platformId.toUpperCase());
     }
 }

@@ -12,7 +12,16 @@ dependencies {
     implementation project(':infra:riot-client')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-batch'
+    implementation 'org.springframework.batch:spring-batch-integration'
 
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Redisson (dedicated backfill rate limiter)
+    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+
+    // Google Cloud Storage (match_participant_build backfill: NDJSON export → GCS)
+    implementation platform('com.google.cloud:libraries-bom:26.43.0')
+    implementation 'com.google.cloud:google-cloud-storage'
 }

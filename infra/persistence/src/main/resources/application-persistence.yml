@@ -16,12 +16,15 @@ spring:
     activate:
       on-profile: local
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?reWriteBatchedInserts=true
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?reWriteBatchedInserts=true&tcpKeepAlive=true
     driver-class-name: org.postgresql.Driver
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 15
+      leak-detection-threshold: 300000
+      max-lifetime: 1500000
+      keepalive-time: 300000
   jpa:
     hibernate:
       ddl-auto: validate
@@ -40,12 +43,15 @@ spring:
     activate:
       on-profile: prod
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?reWriteBatchedInserts=true
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?reWriteBatchedInserts=true&tcpKeepAlive=true
     driver-class-name: org.postgresql.Driver
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 15
+      leak-detection-threshold: 300000
+      max-lifetime: 1500000
+      keepalive-time: 300000
   jpa:
     hibernate:
       ddl-auto: validate
@@ -65,12 +71,15 @@ spring:
     activate:
       on-profile: dev
   datasource:
-    url: jdbc:postgresql://lol-postgres:5432/postgres?reWriteBatchedInserts=true
+    url: jdbc:postgresql://lol-postgres:5432/postgres?reWriteBatchedInserts=true&tcpKeepAlive=true
     driver-class-name: org.postgresql.Driver
     username: postgres
     password: postgres
     hikari:
       maximum-pool-size: 15
+      leak-detection-threshold: 300000
+      max-lifetime: 1500000
+      keepalive-time: 300000
   jpa:
     hibernate:
       ddl-auto: validate

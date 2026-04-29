@@ -40,6 +40,7 @@ public class MatchService implements MatchRepositoryPort {
     private final MatchTeamRepositoryImpl matchTeamRepository;
     private final MatchBanRepositoryImpl matchBanRepository;
     private final TimeLineService timeLineService;
+    private final TimelineEventJsonService timelineEventJsonService;
     private final Executor timelineSaveExecutor;
 
     @Override
@@ -131,8 +132,20 @@ public class MatchService implements MatchRepositoryPort {
 
         if (timelineDtos != null && !timelineDtos.isEmpty()) {
             t = System.currentTimeMillis();
-            timeLineService.saveAll(matchEntities, timelineDtos);
-            log.debug("[saveAll] saveAll timelines: {}ms", System.currentTimeMillis() - t);
+            CompletableFuture<Void> participantFrameSave = CompletableFuture.runAsync(() -> {
+                long inner = System.currentTimeMillis();
+                timeLineService.saveAll(matchEntities, timelineDtos);
+                log.debug("[saveAll] saveAll timelines: {}ms", System.currentTimeMillis() - inner);
+            }, timelineSaveExecutor);
+
+            CompletableFuture<Void> eventJsonSave = CompletableFuture.runAsync(() -> {
+                long inner = System.currentTimeMillis();
+                timelineEventJsonService.saveAll(timelineDtos);
+                log.debug("[saveAll] saveAll timelines (json): {}ms", System.currentTimeMillis() - inner);
+            }, timelineSaveExecutor);
+
+            CompletableFuture.allOf(participantFrameSave, eventJsonSave).join();
+            log.debug("[saveAll] saveAll timelines (parallel total): {}ms", System.currentTimeMillis() - t);
         }
 
         log.info("[saveAll] 총 소요: {}ms", System.currentTimeMillis() - start);
