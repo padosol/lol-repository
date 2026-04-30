@@ -28,32 +28,32 @@ import org.springframework.transaction.PlatformTransactionManager;
 @RequiredArgsConstructor
 public class BackfillJobConfig {
 
-    public static final String JOB_NAME = "matchParticipantBuildBackfillJob";
-    private static final String PARTITION_STEP = "mpBuildPartitionStep";
-    private static final String CHUNK_STEP = "mpBuildChunkStep";
-    private static final String MANIFEST_STEP = "mpBuildManifestStep";
-    private static final String WORKER_PREFIX = "mp-build-backfill-";
+    public static final String JOB_NAME = "lolBackfillJob";
+    private static final String PARTITION_STEP = "backfillPartitionStep";
+    private static final String CHUNK_STEP = "backfillChunkStep";
+    private static final String MANIFEST_STEP = "backfillManifestStep";
+    private static final String WORKER_PREFIX = "lol-backfill-";
 
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager;
 
     @Bean
-    public Job matchParticipantBuildBackfillJob(Step mpBuildPartitionStep, Step mpBuildManifestStep) {
+    public Job lolBackfillJob(Step backfillPartitionStep, Step backfillManifestStep) {
         return new JobBuilder(JOB_NAME, jobRepository)
-                .start(mpBuildPartitionStep)
-                .next(mpBuildManifestStep)
+                .start(backfillPartitionStep)
+                .next(backfillManifestStep)
                 .build();
     }
 
     @Bean
-    public Step mpBuildPartitionStep(
+    public Step backfillPartitionStep(
             IdRangePartitioner idRangePartitioner,
-            Step mpBuildChunkStep,
+            Step backfillChunkStep,
             TaskExecutor backfillTaskExecutor
     ) {
         TaskExecutorPartitionHandler handler = new TaskExecutorPartitionHandler();
         handler.setTaskExecutor(backfillTaskExecutor);
-        handler.setStep(mpBuildChunkStep);
+        handler.setStep(backfillChunkStep);
 
         return new StepBuilder(PARTITION_STEP, jobRepository)
                 .partitioner(CHUNK_STEP, idRangePartitioner)
@@ -62,14 +62,14 @@ public class BackfillJobConfig {
     }
 
     @Bean
-    public Step mpBuildChunkStep(ChunkExportTasklet chunkExportTasklet) {
+    public Step backfillChunkStep(ChunkExportTasklet chunkExportTasklet) {
         return new StepBuilder(CHUNK_STEP, jobRepository)
                 .tasklet(chunkExportTasklet, transactionManager)
                 .build();
     }
 
     @Bean
-    public Step mpBuildManifestStep(ManifestTasklet manifestTasklet) {
+    public Step backfillManifestStep(ManifestTasklet manifestTasklet) {
         return new StepBuilder(MANIFEST_STEP, jobRepository)
                 .tasklet(manifestTasklet, transactionManager)
                 .build();
@@ -107,7 +107,7 @@ public class BackfillJobConfig {
         launcherExecutor.setCorePoolSize(1);
         launcherExecutor.setMaxPoolSize(1);
         launcherExecutor.setQueueCapacity(4);
-        launcherExecutor.setThreadNamePrefix("mp-build-backfill-launcher-");
+        launcherExecutor.setThreadNamePrefix("lol-backfill-launcher-");
         launcherExecutor.initialize();
 
         TaskExecutorJobLauncher launcher = new TaskExecutorJobLauncher();

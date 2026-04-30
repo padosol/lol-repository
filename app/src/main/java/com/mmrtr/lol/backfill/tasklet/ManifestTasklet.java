@@ -1,6 +1,7 @@
 package com.mmrtr.lol.backfill.tasklet;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mmrtr.lol.backfill.BackfillFactType;
 import com.mmrtr.lol.backfill.BackfillProperties;
 import com.mmrtr.lol.backfill.gcs.GcsUploader;
 import lombok.RequiredArgsConstructor;
@@ -45,11 +46,15 @@ public class ManifestTasklet implements Tasklet {
     @Value("#{jobParameters['runId']}")
     private String runId;
 
+    @Value("#{jobParameters['factType']}")
+    private String factTypeCode;
+
     @Value("#{stepExecution.jobExecution}")
     private JobExecution jobExecution;
 
     @Override
     public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
+        BackfillFactType factType = BackfillFactType.fromCode(factTypeCode);
         List<Map<String, Object>> chunks = collectChunkEntries(jobExecution);
         long totalRows = chunks.stream()
                 .mapToLong(c -> ((Number) c.get("rows")).longValue())
@@ -57,6 +62,7 @@ public class ManifestTasklet implements Tasklet {
 
         Map<String, Object> manifest = Map.of(
                 "runId", runId,
+                "factType", factType.code(),
                 "schemaVersion", SCHEMA_VERSION,
                 "writtenAt", Instant.now().toString(),
                 "filter", Map.of(
@@ -75,7 +81,7 @@ public class ManifestTasklet implements Tasklet {
         byte[] content = objectMapper.writerWithDefaultPrettyPrinter()
                 .writeValueAsBytes(manifest);
         String objectName = String.format("%s/%s/_manifest.json",
-                properties.gcs().prefix(), runId);
+                factType.gcsPrefix(), runId);
         gcsUploader.uploadBytes(
                 properties.gcs().bucket(), objectName, content, "application/json");
 

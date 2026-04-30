@@ -1,6 +1,7 @@
 package com.mmrtr.lol.backfill.tasklet;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mmrtr.lol.backfill.BackfillFactType;
 import com.mmrtr.lol.backfill.BackfillProperties;
 import com.mmrtr.lol.backfill.gcs.GcsUploader;
 import com.mmrtr.lol.backfill.partition.IdRangePartitioner;
@@ -59,10 +60,14 @@ public class ChunkExportTasklet implements Tasklet {
     @Value("#{jobParameters['runId']}")
     private String runId;
 
+    @Value("#{jobParameters['factType']}")
+    private String factTypeCode;
+
     @Override
     public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-        String objectName = buildObjectName();
-        long rowsWritten = exportToGcs(objectName);
+        BackfillFactType factType = BackfillFactType.fromCode(factTypeCode);
+        String objectName = buildObjectName(factType);
+        long rowsWritten = exportToGcs(objectName, factType);
 
         ExecutionContext stepCtx = chunkContext.getStepContext()
                 .getStepExecution()
@@ -77,12 +82,12 @@ public class ChunkExportTasklet implements Tasklet {
         return RepeatStatus.FINISHED;
     }
 
-    private String buildObjectName() {
+    private String buildObjectName(BackfillFactType factType) {
         return String.format("%s/%s/chunk_%012d_%012d.ndjson.gz",
-                properties.gcs().prefix(), runId, startId, endId);
+                factType.gcsPrefix(), runId, startId, endId);
     }
 
-    private long exportToGcs(String objectName) throws IOException {
+    private long exportToGcs(String objectName, BackfillFactType factType) throws IOException {
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
         jdbc.getJdbcTemplate().setFetchSize(properties.chunk().fetchSize());
 
@@ -100,7 +105,7 @@ public class ChunkExportTasklet implements Tasklet {
              BufferedWriter writer = new BufferedWriter(
                      new OutputStreamWriter(gzip, StandardCharsets.UTF_8))) {
 
-            jdbc.query(aggregationSql.get(), params, rs -> {
+            jdbc.query(aggregationSql.get(factType), params, rs -> {
                 try {
                     writer.write(rowToJson(rs));
                     writer.newLine();
