@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/internal/backfill/match-participant-build")
+@RequestMapping("/internal/backfill/{factType}")
 public class BackfillController {
 
     private final JobLauncher jobLauncher;
@@ -30,21 +30,26 @@ public class BackfillController {
 
     public BackfillController(
             @Qualifier("backfillJobLauncher") JobLauncher jobLauncher,
-            Job matchParticipantBuildBackfillJob,
+            Job lolBackfillJob,
             BackfillProgressService progressService
     ) {
         this.jobLauncher = jobLauncher;
-        this.job = matchParticipantBuildBackfillJob;
+        this.job = lolBackfillJob;
         this.progressService = progressService;
     }
 
     @PostMapping("/run")
-    public ResponseEntity<Map<String, Object>> run(@RequestBody(required = false) RunRequest request) {
+    public ResponseEntity<Map<String, Object>> run(
+            @PathVariable String factType,
+            @RequestBody(required = false) RunRequest request
+    ) {
+        BackfillFactType type = BackfillFactType.fromCode(factType);
         String runId = (request != null && request.runId() != null)
                 ? request.runId()
                 : "run-" + Instant.now().toEpochMilli();
 
         JobParametersBuilder builder = new JobParametersBuilder()
+                .addString("factType", type.code(), true)
                 .addString("runId", runId, true);
         if (request != null) {
             if (request.startId() != null) {
@@ -55,25 +60,34 @@ public class BackfillController {
             }
         }
 
-        return launch(runId, builder.toJobParameters());
+        return launch(type, runId, builder.toJobParameters());
     }
 
     /**
-     * 이전 실행의 jobParameters(runId/startId/endId) 를 그대로 재사용해서 재실행.
+     * 이전 실행의 jobParameters(factType/runId/startId/endId) 를 그대로 재사용해서 재실행.
      * Spring Batch 가 같은 JobInstance 로 인식하여 COMPLETED 청크는 자동 스킵.
      */
     @PostMapping("/runs/{runId}/resume")
-    public ResponseEntity<Map<String, Object>> resume(@PathVariable String runId) {
-        return progressService.findLatestExecutionByRunId(runId)
-                .map(prev -> launch(runId, prev.getJobParameters()))
+    public ResponseEntity<Map<String, Object>> resume(
+            @PathVariable String factType,
+            @PathVariable String runId
+    ) {
+        BackfillFactType type = BackfillFactType.fromCode(factType);
+        return progressService.findLatestExecutionByRunId(type, runId)
+                .map(prev -> launch(type, runId, prev.getJobParameters()))
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    private ResponseEntity<Map<String, Object>> launch(String runId, JobParameters params) {
+    private ResponseEntity<Map<String, Object>> launch(
+            BackfillFactType type,
+            String runId,
+            JobParameters params
+    ) {
         try {
             JobExecution execution = jobLauncher.run(job, params);
             return ResponseEntity.ok(Map.of(
                     "jobName", BackfillJobConfig.JOB_NAME,
+                    "factType", type.code(),
                     "runId", runId,
                     "jobExecutionId", execution.getId(),
                     "status", execution.getStatus().toString()
@@ -85,21 +99,28 @@ public class BackfillController {
 
     @GetMapping("/runs")
     public List<BackfillProgressService.RunSummary> listRuns(
+            @PathVariable String factType,
             @RequestParam(name = "limit", defaultValue = "20") int limit
     ) {
-        return progressService.listRecentRuns(limit);
+        return progressService.listRecentRuns(BackfillFactType.fromCode(factType), limit);
     }
 
     @GetMapping("/runs/{runId}")
-    public ResponseEntity<BackfillProgressService.RunProgress> getRun(@PathVariable String runId) {
-        return progressService.getProgressByRunId(runId)
+    public ResponseEntity<BackfillProgressService.RunProgress> getRun(
+            @PathVariable String factType,
+            @PathVariable String runId
+    ) {
+        return progressService.getProgressByRunId(BackfillFactType.fromCode(factType), runId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/runs/{runId}/failed-chunks")
-    public ResponseEntity<List<BackfillProgressService.ChunkProgress>> getFailedChunks(@PathVariable String runId) {
-        return progressService.getProgressByRunId(runId)
+    public ResponseEntity<List<BackfillProgressService.ChunkProgress>> getFailedChunks(
+            @PathVariable String factType,
+            @PathVariable String runId
+    ) {
+        return progressService.getProgressByRunId(BackfillFactType.fromCode(factType), runId)
                 .map(progress -> progress.chunks().stream()
                         .filter(BackfillProgressService.ChunkProgress::isFailed)
                         .toList())
@@ -108,7 +129,11 @@ public class BackfillController {
     }
 
     @GetMapping("/executions/{jobExecutionId}")
-    public ResponseEntity<BackfillProgressService.RunProgress> getExecution(@PathVariable long jobExecutionId) {
+    public ResponseEntity<BackfillProgressService.RunProgress> getExecution(
+            @PathVariable String factType,
+            @PathVariable long jobExecutionId
+    ) {
+        BackfillFactType.fromCode(factType);
         return progressService.getProgressByExecutionId(jobExecutionId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());

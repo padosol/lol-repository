@@ -34,10 +34,10 @@ public class BackfillProgressService {
     private final JobExplorer jobExplorer;
 
     /**
-     * runId 로 가장 최근 JobExecution 의 진행 상황 조회.
+     * factType + runId 로 가장 최근 JobExecution 의 진행 상황 조회.
      */
-    public Optional<RunProgress> getProgressByRunId(String runId) {
-        return findLatestExecutionByRunId(runId).map(this::toProgress);
+    public Optional<RunProgress> getProgressByRunId(BackfillFactType factType, String runId) {
+        return findLatestExecutionByRunId(factType, runId).map(this::toProgress);
     }
 
     /**
@@ -48,13 +48,14 @@ public class BackfillProgressService {
     }
 
     /**
-     * 최근 실행된 N 개 run 요약.
+     * factType 별 최근 실행된 N 개 run 요약.
      */
-    public List<RunSummary> listRecentRuns(int limit) {
+    public List<RunSummary> listRecentRuns(BackfillFactType factType, int limit) {
         return jobExplorer
-                .getJobInstances(BackfillJobConfig.JOB_NAME, 0, Math.min(limit, RECENT_INSTANCES_LIMIT))
+                .getJobInstances(BackfillJobConfig.JOB_NAME, 0, RECENT_INSTANCES_LIMIT)
                 .stream()
                 .flatMap(ji -> jobExplorer.getJobExecutions(ji).stream())
+                .filter(je -> factType.code().equals(je.getJobParameters().getString("factType")))
                 .sorted(Comparator.comparing(JobExecution::getCreateTime).reversed())
                 .limit(limit)
                 .map(this::toSummary)
@@ -62,13 +63,14 @@ public class BackfillProgressService {
     }
 
     /**
-     * runId 의 가장 최근 JobExecution 조회 (재시작 / 파라미터 재사용 용도).
+     * factType + runId 의 가장 최근 JobExecution 조회 (재시작 / 파라미터 재사용 용도).
      */
-    public Optional<JobExecution> findLatestExecutionByRunId(String runId) {
+    public Optional<JobExecution> findLatestExecutionByRunId(BackfillFactType factType, String runId) {
         return jobExplorer
                 .getJobInstances(BackfillJobConfig.JOB_NAME, 0, RECENT_INSTANCES_LIMIT)
                 .stream()
                 .flatMap(ji -> jobExplorer.getJobExecutions(ji).stream())
+                .filter(je -> factType.code().equals(je.getJobParameters().getString("factType")))
                 .filter(je -> runId.equals(je.getJobParameters().getString("runId")))
                 .max(Comparator.comparing(JobExecution::getId));
     }
@@ -88,6 +90,7 @@ public class BackfillProgressService {
                 .sum();
 
         return new RunProgress(
+                exec.getJobParameters().getString("factType"),
                 exec.getJobParameters().getString("runId"),
                 exec.getId(),
                 exec.getStatus().name(),
@@ -110,6 +113,7 @@ public class BackfillProgressService {
                 .collect(Collectors.groupingBy(se -> se.getStatus().name(), Collectors.counting()));
 
         return new RunSummary(
+                exec.getJobParameters().getString("factType"),
                 exec.getJobParameters().getString("runId"),
                 exec.getId(),
                 exec.getStatus().name(),
@@ -123,7 +127,7 @@ public class BackfillProgressService {
 
     private boolean isChunkWorkerStep(StepExecution se) {
         // IdRangePartitioner 가 partition key 를 "chunk_<from>_<to>" 형태로 만듬.
-        // partition step 자체("mpBuildPartitionStep") / manifest step 은 제외.
+        // partition step / manifest step 은 제외.
         return se.getStepName() != null && se.getStepName().startsWith("chunk_");
     }
 
@@ -142,10 +146,8 @@ public class BackfillProgressService {
         );
     }
 
-    /**
-     * 단일 run 의 전체 진행 상황. chunks 는 startId 오름차순으로 정렬된 청크별 상세.
-     */
     public record RunProgress(
+            String factType,
             String runId,
             Long jobExecutionId,
             String jobStatus,
@@ -177,6 +179,7 @@ public class BackfillProgressService {
     }
 
     public record RunSummary(
+            String factType,
             String runId,
             Long jobExecutionId,
             String jobStatus,

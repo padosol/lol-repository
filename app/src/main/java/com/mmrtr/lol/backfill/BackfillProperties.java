@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.List;
 
-@ConfigurationProperties(prefix = "lol.backfill.match-participant-build")
+@ConfigurationProperties(prefix = "lol.backfill")
 public record BackfillProperties(
         Range range,
         Chunk chunk,
@@ -21,6 +21,6 @@ public record BackfillProperties(
     public record Filter(int season, List<Integer> queueIds) {
     }
 
-    public record Gcs(String bucket, String prefix) {
+    public record Gcs(String bucket) {
     }
 }
