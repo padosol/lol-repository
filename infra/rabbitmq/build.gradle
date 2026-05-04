@@ -9,5 +9,5 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
 
     // Redisson
-    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+    implementation 'org.redisson:redisson-spring-boot-starter:4.3.1'
 }
