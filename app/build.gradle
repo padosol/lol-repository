@@ -19,7 +19,7 @@ dependencies {
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
     // Redisson (dedicated backfill rate limiter)
-    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+    implementation 'org.redisson:redisson-spring-boot-starter:4.3.1'
 
     // Google Cloud Storage (match_participant_build backfill: NDJSON export → GCS)
     implementation platform('com.google.cloud:libraries-bom:26.43.0')
