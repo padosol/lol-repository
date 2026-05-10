@@ -1,11 +1,4 @@
 spring:
-  config:
-    import:
-      - classpath:application-api.yml
-      - classpath:application-persistence.yml
-      - classpath:application-redis.yml
-      - classpath:application-rabbitmq.yml
-      - classpath:application-riot.yml
   batch:
     jdbc:
       initialize-schema: never
@@ -21,7 +14,7 @@ spring:
     timeout-per-shutdown-phase: 30s
   threads:
     virtual:
-      enabled: ${LOL_VT_ENABLED:true}
+      enabled: true
 
 server:
   shutdown: graceful
@@ -30,7 +23,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: ${MANAGEMENT_ENDPOINTS_EXPOSURE_INCLUDE:health,info,metrics,prometheus,threaddump}
+        include: health,info,metrics,prometheus,threaddump
   endpoint:
     health:
       show-details: when_authorized
@@ -40,17 +33,53 @@ management:
 lol:
   vt:
     executors:
-      enabled: ${LOL_VT_EXECUTORS_ENABLED:${LOL_VT_ENABLED:true}}
+      enabled: true
   backfill:
     range:
-      start-id: ${BACKFILL_START_ID:1}
-      end-id: ${BACKFILL_END_ID:1}
+      start-id: ${BACKFILL_START_ID}
+      end-id: ${BACKFILL_END_ID}
     chunk:
-      size: ${BACKFILL_CHUNK_SIZE:100000}
-      parallelism: ${BACKFILL_PARALLELISM:2}
-      fetch-size: ${BACKFILL_FETCH_SIZE:1000}
+      size: ${BACKFILL_CHUNK_SIZE}
+      parallelism: ${BACKFILL_PARALLELISM}
+      fetch-size: ${BACKFILL_FETCH_SIZE}
     filter:
-      season: ${BACKFILL_SEASON:16}
-      queue-ids: ${BACKFILL_QUEUE_IDS:420,440}
+      season: ${BACKFILL_SEASON}
+      queue-ids: ${BACKFILL_QUEUE_IDS}
     gcs:
-      bucket: ${BACKFILL_GCS_BUCKET:}
+      bucket: ${BACKFILL_GCS_BUCKET}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+    import:
+      - api-local.yml
+      - persistence-local.yml
+      - rabbitmq-local.yml
+      - redis-local.yml
+      - riot-local.yml
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+    import:
+      - api-dev.yml
+      - persistence-dev.yml
+      - rabbitmq-dev.yml
+      - redis-dev.yml
+      - riot-dev.yml
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+    import:
+      - api-prod.yml
+      - persistence-prod.yml
+      - rabbitmq-prod.yml
+      - redis-prod.yml
+      - riot-prod.yml
