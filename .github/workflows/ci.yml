@@ -31,21 +31,6 @@ jobs:
         if: always()
         run: ./gradlew checkstyleMain --no-daemon
 
-      - name: Generate JaCoCo Report
-        if: always()
-        run: ./gradlew jacocoTestReport --no-daemon
-
-      - name: Add Coverage to PR
-        if: github.event_name == 'pull_request'
-        uses: madrapps/jacoco-report@v1.7.2
-        with:
-          paths: '**/build/reports/jacoco/test/jacocoTestReport.xml'
-          token: ${{ secrets.GITHUB_TOKEN }}
-          min-coverage-overall: 0
-          min-coverage-changed-files: 0
-          title: 'Code Coverage Report'
-          update-comment: true
-
   notify:
     name: Slack Notification
     runs-on: ubuntu-latest
