@@ -12,13 +12,13 @@ public record BackfillProperties(
         Gcs gcs
 ) {
 
-    public record Range(long startId, long endId) {
+    public record Range(Long startId, Long endId) {
     }
 
-    public record Chunk(int size, int parallelism, int fetchSize) {
+    public record Chunk(Integer size, Integer parallelism, Integer fetchSize) {
     }
 
-    public record Filter(int season, List<Integer> queueIds) {
+    public record Filter(Integer season, List<Integer> queueIds) {
     }
 
     public record Gcs(String bucket) {

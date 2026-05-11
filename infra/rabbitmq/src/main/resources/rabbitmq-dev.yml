@@ -1,0 +1,13 @@
+spring:
+  rabbitmq:
+    host: lol-rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+    connection-timeout: 30000ms
+    requested-heartbeat: 60
+
+rabbitmq:
+  queue.name: sample.queue
+  exchange.name: sample.exchange
+  routing.key: sample.key

@@ -1,0 +1,7 @@
+server:
+  port: 8111
+
+logging:
+  level:
+    root: INFO
+    com.mmrtr.lol: INFO
