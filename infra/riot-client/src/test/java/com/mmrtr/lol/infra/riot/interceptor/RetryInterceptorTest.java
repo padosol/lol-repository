@@ -2,19 +2,32 @@ package com.mmrtr.lol.infra.riot.interceptor;
 
 import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.springframework.boot.logging.LogLevel;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
@@ -33,7 +46,10 @@ class RetryInterceptorTest {
 
     private SimpleMeterRegistry meterRegistry;
     private List<Long> sleeps;
+    private RetryInterceptor retryInterceptor;
+    private JdkClientHttpRequestFactory factory;
     private RestClient restClient;
+    private String host;
 
     @BeforeEach
     void setUp() {
@@ -41,12 +57,12 @@ class RetryInterceptorTest {
         meterRegistry = new SimpleMeterRegistry();
         sleeps = new ArrayList<>();
         RetryInterceptor.Sleeper sleeper = (long ms) -> sleeps.add(ms);
-        RetryInterceptor retryInterceptor = new RetryInterceptor(meterRegistry, sleeper);
+        retryInterceptor = new RetryInterceptor(meterRegistry, sleeper);
 
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(2))
                 .build();
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofMillis(500));
 
         restClient = RestClient.builder()
@@ -54,6 +70,8 @@ class RetryInterceptorTest {
                 .baseUrl(wm.baseUrl())
                 .requestInterceptor(retryInterceptor)
                 .build();
+
+        host = URI.create(wm.baseUrl()).getHost();
     }
 
     @Test
@@ -110,7 +128,7 @@ class RetryInterceptorTest {
     }
 
     @Test
-    @DisplayName("시나리오 4: 5xx → 5xx → 200 (재시도 2회)")
+    @DisplayName("시나리오 4: 5xx → 5xx → 200 (재시도 2회) + responses counter 누적 확인")
     void scenario4_5xx_5xx_200() {
         wm.stubFor(get(urlEqualTo("/x")).inScenario("c")
                 .whenScenarioStateIs("Started")
@@ -131,6 +149,11 @@ class RetryInterceptorTest {
         assertThat(sleeps).hasSize(2);
         assertThat(sleeps.get(0)).isBetween(375L, 625L);
         assertThat(sleeps.get(1)).isBetween(750L, 1250L);
+        // riot.api.responses counter 는 매 시도마다 누적
+        assertThat(meterRegistry.counter("riot.api.responses", "status", "500", "host", host).count())
+                .isEqualTo(2.0);
+        assertThat(meterRegistry.counter("riot.api.responses", "status", "200", "host", host).count())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -160,7 +183,6 @@ class RetryInterceptorTest {
         assertThat(body).isEqualTo("ok");
         assertThat(sleeps).hasSize(1);
         assertThat(sleeps.get(0)).isBetween(11_250L, 18_750L);
-        assertThat(sleeps.get(0)).isLessThan(60_000L);
     }
 
     @Test
@@ -181,5 +203,102 @@ class RetryInterceptorTest {
         assertThat(sleeps).hasSize(1);
         assertThat(meterRegistry.counter("riot.api.retry.attempts", "outcome", "success").count())
                 .isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("시나리오 8: 로컬 limiter (RiotRateLimitException) → retry → 성공 (unit-level)")
+    void scenario8_local_limiter_then_200() throws IOException {
+        // Spring InterceptingRequestExecution 은 single-pass iterator 라 RestClient chain 안의
+        // fake interceptor 가 retry 두번째 시도에 다시 호출되지 않는다 (production 의 RateLimitInterceptor
+        // 도 동일한 한계 — 기존 spring-retry 시절부터 존재). 따라서 시나리오 8 은 RetryInterceptor 의
+        // RiotRateLimitException catch + retry 동작을 unit-level (ClientHttpRequestExecution lambda) 로 검증.
+        HttpRequest request = new TestHttpRequest(URI.create("http://example.com/x"), HttpMethod.GET);
+        ClientHttpResponse okResponse = new TestClientHttpResponse(HttpStatus.OK, "ok");
+
+        AtomicInteger calls = new AtomicInteger(0);
+        ClientHttpRequestExecution execution = (req, body) -> {
+            if (calls.incrementAndGet() == 1) {
+                throw new RiotRateLimitException(
+                        Duration.ZERO, HttpStatus.TOO_MANY_REQUESTS, "Local limiter exhausted", LogLevel.WARN);
+            }
+            return okResponse;
+        };
+
+        ClientHttpResponse response = retryInterceptor.intercept(request, new byte[0], execution);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(calls.get()).isEqualTo(2);
+        assertThat(sleeps).hasSize(1);
+        // RiotRateLimitException(Duration.ZERO) → exp backoff (INITIAL=500ms ± 25%)
+        assertThat(sleeps.get(0)).isBetween(375L, 625L);
+        assertThat(meterRegistry.counter("riot.api.retry.attempts", "outcome", "success").count())
+                .isEqualTo(1.0);
+    }
+
+    private static final class TestHttpRequest implements HttpRequest {
+        private final URI uri;
+        private final HttpMethod method;
+        private final HttpHeaders headers = new HttpHeaders();
+
+        TestHttpRequest(URI uri, HttpMethod method) {
+            this.uri = uri;
+            this.method = method;
+        }
+
+        @Override
+        public HttpMethod getMethod() {
+            return method;
+        }
+
+        @Override
+        public URI getURI() {
+            return uri;
+        }
+
+        @Override
+        public HttpHeaders getHeaders() {
+            return headers;
+        }
+
+        @Override
+        public java.util.Map<String, Object> getAttributes() {
+            return java.util.Map.of();
+        }
+    }
+
+    private static final class TestClientHttpResponse implements ClientHttpResponse {
+        private final HttpStatus status;
+        private final HttpHeaders headers = new HttpHeaders();
+        private final byte[] body;
+
+        TestClientHttpResponse(HttpStatus status, String body) {
+            this.status = status;
+            this.body = body.getBytes();
+        }
+
+        @Override
+        public HttpStatus getStatusCode() {
+            return status;
+        }
+
+        @Override
+        public String getStatusText() {
+            return status.getReasonPhrase();
+        }
+
+        @Override
+        public void close() {
+            // no-op
+        }
+
+        @Override
+        public InputStream getBody() {
+            return new ByteArrayInputStream(body);
+        }
+
+        @Override
+        public HttpHeaders getHeaders() {
+            return headers;
+        }
     }
 }
