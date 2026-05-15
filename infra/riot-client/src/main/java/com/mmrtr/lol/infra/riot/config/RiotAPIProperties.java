@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 public class RiotAPIProperties {
     private String apiKey;
     private int timeout = 3;
+    private int readTimeout = 5;
     private int retryAttempts = 2;
     private int retryDelay = 2;
 }

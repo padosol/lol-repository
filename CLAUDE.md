@@ -53,7 +53,7 @@ com.mmrtr.lol.domain/
 ### 데이터 흐름
 
 1. **Main Server** → **RabbitMQ** → **LOL Repository** → **RIOT API**
-2. RestClient Interceptor를 통한 Rate Limiting (`RetryInterceptor`)
+2. RestClient Interceptor 체인: `RetryInterceptor` (Retry-After 기반 backoff + ±25% jitter + 4xx/429/5xx/IOException 분류 + Micrometer 메트릭 3종 — `riot.api.responses{status,host}` / `riot.api.retry.attempts{outcome=success|exhausted}` / `riot.api.retry.backoff` timer) → 로컬 Redisson `RateLimitInterceptor` → 로깅 → `concurrencyInterceptor` (Semaphore 20)
 3. CompletableFuture 패턴을 활용한 비동기 처리
 4. 배치 데이터베이스 삽입 (배치 크기 1000, 1초 간격)
 
