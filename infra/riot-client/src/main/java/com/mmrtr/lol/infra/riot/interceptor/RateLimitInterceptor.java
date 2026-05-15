@@ -1,7 +1,7 @@
 package com.mmrtr.lol.infra.riot.interceptor;
 
 import com.mmrtr.lol.infra.riot.aspect.RateLimitType;
-import com.mmrtr.lol.infra.riot.exception.RiotClientException;
+import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.ratelimit.HostRateLimitResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RRateLimiter;
@@ -39,8 +39,9 @@ public class RateLimitInterceptor implements ClientHttpRequestInterceptor {
         RRateLimiter limiter = getOrCreateRateLimiter(type);
 
         if (!limiter.tryAcquire(1, Duration.ofSeconds(3))) {
-            log.warn("Rate limit exceeded for [{}]", type.getBeanName());
-            throw new RiotClientException(HttpStatus.TOO_MANY_REQUESTS, "Rate limit 초과", LogLevel.WARN);
+            log.warn("Local rate limit exceeded for [{}]", type.getBeanName());
+            throw new RiotRateLimitException(
+                    Duration.ZERO, HttpStatus.TOO_MANY_REQUESTS, "Local rate limit 초과", LogLevel.WARN);
         }
 
         return execution.execute(request, body);
