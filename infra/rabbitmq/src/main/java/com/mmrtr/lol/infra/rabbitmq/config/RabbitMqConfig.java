@@ -78,7 +78,10 @@ public class RabbitMqConfig {
 
     @Bean
     public Queue matchIdQueue() {
-        return new Queue(RabbitMqBinding.MATCH_ID.getQueue());
+        return QueueBuilder.durable(RabbitMqBinding.MATCH_ID.getQueue())
+                .withArgument("x-dead-letter-exchange", RabbitMqBinding.MATCH_ID_DLX.getExchange())
+                .withArgument("x-dead-letter-routing-key", RabbitMqBinding.MATCH_ID_DLX.getRoutingKey())
+                .build();
     }
 
     @Bean
@@ -92,6 +95,24 @@ public class RabbitMqConfig {
                 .bind(matchIdQueue())
                 .to(matchIdExchange())
                 .with(RabbitMqBinding.MATCH_ID.getRoutingKey());
+    }
+
+    @Bean
+    public Queue dlxMatchIdQueue() {
+        return new Queue(RabbitMqBinding.MATCH_ID_DLX.getQueue(), true);
+    }
+
+    @Bean
+    public DirectExchange matchIdDlxExchange() {
+        return new DirectExchange(RabbitMqBinding.MATCH_ID_DLX.getExchange());
+    }
+
+    @Bean
+    public Binding matchIdDlxBinding() {
+        return BindingBuilder
+                .bind(dlxMatchIdQueue())
+                .to(matchIdDlxExchange())
+                .with(RabbitMqBinding.MATCH_ID_DLX.getRoutingKey());
     }
 
     @Bean
