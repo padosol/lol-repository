@@ -39,6 +39,7 @@ public class MatchListener {
 
         switch (result) {
             case DUPLICATE, SUCCESS -> safeAck(channel, deliveryTag);
+            case QUEUE_FULL -> safeNackRequeue(channel, deliveryTag);
             case FAILURE -> safeNack(channel, deliveryTag);
         }
     }
@@ -68,6 +69,21 @@ public class MatchListener {
             log.warn("Channel already closed during nack for deliveryTag {}: {}", deliveryTag, e.getMessage());
         } catch (IOException e) {
             log.warn("IOException during nack for deliveryTag {}: {}", deliveryTag, e.getMessage());
+        }
+    }
+
+    private void safeNackRequeue(Channel channel, long deliveryTag) {
+        try {
+            if (channel.isOpen()) {
+                channel.basicNack(deliveryTag, false, true);
+            } else {
+                log.warn("Channel is closed, cannot nack(requeue) deliveryTag {}.", deliveryTag);
+            }
+        } catch (AlreadyClosedException e) {
+            log.warn("Channel already closed during nack(requeue) for deliveryTag {}: {}",
+                    deliveryTag, e.getMessage());
+        } catch (IOException e) {
+            log.warn("IOException during nack(requeue) for deliveryTag {}: {}", deliveryTag, e.getMessage());
         }
     }
 }

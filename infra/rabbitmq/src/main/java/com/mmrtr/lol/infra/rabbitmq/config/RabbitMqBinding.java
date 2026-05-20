@@ -9,6 +9,7 @@ public enum RabbitMqBinding {
     SUMMONER("mmrtr.exchange", "mmrtr.key", Queue.SUMMONER),
     SUMMONER_DLX("summoner.dlx.exchange", "deadLetter", Queue.SUMMONER_DLX),
     MATCH_ID("mmrtr.matchId.exchange", "mmrtr.routingkey.matchId", Queue.MATCH_ID),
+    MATCH_ID_DLX("matchId.dlx.exchange", "deadLetter", Queue.MATCH_ID_DLX),
     RENEWAL_MATCH_FIND("renewal.topic.exchange", "renewal.match.find", Queue.RENEWAL_MATCH_FIND);
 
     private final String exchange;
@@ -19,6 +20,7 @@ public enum RabbitMqBinding {
         public static final String SUMMONER = "mmrtr.summoner";
         public static final String SUMMONER_DLX = "mmrtr.summoner.dlx";
         public static final String MATCH_ID = "mmrtr.matchId";
+        public static final String MATCH_ID_DLX = "mmrtr.matchId.dlx";
         public static final String RENEWAL_MATCH_FIND = "renewal.match.find.queue";
 
         private Queue() {}

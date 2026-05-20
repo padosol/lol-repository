@@ -32,7 +32,8 @@ public class MatchDataProcessor {
     public enum Result {
         DUPLICATE,
         SUCCESS,
-        FAILURE
+        FAILURE,
+        QUEUE_FULL
     }
 
     public Result process(String matchId, String platformName) {
@@ -65,7 +66,10 @@ public class MatchDataProcessor {
             return Result.FAILURE;
         }
 
-        matchBatchProcessor.add(dtoPair);
+        if (!matchBatchProcessor.add(dtoPair)) {
+            log.warn("Match batch queue is full, requeueing matchId {}", matchId);
+            return Result.QUEUE_FULL;
+        }
         return Result.SUCCESS;
     }
 }

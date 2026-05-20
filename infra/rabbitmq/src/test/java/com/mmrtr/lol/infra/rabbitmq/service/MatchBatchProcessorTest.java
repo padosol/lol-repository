@@ -61,6 +61,19 @@ class MatchBatchProcessorTest {
         verify(matchCacheEvictPort, never()).evictByPuuids(any());
     }
 
+    @Test
+    @DisplayName("큐가 가득 차면 add 는 false 를 반환한다 (backpressure)")
+    void add_returnsFalse_whenQueueIsFull() {
+        // 큐 용량 500 — 채워 넣은 뒤 추가 add 가 거절되는지 확인
+        for (int i = 0; i < 500; i++) {
+            boolean accepted = processor.add(Pair.of(new MatchDto(), new TimelineDto()));
+            assertThat(accepted).isTrue();
+        }
+
+        boolean overflow = processor.add(Pair.of(new MatchDto(), new TimelineDto()));
+        assertThat(overflow).isFalse();
+    }
+
     private MatchDto matchWithPuuids(List<String> puuids) {
         MatchDto dto = new MatchDto();
         InfoDto info = new InfoDto();
