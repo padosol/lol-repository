@@ -1,0 +1,23 @@
+spring:
+  config:
+    import:
+      - api-local.yml
+      - persistence-local.yml
+      - rabbitmq-local.yml
+      - redis-local.yml
+      - riot-local.yml
+
+lol:
+  backfill:
+    range:
+      start-id: ${BACKFILL_START_ID:0}
+      end-id: ${BACKFILL_END_ID:0}
+    chunk:
+      size: ${BACKFILL_CHUNK_SIZE:100}
+      parallelism: ${BACKFILL_PARALLELISM:2}
+      fetch-size: ${BACKFILL_FETCH_SIZE:1000}
+    filter:
+      season: ${BACKFILL_SEASON:14}
+      queue-ids: ${BACKFILL_QUEUE_IDS:420}
+    gcs:
+      bucket: ${BACKFILL_GCS_BUCKET:lol-backfill-local}

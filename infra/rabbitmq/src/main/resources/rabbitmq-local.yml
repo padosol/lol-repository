@@ -1,10 +1,7 @@
 spring:
   rabbitmq:
-    host: localhost
-    port: 5672
-    requested-heartbeat: 60
-
-rabbitmq:
-  queue.name: sample.queue
-  exchange.name: sample.exchange
-  routing.key: sample.key
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    requested-heartbeat: ${RABBITMQ_HEARTBEAT:60}
