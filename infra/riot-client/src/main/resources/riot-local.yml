@@ -1,2 +1,2 @@
 riot:
-  api-key:
+  api-key: ${RIOT_API_KEY:}
