@@ -5,7 +5,6 @@ import com.mmrtr.lol.domain.match.application.port.MatchCacheWritePort;
 import com.mmrtr.lol.domain.match.readmodel.InfoDto;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.MetadataDto;
-import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBatch;
@@ -14,7 +13,9 @@ import org.redisson.client.codec.StringCodec;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -22,13 +23,12 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>저장 키:
  * <ul>
- *   <li>{@code match:v1:{matchId}} - 단건 매치 JSON, 1시간 TTL</li>
- *   <li>{@code match:ids:v1:{puuid}} - 참가자 별 최근 매치 ID ZSET (score = gameCreation),
- *       크기 20 으로 trim, 24시간 TTL</li>
+ *   <li>{@code match:v1:{matchId}} - 단건 매치 JSON, 3분 TTL (모든 유저 공유)</li>
+ *   <li>{@code match:ids:v1:{requesterPuuid}} - 갱신 요청자 ZSET (score = gameCreation),
+ *       크기 20 으로 trim, 3분 TTL. 다른 참가자의 ZSET 은 채우지 않아 "최근 갱신 유저만 캐시" 유지</li>
  * </ul>
  *
- * <p>모든 작업은 {@link RBatch} pipeline 으로 1 RTT 에 수행되며, 실패 시 swallow + 메트릭 기록
- * (호출자 = 저장 파이프라인에 예외 전파하지 않음).
+ * <p>매치 N 개를 한 번의 {@link RBatch} pipeline 으로 1 RTT 에 처리한다. 실패 시 swallow + 메트릭 기록.
  */
 @Slf4j
 @Component
@@ -36,8 +36,8 @@ public class MatchCacheWriteAdapter implements MatchCacheWritePort {
 
     private static final String MATCH_KEY_PREFIX = "match:v1:";
     private static final String MATCH_IDS_KEY_PREFIX = "match:ids:v1:";
-    private static final Duration MATCH_TTL = Duration.ofHours(1);
-    private static final Duration MATCH_IDS_TTL = Duration.ofHours(24);
+    private static final Duration MATCH_TTL = Duration.ofMinutes(3);
+    private static final Duration MATCH_IDS_TTL = Duration.ofMinutes(3);
     private static final int MATCH_IDS_TRIM_KEEP = 20;
 
     private final RedissonClient redissonClient;
@@ -55,52 +55,62 @@ public class MatchCacheWriteAdapter implements MatchCacheWritePort {
     }
 
     @Override
-    public void writeMatch(MatchDto match) {
-        if (match == null) {
+    public void writeMatches(List<MatchDto> matches, String requesterPuuid) {
+        if (matches == null || matches.isEmpty()) {
             return;
+        }
+        if (requesterPuuid == null || requesterPuuid.isBlank()) {
+            log.warn("cache.match.write skipped: blank requesterPuuid matchCount={}", matches.size());
+            meterRegistry.counter("cache.match.write", "result", "skipped").increment();
+            return;
+        }
+
+        try {
+            RBatch batch = redissonClient.createBatch();
+            Map<String, Double> zsetMembers = new HashMap<>();
+
+            for (MatchDto match : matches) {
+                String matchId = extractMatchId(match);
+                if (matchId == null) {
+                    continue;
+                }
+                String json = objectMapper.writeValueAsString(match);
+                batch.getBucket(MATCH_KEY_PREFIX + matchId, StringCodec.INSTANCE)
+                        .setAsync(json, MATCH_TTL);
+                zsetMembers.put(matchId, (double) match.getInfo().getGameCreation());
+            }
+
+            if (zsetMembers.isEmpty()) {
+                return;
+            }
+
+            String zsetKey = MATCH_IDS_KEY_PREFIX + requesterPuuid;
+            batch.<String>getScoredSortedSet(zsetKey, StringCodec.INSTANCE).addAllAsync(zsetMembers);
+            batch.<String>getScoredSortedSet(zsetKey, StringCodec.INSTANCE)
+                    .removeRangeByRankAsync(0, -(MATCH_IDS_TRIM_KEEP + 1));
+            batch.getKeys().expireAsync(zsetKey, MATCH_IDS_TTL.toSeconds(), TimeUnit.SECONDS);
+
+            batch.execute();
+            meterRegistry.counter("cache.match.write", "result", "success").increment(zsetMembers.size());
+        } catch (Exception e) {
+            log.warn("cache.match.write failed count={} cause={}", matches.size(), e.getMessage());
+            meterRegistry.counter("cache.match.write", "result", "failure").increment(matches.size());
+        }
+    }
+
+    private String extractMatchId(MatchDto match) {
+        if (match == null) {
+            return null;
         }
         MetadataDto metadata = match.getMetadata();
         InfoDto info = match.getInfo();
         if (metadata == null || info == null) {
-            return;
+            return null;
         }
         String matchId = metadata.getMatchId();
         if (matchId == null || matchId.isBlank()) {
-            return;
+            return null;
         }
-        long gameCreation = info.getGameCreation();
-        List<ParticipantDto> participants = info.getParticipants();
-
-        try {
-            String json = objectMapper.writeValueAsString(match);
-
-            RBatch batch = redissonClient.createBatch();
-            batch.getBucket(MATCH_KEY_PREFIX + matchId, StringCodec.INSTANCE)
-                    .setAsync(json, MATCH_TTL);
-
-            if (participants != null) {
-                for (ParticipantDto participant : participants) {
-                    if (participant == null) {
-                        continue;
-                    }
-                    String puuid = participant.getPuuid();
-                    if (puuid == null || puuid.isBlank()) {
-                        continue;
-                    }
-                    String zsetKey = MATCH_IDS_KEY_PREFIX + puuid;
-                    batch.getScoredSortedSet(zsetKey, StringCodec.INSTANCE)
-                            .addAsync((double) gameCreation, matchId);
-                    batch.getScoredSortedSet(zsetKey, StringCodec.INSTANCE)
-                            .removeRangeByRankAsync(0, -(MATCH_IDS_TRIM_KEEP + 1));
-                    batch.getKeys().expireAsync(zsetKey, MATCH_IDS_TTL.toSeconds(), TimeUnit.SECONDS);
-                }
-            }
-
-            batch.execute();
-            meterRegistry.counter("cache.match.write", "result", "success").increment();
-        } catch (Exception e) {
-            log.warn("cache.match.write failed matchId={} cause={}", matchId, e.getMessage());
-            meterRegistry.counter("cache.match.write", "result", "failure").increment();
-        }
+        return matchId;
     }
 }
