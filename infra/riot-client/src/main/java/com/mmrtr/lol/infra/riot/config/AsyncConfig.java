@@ -57,6 +57,13 @@ public class AsyncConfig {
         return executor;
     }
 
+    @Bean
+    public Executor matchSaveExecutor() {
+        ThreadPoolTaskExecutor executor = newPlatformThreadPoolExecutor(10, 10, 0, "MatchSave-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        return executor;
+    }
+
     private ExecutorService newVirtualThreadExecutor(String prefix, long startIndex) {
         ExecutorService delegate = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual()
