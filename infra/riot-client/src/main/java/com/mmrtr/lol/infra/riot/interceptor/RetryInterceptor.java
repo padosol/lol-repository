@@ -61,11 +61,11 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
                         recordExhausted();
                         throw new RiotRateLimitException(retryAfter, status, "Riot rate limit exhausted", LogLevel.WARN);
                     }
-                    long base = retryAfter.isZero() ? exponentialBackoffMs(attempt) : retryAfter.toMillis();
-                    log.warn("Riot 429 — attempt {}/{}, Retry-After={}s, sleep base={}ms",
-                            attempt, MAX_ATTEMPTS, retryAfter.toSeconds(), base);
                     closeQuietly(response);
-                    sleepOrAbort(jitter(cap(base)));
+                    long sleepMs = computeBackoffMs(attempt, retryAfter);
+                    log.warn("Riot 429 — attempt {}/{}, Retry-After={}s, sleep={}ms",
+                            attempt, MAX_ATTEMPTS, retryAfter.toSeconds(), sleepMs);
+                    sleepOrAbort(sleepMs);
                     continue;
                 }
 
@@ -74,9 +74,11 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
                         recordExhausted();
                         return response;
                     }
-                    log.warn("Riot 5xx — attempt {}/{}, status={}", attempt, MAX_ATTEMPTS, status.value());
                     closeQuietly(response);
-                    sleepOrAbort(jitter(cap(exponentialBackoffMs(attempt))));
+                    long sleepMs = computeBackoffMs(attempt, null);
+                    log.warn("Riot 5xx — attempt {}/{}, status={}, sleep={}ms",
+                            attempt, MAX_ATTEMPTS, status.value(), sleepMs);
+                    sleepOrAbort(sleepMs);
                     continue;
                 }
 
@@ -89,14 +91,10 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
                     recordExhausted();
                     throw e;
                 }
-                Duration retryAfter = e.getRetryAfter();
-                long base = (retryAfter == null || retryAfter.isZero())
-                        ? exponentialBackoffMs(attempt)
-                        : retryAfter.toMillis();
-                log.warn("Riot RiotRateLimitException — attempt {}/{}, retryAfter={}ms, base={}ms",
-                        attempt, MAX_ATTEMPTS,
-                        retryAfter == null ? -1L : retryAfter.toMillis(), base);
-                sleepOrAbort(jitter(cap(base)));
+                long sleepMs = computeBackoffMs(attempt, e.getRetryAfter());
+                log.warn("Riot RiotRateLimitException — attempt {}/{}, sleep={}ms",
+                        attempt, MAX_ATTEMPTS, sleepMs);
+                sleepOrAbort(sleepMs);
             } catch (IOException e) {
                 if (e.getCause() instanceof InterruptedException) {
                     throw e;
@@ -105,11 +103,20 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
                     recordExhausted();
                     throw e;
                 }
-                log.warn("Riot IOException — attempt {}/{}: {}", attempt, MAX_ATTEMPTS, e.getMessage());
-                sleepOrAbort(jitter(cap(exponentialBackoffMs(attempt))));
+                long sleepMs = computeBackoffMs(attempt, null);
+                log.warn("Riot IOException — attempt {}/{}, sleep={}ms: {}",
+                        attempt, MAX_ATTEMPTS, sleepMs, e.getMessage());
+                sleepOrAbort(sleepMs);
             }
         }
         throw new IllegalStateException("RetryInterceptor loop exited without resolution");
+    }
+
+    private long computeBackoffMs(int attempt, Duration retryAfter) {
+        long base = (retryAfter == null || retryAfter.isZero())
+                ? exponentialBackoffMs(attempt)
+                : retryAfter.toMillis();
+        return jitter(cap(base));
     }
 
     private Duration parseRetryAfter(String header) {
