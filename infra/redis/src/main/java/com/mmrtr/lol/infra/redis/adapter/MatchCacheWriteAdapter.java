@@ -5,6 +5,9 @@ import com.mmrtr.lol.domain.match.application.port.MatchCacheWritePort;
 import com.mmrtr.lol.domain.match.readmodel.InfoDto;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.MetadataDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
+import com.mmrtr.lol.infra.redis.adapter.view.MatchCacheView;
+import com.mmrtr.lol.infra.redis.adapter.view.MatchCacheViewMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBatch;
@@ -23,7 +26,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>저장 키:
  * <ul>
- *   <li>{@code match:v1:{matchId}} - 단건 매치 JSON, 3분 TTL (모든 유저 공유)</li>
+ *   <li>{@code match:v1:{matchId}} - lol-server GameReadModel 형태로 직렬화된 단건 매치 JSON, 3분 TTL (공유)</li>
  *   <li>{@code match:ids:v1:{requesterPuuid}} - 갱신 요청자 ZSET (score = gameCreation),
  *       크기 20 으로 trim, 3분 TTL. 다른 참가자의 ZSET 은 채우지 않아 "최근 갱신 유저만 캐시" 유지</li>
  * </ul>
@@ -43,19 +46,22 @@ public class MatchCacheWriteAdapter implements MatchCacheWritePort {
     private final RedissonClient redissonClient;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final MatchCacheViewMapper viewMapper;
 
     public MatchCacheWriteAdapter(
             RedissonClient redissonClient,
             ObjectMapper objectMapper,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            MatchCacheViewMapper viewMapper
     ) {
         this.redissonClient = redissonClient;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
+        this.viewMapper = viewMapper;
     }
 
     @Override
-    public void writeMatches(List<MatchDto> matches, String requesterPuuid) {
+    public void writeMatches(List<MatchDto> matches, List<TimelineDto> timelines, String requesterPuuid) {
         if (matches == null || matches.isEmpty()) {
             return;
         }
@@ -69,12 +75,16 @@ public class MatchCacheWriteAdapter implements MatchCacheWritePort {
             RBatch batch = redissonClient.createBatch();
             Map<String, Double> zsetMembers = new HashMap<>();
 
-            for (MatchDto match : matches) {
+            for (int i = 0; i < matches.size(); i++) {
+                MatchDto match = matches.get(i);
                 String matchId = extractMatchId(match);
                 if (matchId == null) {
                     continue;
                 }
-                String json = objectMapper.writeValueAsString(match);
+                TimelineDto timeline = (timelines != null && i < timelines.size()) ? timelines.get(i) : null;
+                MatchCacheView view = viewMapper.toView(match, timeline);
+
+                String json = objectMapper.writeValueAsString(view);
                 batch.getBucket(MATCH_KEY_PREFIX + matchId, StringCodec.INSTANCE)
                         .setAsync(json, MATCH_TTL);
                 zsetMembers.put(matchId, (double) match.getInfo().getGameCreation());

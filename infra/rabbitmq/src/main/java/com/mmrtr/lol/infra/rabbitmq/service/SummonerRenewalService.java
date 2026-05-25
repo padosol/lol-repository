@@ -50,7 +50,7 @@ public class SummonerRenewalService {
     private void doRenew(String puuid, Platform platform) {
         long t = System.currentTimeMillis();
         SummonerDto summonerDto = summonerDataCollector.fetchSummoner(puuid, platform, requestExecutor);
-        log.debug("[갱신-API] fetchSummoner: {}ms puuid={}", System.currentTimeMillis() - t, puuid);
+        log.info("[갱신-API] fetchSummoner: {}ms puuid={}", System.currentTimeMillis() - t, puuid);
         if (summonerDto == null) {
             log.error("RIOT API에서 소환사 정보를 조회할 수 없습니다. puuid: {}", puuid);
             return;
@@ -65,7 +65,7 @@ public class SummonerRenewalService {
         t = System.currentTimeMillis();
         Optional<Summoner> summonerOpt = summonerDataCollector
                 .collectAndAssemble(puuid, platform, summonerDto, requestExecutor);
-        log.debug("[갱신-API] collectAndAssemble: {}ms puuid={}", System.currentTimeMillis() - t, puuid);
+        log.info("[갱신-API] collectAndAssemble: {}ms puuid={}", System.currentTimeMillis() - t, puuid);
         if (summonerOpt.isEmpty()) {
             return;
         }
@@ -74,7 +74,7 @@ public class SummonerRenewalService {
         t = System.currentTimeMillis();
         FetchNewMatchIdsResult fetchResult = matchDataFetcher
                 .fetchNewMatchIds(puuid, platform, revisionCheck.dbRevisionDateSeconds(), requestExecutor).join();
-        log.debug("[갱신-API] fetchNewMatchIds: {}ms count={} puuid={}",
+        log.info("[갱신-API] fetchNewMatchIds: {}ms count={} puuid={}",
                 System.currentTimeMillis() - t, fetchResult.newMatchIds().size(), puuid);
 
         t = System.currentTimeMillis();
@@ -85,14 +85,14 @@ public class SummonerRenewalService {
 
         List<MatchDto> matchDtos = matchDetailsFuture.join();
         List<TimelineDto> timelineDtos = timelinesFuture.join();
-        log.debug("[갱신-API] fetchMatchDetails+Timelines (parallel): {}ms count={} puuid={}",
+        log.info("[갱신-API] fetchMatchDetails+Timelines (parallel): {}ms count={} puuid={}",
                 System.currentTimeMillis() - t, matchDtos.size(), puuid);
 
         summoner.updateLastRiotCallDate();
         summonerDataCollector.save(summoner);
 
         if (matchDtos != null && !matchDtos.isEmpty()) {
-            matchCacheWritePort.writeMatches(matchDtos, puuid);
+            matchCacheWritePort.writeMatches(matchDtos, timelineDtos, puuid);
             asyncMatchSaver.saveAsync(matchDtos, timelineDtos);
         }
 
