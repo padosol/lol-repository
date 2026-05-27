@@ -1,0 +1,5 @@
+// module:support:logging - @LogExecutionTime / MDC 로깅 AOP 등 횡단 유틸.
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    implementation 'org.springframework.boot:spring-boot'
+}

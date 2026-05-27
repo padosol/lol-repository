@@ -1,0 +1,15 @@
+dependencies {
+    implementation project(':module:domain:summoner')
+    implementation project(':module:domain:match')
+    implementation project(':module:domain:league')
+    implementation project(':module:shared')
+    implementation project(':module:infra:redis')
+    implementation project(':module:infra:riot-client')  // 비매치 API (account, summoner, league)
+    implementation project(':module:support:logging')
+
+    // RabbitMQ
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
+    // Redisson
+    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+}
