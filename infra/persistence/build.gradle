@@ -10,7 +10,6 @@ dependencies {
     implementation project(':module:domain:summoner')
     implementation project(':module:domain:match')
     implementation project(':module:domain:league')
-    implementation project(':core:domain')
     implementation project(':module:shared')
     implementation project(':infra:redis')
 

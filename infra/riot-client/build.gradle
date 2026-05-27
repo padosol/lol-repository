@@ -4,7 +4,6 @@ dependencies {
     implementation project(':module:domain:spectator')
     implementation project(':module:domain:champion')
     implementation project(':module:domain:league')
-    implementation project(':core:domain')
     implementation project(':module:shared')
     implementation project(':module:common')
     implementation project(':infra:redis')

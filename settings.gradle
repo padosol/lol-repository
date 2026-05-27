@@ -1,7 +1,6 @@
 rootProject.name = 'lol-repository'
 
 include 'app'
-include 'core:domain'
 include 'infra:api'
 include 'infra:persistence'
 include 'infra:redis'

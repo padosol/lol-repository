@@ -2,7 +2,6 @@ dependencies {
     implementation project(':module:domain:summoner')
     implementation project(':module:domain:match')
     implementation project(':module:domain:league')
-    implementation project(':core:domain')
     implementation project(':module:shared')
     implementation project(':infra:redis')
     implementation project(':infra:riot-client')  // 비매치 API (account, summoner, league)
