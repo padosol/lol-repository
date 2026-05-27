@@ -16,3 +16,4 @@ include 'module:support:logging'
 // ── 수직(컨텍스트별) 도메인 모듈 ──
 include 'module:domain:league'
 include 'module:domain:champion'
+include 'module:domain:spectator'
