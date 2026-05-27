@@ -1,0 +1,15 @@
+// module:domain:summoner - 소환사 컨텍스트 (도메인 + application port.in/out)
+dependencies {
+    implementation project(':module:common')           // CoreException 등 error 사용
+    implementation project(':module:domain:league')     // SaveSummonerDataUseCase 가 league port.in/model 참조
+
+    // Spring
+    implementation 'org.springframework:spring-context'
+    implementation 'org.springframework:spring-tx'
+
+    // Jackson (ReadModel DTO 어노테이션)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Logging
+    implementation 'org.slf4j:slf4j-api'
+}
