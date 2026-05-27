@@ -9,4 +9,6 @@ dependencies {
 
     // Logging
     implementation 'org.slf4j:slf4j-api'
+
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
 }

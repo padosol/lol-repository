@@ -72,3 +72,11 @@ subprojects {
     }
 
 }
+
+// 수직 도메인 모듈의 컨텍스트 경계(ArchUnit) 테스트만 모아 실행
+tasks.register('archTest') {
+    group = 'verification'
+    description = '수직 도메인 모듈의 ArchUnit 경계 테스트(*ArchitectureTest) 실행'
+    dependsOn(['league', 'champion', 'spectator', 'match', 'summoner']
+            .collect { ":module:domain:${it}:test" })
+}
