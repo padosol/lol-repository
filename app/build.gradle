@@ -3,8 +3,9 @@ jar.enabled = false
 
 dependencies {
     implementation project(':core:domain')
-    implementation project(':core:enum')
-    implementation project(':support')
+    implementation project(':module:shared')
+    implementation project(':module:common')
+    implementation project(':module:support:logging')
     implementation project(':infra:api')
     implementation project(':infra:persistence')
     implementation project(':infra:redis')

@@ -8,7 +8,7 @@ sourceSets {
 
 dependencies {
     implementation project(':core:domain')
-    implementation project(':core:enum')
+    implementation project(':module:shared')
     implementation project(':infra:redis')
 
     // JPA

@@ -1,6 +1,6 @@
 dependencies {
-    implementation project(':core:enum')
-    implementation project(':support')
+    implementation project(':module:shared')
+    implementation project(':module:common')
 
     // Spring
     implementation 'org.springframework:spring-context'

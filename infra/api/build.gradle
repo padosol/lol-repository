@@ -3,8 +3,8 @@ jar.enabled = true
 
 dependencies {
     implementation project(':core:domain')
-    implementation project(':core:enum')
-    implementation project(':support')
+    implementation project(':module:shared')
+    implementation project(':module:common')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
 }
