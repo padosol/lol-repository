@@ -12,3 +12,6 @@ include 'infra:riot-client'
 include 'module:shared'
 include 'module:common'
 include 'module:support:logging'
+
+// ── 수직(컨텍스트별) 도메인 모듈 ──
+include 'module:domain:league'

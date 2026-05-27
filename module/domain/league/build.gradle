@@ -1,7 +1,6 @@
+// module:domain:league - 리그/랭킹/티어컷오프 컨텍스트 (도메인 + application port.in/out)
 dependencies {
-    implementation project(':module:domain:league')
     implementation project(':module:shared')
-    implementation project(':module:common')
 
     // Spring
     implementation 'org.springframework:spring-context'
