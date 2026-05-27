@@ -11,11 +11,11 @@ dependencies {
     implementation project(':module:shared')
     implementation project(':module:common')
     implementation project(':module:support:logging')
-    implementation project(':infra:api')
-    implementation project(':infra:persistence')
-    implementation project(':infra:redis')
-    implementation project(':infra:rabbitmq')
-    implementation project(':infra:riot-client')
+    implementation project(':module:infra:api')
+    implementation project(':module:infra:persistence')
+    implementation project(':module:infra:redis')
+    implementation project(':module:infra:rabbitmq')
+    implementation project(':module:infra:riot-client')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-batch'

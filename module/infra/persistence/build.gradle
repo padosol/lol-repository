@@ -11,7 +11,7 @@ dependencies {
     implementation project(':module:domain:match')
     implementation project(':module:domain:league')
     implementation project(':module:shared')
-    implementation project(':infra:redis')
+    implementation project(':module:infra:redis')
 
     // JPA
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'

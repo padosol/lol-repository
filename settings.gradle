@@ -1,11 +1,11 @@
 rootProject.name = 'lol-repository'
 
-include 'app'
-include 'infra:api'
-include 'infra:persistence'
-include 'infra:redis'
-include 'infra:rabbitmq'
-include 'infra:riot-client'
+include 'module:app:application'
+include 'module:infra:api'
+include 'module:infra:persistence'
+include 'module:infra:redis'
+include 'module:infra:rabbitmq'
+include 'module:infra:riot-client'
 
 // ── 공유 모듈 (수직 컨텍스트 재구성) ──
 include 'module:shared'

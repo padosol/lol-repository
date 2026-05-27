@@ -6,7 +6,7 @@ dependencies {
     implementation project(':module:domain:league')
     implementation project(':module:shared')
     implementation project(':module:common')
-    implementation project(':infra:redis')
+    implementation project(':module:infra:redis')
 
     // Web & AOP
     implementation 'org.springframework.boot:spring-boot-starter-web'
