@@ -68,7 +68,9 @@ subprojects {
 
     bootRun {
         String activeProfile = System.properties['spring.profiles.active']
-        systemProperty "spring.profiles.active", activeProfile
+        if (activeProfile != null) {
+            systemProperty "spring.profiles.active", activeProfile
+        }
 
         // 루트 .env 를 읽어 bootRun 프로세스 환경변수로 주입
         def envFile = rootProject.file('.env')
