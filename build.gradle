@@ -69,6 +69,25 @@ subprojects {
     bootRun {
         String activeProfile = System.properties['spring.profiles.active']
         systemProperty "spring.profiles.active", activeProfile
+
+        // 루트 .env 를 읽어 bootRun 프로세스 환경변수로 주입
+        def envFile = rootProject.file('.env')
+        if (envFile.exists()) {
+            envFile.readLines('UTF-8').each { line ->
+                def t = line.trim()
+                if (t.isEmpty() || t.startsWith('#')) return
+                if (t.startsWith('export ')) t = t.substring(7).trim()
+                int i = t.indexOf('=')
+                if (i <= 0) return
+                def key = t.substring(0, i).trim()
+                def value = t.substring(i + 1).trim()
+                if ((value.startsWith('"') && value.endsWith('"')) ||
+                    (value.startsWith("'") && value.endsWith("'"))) {
+                    value = value.substring(1, value.length() - 1)
+                }
+                environment key, value
+            }
+        }
     }
 
 }
