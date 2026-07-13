@@ -26,11 +26,15 @@ public class SaveSummonerDataUseCase {
         summonerRepositoryPort.save(summoner);
 
         for (LeagueInfo leagueInfo : summoner.getLeagueInfos()) {
-            leagueRepositoryPort.saveIfAbsent(League.builder()
-                    .leagueId(leagueInfo.getLeagueId())
-                    .queue(leagueInfo.getQueueType())
-                    .tier(leagueInfo.getTier())
-                    .build());
+            // Riot league-v4 puuid 전환(2025)으로 leagueId 미제공 — League 저장만
+            // 건너뛴다. tier/rank/LP 는 아래 LeagueSummoner 가 보존한다.
+            if (leagueInfo.getLeagueId() != null) {
+                leagueRepositoryPort.saveIfAbsent(League.builder()
+                        .leagueId(leagueInfo.getLeagueId())
+                        .queue(leagueInfo.getQueueType())
+                        .tier(leagueInfo.getTier())
+                        .build());
+            }
 
             LeagueSummoner leagueSummoner = LeagueSummoner.builder()
                     .puuid(summoner.getPuuid())
