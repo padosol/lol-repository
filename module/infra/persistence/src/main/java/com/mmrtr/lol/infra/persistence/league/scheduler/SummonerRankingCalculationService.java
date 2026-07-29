@@ -40,15 +40,25 @@ public class SummonerRankingCalculationService {
     private static final String PLATFORM_KR = "KR";
     private static final long UNKNOWN_SUMMONER_FETCH_DELAY_MS = 500;
 
-    public void processQueueRanking(String queue) {
+    /**
+     * 큐 랭킹을 갱신한다.
+     *
+     * @param queue            대상 큐 타입
+     * @param updateTierCutoff 티어 커트라인(챌린저/그랜드마스터 컷)까지 함께 갱신할지 여부.
+     *                         false 면 랭킹만 교체하고 기존 커트라인은 그대로 유지한다.
+     */
+    public void processQueueRanking(String queue, boolean updateTierCutoff) {
         try {
             // 잔존 백업 데이터 방어적 정리
             summonerRankingRepositoryPort.clearBackup(queue);
-            tierCutoffRepositoryPort.clearBackup(queue);
 
-            // 현재 랭킹/티어 커트라인을 백업 (기존 데이터는 유지 → 유저 조회 정상)
+            // 현재 랭킹을 백업 (기존 데이터는 유지 → 유저 조회 정상)
             summonerRankingRepositoryPort.backupCurrentRanks(queue);
-            tierCutoffRepositoryPort.backupCurrentCutoffs(queue);
+
+            if (updateTierCutoff) {
+                tierCutoffRepositoryPort.clearBackup(queue);
+                tierCutoffRepositoryPort.backupCurrentCutoffs(queue);
+            }
 
             // Riot API에서 챌린저/그랜드마스터 데이터 조회 (KR만)
             log.info("큐 {} 챌린저/그랜드마스터 데이터 조회 시작 (KR)", queue);
@@ -104,18 +114,24 @@ public class SummonerRankingCalculationService {
 
             log.info("큐 {} 랭킹 교체 완료: {} 명 (KR)", queue, allRankings.size());
 
-            // 티어 커트라인 빌드 및 교체
-            List<TierCutoff> cutoffs = buildTierCutoffs(queue, mergedEntries);
+            // 티어 커트라인 빌드 및 교체 (지정된 시간대 실행에서만 수행)
+            if (updateTierCutoff) {
+                List<TierCutoff> cutoffs = buildTierCutoffs(queue, mergedEntries);
 
-            if (!cutoffs.isEmpty()) {
-                tierCutoffRepositoryPort.replaceAllCutoffs(queue, cutoffs);
+                if (!cutoffs.isEmpty()) {
+                    tierCutoffRepositoryPort.replaceAllCutoffs(queue, cutoffs);
+                }
+
+                tierCutoffRepositoryPort.clearBackup(queue);
+
+                log.info("큐 {} 티어 커트라인 교체 완료: {} 건", queue, cutoffs.size());
+            } else {
+                log.info("큐 {} 티어 커트라인 갱신 건너뜀 (갱신 시간대가 아님)", queue);
             }
-
-            tierCutoffRepositoryPort.clearBackup(queue);
 
         } catch (Exception e) {
             log.error("큐 {} 랭킹 처리 중 오류 발생", queue, e);
-            safeCleanupBackups(queue);
+            safeCleanupBackups(queue, updateTierCutoff);
         }
     }
 
@@ -241,12 +257,17 @@ public class SummonerRankingCalculationService {
         log.info("미등록 소환사 조회 결과: {}/{} 성공", fetched, unknownPuuids.size());
     }
 
-    private void safeCleanupBackups(String queue) {
+    private void safeCleanupBackups(String queue, boolean updateTierCutoff) {
         try {
             summonerRankingRepositoryPort.clearBackup(queue);
         } catch (Exception ex) {
             log.error("큐 {} 랭킹 백업 정리 실패", queue, ex);
         }
+
+        if (!updateTierCutoff) {
+            return;
+        }
+
         try {
             tierCutoffRepositoryPort.clearBackup(queue);
         } catch (Exception ex) {
