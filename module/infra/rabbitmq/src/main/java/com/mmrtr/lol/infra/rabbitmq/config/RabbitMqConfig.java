@@ -1,10 +1,14 @@
 package com.mmrtr.lol.infra.rabbitmq.config;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
@@ -21,6 +25,7 @@ import org.springframework.core.task.support.TaskExecutorAdapter;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@Slf4j
 @Configuration
 @EnableRabbit
 public class RabbitMqConfig {
@@ -141,13 +146,66 @@ public class RabbitMqConfig {
         connectionFactory.setPassword(rabbitmqPassword);
         connectionFactory.setRequestedHeartBeat(60);
 
+        // ConnectionFactory 를 코드로 직접 만들면 spring.rabbitmq.publisher-* 프로퍼티가 적용되지 않는다.
+        // 발행 확인을 받으려면 여기서 직접 켜야 한다.
+        connectionFactory.setPublisherConfirmType(CachingConnectionFactory.ConfirmType.CORRELATED);
+        connectionFactory.setPublisherReturns(true);
+
         return connectionFactory;
     }
 
+    /**
+     * {@code @Bean} 으로 선언한 Queue/Exchange/Binding 을 브로커에 실제로 반영하는 주체.
+     *
+     * <p>{@link ConnectionFactory} 를 코드로 직접 정의하면 자동설정의 {@code amqpAdmin} 이 함께 백오프되어
+     * RabbitAdmin 이 컨텍스트에 존재하지 않는다. 그 경우 이 클래스의 토폴로지 선언은 브로커에 적용되지 않고,
+     * 큐가 없는 환경에 배포하면 리스너가 큐를 찾지 못한다. 명시적으로 등록해 선언이 동작하도록 한다.
+     */
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
+        return new RabbitAdmin(connectionFactory);
+    }
+
+    @Bean
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, MeterRegistry meterRegistry) {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(jackson2JsonMessageConverter());
+
+        // 소비 측이 브로커 flow control 에 걸려도 발행은 계속되도록 커넥션을 분리한다.
+        rabbitTemplate.setUsePublisherConnection(true);
+
+        // 어느 큐에도 라우팅되지 않은 메시지를 조용히 버리지 않고 returns 콜백으로 돌려받는다.
+        rabbitTemplate.setMandatory(true);
+
+        Counter confirmAck = Counter.builder("rabbitmq.publish.confirm")
+                .tag("outcome", "ack")
+                .description("브로커가 발행을 확인한 횟수")
+                .register(meterRegistry);
+        Counter confirmNack = Counter.builder("rabbitmq.publish.confirm")
+                .tag("outcome", "nack")
+                .description("브로커가 발행을 거부한 횟수")
+                .register(meterRegistry);
+        Counter routingFailure = Counter.builder("rabbitmq.publish.returned")
+                .description("어느 큐에도 라우팅되지 못하고 반환된 메시지 수")
+                .register(meterRegistry);
+
+        rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
+            if (ack) {
+                confirmAck.increment();
+                return;
+            }
+            confirmNack.increment();
+            log.error("[MQ 발행 거부] 브로커가 메시지를 받지 못했습니다. correlationData={}, cause={}",
+                    correlationData, cause);
+        });
+
+        rabbitTemplate.setReturnsCallback(returned -> {
+            routingFailure.increment();
+            log.error("[MQ 라우팅 실패] 어느 큐에도 전달되지 않았습니다. exchange={}, routingKey={}, replyCode={}, replyText={}",
+                    returned.getExchange(), returned.getRoutingKey(),
+                    returned.getReplyCode(), returned.getReplyText());
+        });
+
         return rabbitTemplate;
     }
 
@@ -182,7 +240,10 @@ public class RabbitMqConfig {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
 
-        simpleFactory.setChannelTransacted(true);
+        // 채널 트랜잭션은 ACK 을 DB 트랜잭션과 묶을 때만 의미가 있는데 이 리스너에는 그런 경계가 없다.
+        // 반면 tx.select/tx.commit 라운드트립 비용은 그대로 들고, 롤백 재전달이
+        // default-requeue-rejected=false 기반 DLQ 격리와 겹쳐 동작이 불명확해진다.
+        simpleFactory.setChannelTransacted(false);
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
 
         simpleFactory.setConcurrentConsumers(20);

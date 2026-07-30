@@ -3,12 +3,16 @@ dependencies {
     implementation project(':module:domain:match')
     implementation project(':module:domain:league')
     implementation project(':module:shared')
+    implementation project(':module:common')             // CoreException/ErrorType (리스너 실패 분류)
     implementation project(':module:infra:redis')
     implementation project(':module:infra:riot-client')  // 비매치 API (account, summoner, league)
     implementation project(':module:support:logging')
 
     // RabbitMQ
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
+    // Metrics (큐 적재량 / DLQ / publisher confirm 지표)
+    implementation 'io.micrometer:micrometer-core'
 
     // Redisson
     implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
