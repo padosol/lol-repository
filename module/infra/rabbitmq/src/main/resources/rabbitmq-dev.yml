@@ -6,3 +6,13 @@ spring:
     password: guest
     connection-timeout: 30000ms
     requested-heartbeat: 60
+    listener:
+      simple:
+        # 재시도 소진 후 requeue 하지 않고 reject → 큐에 선언된 DLX 로 격리된다.
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: ${RABBITMQ_RETRY_MAX_ATTEMPTS:3}
+          initial-interval: ${RABBITMQ_RETRY_INITIAL_INTERVAL:2s}
+          multiplier: ${RABBITMQ_RETRY_MULTIPLIER:2}
+          max-interval: ${RABBITMQ_RETRY_MAX_INTERVAL:10s}

@@ -29,14 +29,19 @@ public class SummonerRenewalListener {
     public void receiveSummonerMessageV2(@Payload SummonerMessage summonerMessage) {
         log.info("전적 갱신 요청 {}", summonerMessage);
 
+        String puuid = summonerMessage.getPuuid();
+
         Platform platform = Platform.valueOfName(summonerMessage.getPlatformId());
         if (platform == null) {
-            log.error("유효하지 않은 platform: {}, message: {}", summonerMessage.getPlatformId(), summonerMessage);
-            return;
+            // 재요청해도 같은 결과이므로 재시도하지 않고 바로 격리한다.
+            throw ListenerFailurePolicy.translate(
+                    new IllegalArgumentException("유효하지 않은 platform: " + summonerMessage.getPlatformId()),
+                    "전적 갱신", puuid);
         }
 
-        String puuid = summonerMessage.getPuuid();
         if (!redisLockHandler.acquireLock(puuid, LOCK_TIMEOUT)) {
+            // 동일 puuid 가 이미 처리 중 — 중복 요청이므로 ACK 하고 버린다.
+            // requeue 하면 락이 풀릴 때까지(최대 3분) 같은 메시지가 재전달을 반복해 busy loop 가 된다.
             log.info("이미 전적 갱신 진행 중 입니다. {}", puuid);
             return;
         }
@@ -44,7 +49,9 @@ public class SummonerRenewalListener {
         try {
             summonerRenewalService.renewSummoner(puuid, platform);
         } catch (Exception e) {
-            log.error(e.getMessage());
+            // 예외를 삼키면 컨테이너가 정상 처리로 보고 ACK 하므로 DLX 가 선언돼 있어도 격리되지 않는다.
+            // 재시도 가치에 따라 전파(재시도 소진 시 DLQ) 또는 즉시 DLQ 로 보낸다.
+            throw ListenerFailurePolicy.translate(e, "전적 갱신", puuid);
         } finally {
             log.info("전적 갱신 요청 완료 {}", summonerMessage);
             redisLockHandler.deleteSummonerRenewal(puuid);
