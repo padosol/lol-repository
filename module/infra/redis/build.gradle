@@ -4,7 +4,7 @@ dependencies {
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+    implementation 'org.redisson:redisson-spring-boot-starter:4.6.1'
 
     // Jackson (match write-through 캐시 JSON 직렬화)
     implementation 'com.fasterxml.jackson.core:jackson-databind'
