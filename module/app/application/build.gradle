@@ -1,0 +1,36 @@
+bootJar.enabled = true
+jar.enabled = false
+
+dependencies {
+    // ── 수직 도메인 모듈 (컴포지션 루트가 전 컨텍스트 조립) ──
+    implementation project(':module:domain:league')
+    implementation project(':module:domain:champion')
+    implementation project(':module:domain:spectator')
+    implementation project(':module:domain:match')
+    implementation project(':module:domain:summoner')
+    implementation project(':module:shared')
+    implementation project(':module:common')
+    implementation project(':module:support:logging')
+    implementation project(':module:infra:api')
+    implementation project(':module:infra:persistence')
+    implementation project(':module:infra:redis')
+    implementation project(':module:infra:rabbitmq')
+    implementation project(':module:infra:riot-client')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-batch'
+    implementation 'org.springframework.batch:spring-batch-integration'
+
+    // DevTools — 소스 변경 시 자동 재시작 (실행 모듈에만 적용, 운영 빌드에서는 제외)
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Redisson (dedicated backfill rate limiter)
+    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+
+    // Google Cloud Storage (match_participant_build backfill: NDJSON export → GCS)
+    implementation platform('com.google.cloud:libraries-bom:26.43.0')
+    implementation 'com.google.cloud:google-cloud-storage'
+}

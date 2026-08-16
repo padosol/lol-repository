@@ -1,0 +1,7 @@
+server:
+  port: ${SERVER_PORT:8111}
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.mmrtr.lol: ${LOG_LEVEL_APP:INFO}

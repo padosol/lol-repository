@@ -1,0 +1,14 @@
+dependencies {
+    implementation project(':module:domain:match')
+    implementation project(':module:shared')
+
+    // Redis
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+
+    // Jackson (match write-through 캐시 JSON 직렬화)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Metrics
+    implementation 'io.micrometer:micrometer-core'
+}

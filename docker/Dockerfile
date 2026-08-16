@@ -10,14 +10,12 @@ RUN chmod +x gradlew
 
 # 의존성 캐싱을 위해 빌드 파일 먼저 복사
 COPY build.gradle settings.gradle ./
-COPY app app
-COPY core core
-COPY infra infra
-COPY support support
+COPY buildSrc buildSrc
+COPY module module
 COPY lol-db-schema lol-db-schema
 
 # 빌드 실행
-RUN ./gradlew :app:bootJar -x test --no-daemon
+RUN ./gradlew :module:app:application:bootJar -x test --no-daemon
 
 # Stage 2: 런타임
 FROM eclipse-temurin:21-jre
@@ -27,7 +25,7 @@ WORKDIR /app
 ENV SPRING_PROFILES_ACTIVE=dev
 
 # JAR 복사
-COPY --from=build /app/app/build/libs/*.jar app.jar
+COPY --from=build /app/module/app/application/build/libs/*.jar app.jar
 
 # JVM 컨테이너 최적화 옵션
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"

@@ -1,0 +1,23 @@
+spring:
+  config:
+    import:
+      - api-prod.yml
+      - persistence-prod.yml
+      - rabbitmq-prod.yml
+      - redis-prod.yml
+      - riot-prod.yml
+
+lol:
+  backfill:
+    range:
+      start-id: ${BACKFILL_START_ID}
+      end-id: ${BACKFILL_END_ID}
+    chunk:
+      size: ${BACKFILL_CHUNK_SIZE}
+      parallelism: ${BACKFILL_PARALLELISM}
+      fetch-size: ${BACKFILL_FETCH_SIZE}
+    filter:
+      season: ${BACKFILL_SEASON}
+      queue-ids: ${BACKFILL_QUEUE_IDS}
+    gcs:
+      bucket: ${BACKFILL_GCS_BUCKET}

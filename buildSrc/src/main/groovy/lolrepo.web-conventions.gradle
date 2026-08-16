@@ -1,0 +1,10 @@
+// 웹(driving adapter) 컨텍스트 공통 빌드 설정: REST 컨트롤러.
+// baseline(spring-boot / dependency-management / lombok / checkstyle / test)은
+// 루트 build.gradle 의 subprojects {} 블록이 모든 서브프로젝트에 제공한다. 여기서는 feature 의존만 더한다.
+plugins {
+    id 'java'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+}

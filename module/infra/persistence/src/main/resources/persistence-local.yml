@@ -1,0 +1,28 @@
+spring:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 1000
+          order_inserts: true
+          order_updates: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}?reWriteBatchedInserts=true&tcpKeepAlive=true
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:15}
+      leak-detection-threshold: ${DB_POOL_LEAK_THRESHOLD:300000}
+      max-lifetime: ${DB_POOL_MAX_LIFETIME:1500000}
+      keepalive-time: ${DB_POOL_KEEPALIVE:300000}

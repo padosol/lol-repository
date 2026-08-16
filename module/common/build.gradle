@@ -1,0 +1,6 @@
+// module:common - 공유 커널 (error 처리 + MDC 유틸). 도메인 아님.
+dependencies {
+    implementation 'org.springframework:spring-web'
+    implementation 'org.springframework.boot:spring-boot'
+    implementation 'org.slf4j:slf4j-api'
+}

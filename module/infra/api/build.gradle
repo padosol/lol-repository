@@ -1,0 +1,13 @@
+bootJar.enabled = false
+jar.enabled = true
+
+dependencies {
+    implementation project(':module:domain:summoner')
+    implementation project(':module:domain:spectator')
+    implementation project(':module:domain:champion')
+    implementation project(':module:domain:league')
+    implementation project(':module:shared')
+    implementation project(':module:common')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+}

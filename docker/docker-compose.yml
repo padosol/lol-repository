@@ -10,21 +10,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 1234
       POSTGRES_DB: postgresCLAUDE
-  # 2. 통계를 처리할 분석 DB (ClickHouse)
-  clickhouse_analytics:
-    image: clickhouse/clickhouse-server:latest
-    container_name: clickhouse_analytics
-    ports:
-      - "8123:8123" # HTTP 인터페이스
-      - "9000:9000" # 기본 클라이언트 포트
-    environment:
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: clickhouse
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
 
   rabbitmq:
     image: rabbitmq:3.13-management
