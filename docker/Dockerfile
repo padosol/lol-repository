@@ -14,6 +14,13 @@ COPY buildSrc buildSrc
 COPY module module
 COPY lol-db-schema lol-db-schema
 
+# 서브모듈 가드 — lol-db-schema 가 비어 있어도 COPY 는 에러 없이 통과한다.
+# 그대로 두면 마이그레이션 0개인 이미지가 조용히 만들어지고, Flyway 는
+# "No migrations found" 만 남긴 채 정상 기동해 배포는 초록불인데 스키마만
+# 그대로인 상태가 된다. 빌드 시점에 끊는다.
+RUN test -n "$(ls -A lol-db-schema/db/migration/*.sql 2>/dev/null)" \
+    || (echo "ERROR: lol-db-schema 서브모듈이 비어 있습니다 — 마이그레이션 없이 이미지가 만들어집니다. checkout 의 submodules 설정과 PAT 유효성을 확인하세요." >&2 && exit 1)
+
 # 빌드 실행
 RUN ./gradlew :module:app:application:bootJar -x test --no-daemon
 
