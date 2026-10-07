@@ -14,7 +14,7 @@ lol-server `gamedata` 모듈에서 이전했다 (MP-131). 챔피언 로테이션
 ## 어댑터 위치
 
 - persistence: `module:infra:persistence` 의 `version`·`queue_type` 패키지
-- cache: `module:infra:redis` 의 `GameDataCacheRedisAdapter` (키 `gamedata:*`)
+- cache: `module:infra:redis` 의 `VersionCacheRedisAdapter` (키 `gamedata:version:latest`, TTL 10분)
 - web: `module:infra:api` 의 `GameDataController`
 
 ## 규칙

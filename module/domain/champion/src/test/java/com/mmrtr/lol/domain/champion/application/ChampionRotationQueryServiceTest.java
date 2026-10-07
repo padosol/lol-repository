@@ -1,6 +1,5 @@
 package com.mmrtr.lol.domain.champion.application;
 
-import com.mmrtr.lol.domain.champion.application.port.ChampionApiPort;
 import com.mmrtr.lol.domain.champion.application.port.ChampionRotationCachePort;
 import com.mmrtr.lol.domain.champion.domain.ChampionRotation;
 import com.mmrtr.lol.support.error.CoreException;
@@ -11,12 +10,10 @@ import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
+import java.util.concurrent.CompletionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -27,10 +24,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 class ChampionRotationQueryServiceTest {
 
-    private final ChampionApiPort championApiPort = mock(ChampionApiPort.class);
+    private final ChampionRotateService championRotateService = mock(ChampionRotateService.class);
     private final ChampionRotationCachePort cachePort = mock(ChampionRotationCachePort.class);
     private final ChampionRotationQueryService service =
-            new ChampionRotationQueryService(championApiPort, cachePort, Runnable::run);
+            new ChampionRotationQueryService(championRotateService, cachePort);
 
     private final ChampionRotation rotation = new ChampionRotation(List.of(1, 2), List.of(101), 10);
 
@@ -40,15 +37,14 @@ class ChampionRotationQueryServiceTest {
         given(cachePort.find("kr")).willReturn(Optional.of(rotation));
 
         assertThat(service.getChampionRotation("kr")).isSameAs(rotation);
-        verify(championApiPort, never()).fetchChampionRotation(anyString(), any(Executor.class));
+        verify(championRotateService, never()).getChampionRotate(anyString());
     }
 
-    @DisplayName("캐시 미스면 Riot 에서 받아 캐시한다")
+    @DisplayName("캐시 미스면 ChampionRotateService 로 받아 캐시한다")
     @Test
     void cacheMiss() {
         given(cachePort.find("kr")).willReturn(Optional.empty());
-        given(championApiPort.fetchChampionRotation(eq("kr"), any(Executor.class)))
-                .willReturn(CompletableFuture.completedFuture(rotation));
+        given(championRotateService.getChampionRotate("kr")).willReturn(rotation);
 
         assertThat(service.getChampionRotation("kr")).isSameAs(rotation);
         verify(cachePort).save("kr", rotation);
@@ -58,8 +54,8 @@ class ChampionRotationQueryServiceTest {
     @Test
     void riotFailure() {
         given(cachePort.find("kr")).willReturn(Optional.empty());
-        given(championApiPort.fetchChampionRotation(eq("kr"), any(Executor.class)))
-                .willReturn(CompletableFuture.failedFuture(new IllegalStateException("riot down")));
+        given(championRotateService.getChampionRotate("kr"))
+                .willThrow(new CompletionException(new IllegalStateException("riot down")));
 
         ChampionRotation result = service.getChampionRotation("kr");
 
@@ -75,6 +71,6 @@ class ChampionRotationQueryServiceTest {
         assertThatThrownBy(() -> service.getChampionRotation("mars"))
                 .isInstanceOf(CoreException.class)
                 .extracting("errorType").isEqualTo(ErrorType.INVALID_INPUT);
-        verifyNoInteractions(cachePort, championApiPort);
+        verifyNoInteractions(cachePort, championRotateService);
     }
 }

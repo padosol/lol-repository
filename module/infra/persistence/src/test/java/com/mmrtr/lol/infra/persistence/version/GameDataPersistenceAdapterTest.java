@@ -89,6 +89,19 @@ class GameDataPersistenceAdapterTest {
         assertThat(adapter.findByVersionId("16.2").orElseThrow().content()).isNull();
     }
 
+    @DisplayName("패치노트 content 구조가 기대와 다르면 500 대신 content=null (제목·링크는 응답)")
+    @Test
+    void patchNoteWithUnexpectedContentShape() {
+        sql("INSERT INTO patch_note (version_id, title, content, patch_url, created_at) VALUES "
+                + "('16.3', '패치 16.3', '{\"rift\":\"oops\"}', 'https://example.com/16-3', '2026-02-05 09:00:00')");
+
+        PatchNoteReadModel detail = adapter.findByVersionId("16.3").orElseThrow();
+
+        assertThat(detail.title()).isEqualTo("패치 16.3");
+        assertThat(detail.patchUrl()).isEqualTo("https://example.com/16-3");
+        assertThat(detail.content()).isNull();
+    }
+
     @DisplayName("큐: 탭 큐만 / 전체")
     @Test
     void queues() {

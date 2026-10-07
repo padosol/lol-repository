@@ -16,11 +16,14 @@ import com.mmrtr.lol.support.error.ErrorType;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 서비스 단위 트랜잭션을 두지 않는다 — 각 조회는 리포지토리 호출 한두 번이고 지연 로딩이 없어,
+ * 리포지토리 메서드 자체의 읽기 전용 트랜잭션으로 충분하다. 클래스에 걸면 최신 버전 캐시 히트에도
+ * DB 커넥션을 잡는다.
+ */
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class GameDataQueryService implements GameDataQueryUseCase {
 
     /**

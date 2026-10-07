@@ -9,7 +9,4 @@ public interface ChampionRotationCachePort {
 
     /** 빈 로테이션은 어댑터가 짧은 TTL(negative cache)로 저장한다. */
     void save(String platform, ChampionRotation rotation);
-
-    /** 전 플랫폼 캐시 제거. */
-    void evictAll();
 }

@@ -21,10 +21,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 /** 게임 데이터 조회 어댑터. 응답 모양은 lol-server gamedata 어댑터·매퍼와 같다. */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class GameDataPersistenceAdapter
@@ -144,7 +146,10 @@ public class GameDataPersistenceAdapter
         try {
             return objectMapper.readValue(contentJson, PatchNoteContent.class);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("패치노트 content 파싱 실패", e);
+            // 크롤러가 적재한 행 하나가 깨져도 상세 화면 전체를 500 으로 막지 않는다 — 제목·원문 링크는 내려가고,
+            // content 만 비운다. 데이터 이상은 ERROR 로그로 드러낸다.
+            log.error("패치노트 content 파싱 실패 - content 를 null 로 응답", e);
+            return null;
         }
     }
 }
