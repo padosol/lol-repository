@@ -62,6 +62,13 @@ com.mmrtr.lol.domain.{ctx}/
 3. CompletableFuture 패턴을 활용한 비동기 처리
 4. 배치 데이터베이스 삽입 (배치 크기 1000, 1초 간격)
 
+### 공개 API · 포트 분리
+
+- **공개 포트**(`server.port`, Ingress 대상): 소유 prefix `/api/v1/{summoners,matches,rankings,champion-stats,game-data}` + 이행용 `lol.web.transitional-public-prefixes`(`/api/riot`·`/api/admin`·`/actuator`)만 받고 그 외 `ApiResponse` 404 (`PublicApiPathFilter`)
+- **내부 포트**(`lol.web.internal-port`, 기본 8081 / local 8112): `/internal/**` 전용. NetworkPolicy 로 lol-server 파드만 허용
+- 공개 컨트롤러는 `@PublicApi` + `ApiResponse<T>` 반환 — 예외는 `PublicApiExceptionAdvice` 가 lol-server 와 같은 형식으로 응답. 소유 prefix 밖 매핑은 `PublicApiMappingTest` 가 실패시킨다
+- lol-server 에서 옮기는 API 는 `RestDocsSupport` 를 상속해 lol-server RestDocs 테스트의 필드 정의를 그대로 옮겨 응답 동일성을 검증한다
+
 ## 4. 명령어
 
 ```bash
