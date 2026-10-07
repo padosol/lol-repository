@@ -11,7 +11,10 @@
 
 ## 어댑터 위치
 
-이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: riot-client(ChampionApiAdapter)·api(컨트롤러).
+이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: riot-client(ChampionApiAdapter)·redis(GameDataCacheRedisAdapter)·api(컨트롤러).
+
+- 공개 API(`/api/v1/game-data/champion-rotations`)는 `ChampionRotationQueryService`(캐시 우선, 빈 로테이션 60초 negative cache, 매주 화요일 00:10 evict)
+- 레거시 `/api/riot/{region}/champion-rotate` 는 `ChampionRotateService`(캐시 없음) — MP-161 에서 제거
 
 ## 규칙
 

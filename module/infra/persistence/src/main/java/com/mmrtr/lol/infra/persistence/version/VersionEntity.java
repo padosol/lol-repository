@@ -30,6 +30,14 @@ public class VersionEntity {
     @Column(name = "season_id")
     private Long seasonId;
 
+    /**
+     * Data Dragon 정적 데이터 버전 (예: 16.16.1, V35). 핫픽스 때 마지막 자리가 달라질 수 있어
+     * {@link #versionValue} 에서 파생하지 않고 저장한다. 과거 행은 null 일 수 있다.
+     */
+    @Comment("Data Dragon 정적 데이터 버전")
+    @Column(name = "patch_version_data", length = 20)
+    private String patchVersionData;
+
     @CreatedDate
     @Comment("생성 일시")
     private LocalDateTime createdAt;

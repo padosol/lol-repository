@@ -1,5 +1,7 @@
 dependencies {
     implementation project(':module:domain:match')
+    implementation project(':module:domain:gamedata')
+    implementation project(':module:domain:champion')
     implementation project(':module:shared')
 
     // Redis
@@ -11,4 +13,6 @@ dependencies {
 
     // Metrics
     implementation 'io.micrometer:micrometer-core'
+
+    testImplementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 }
