@@ -30,6 +30,7 @@ lol-repository (루트)
     ├── domain/
     │   ├── league                  # 리그/랭킹/티어컷오프 (sink 컨텍스트)
     │   ├── champion                # 챔피언 로테이션
+    │   ├── gamedata                # 패치 버전·시즌·패치노트·큐 조회 (공개 API game-data)
     │   ├── spectator               # 활성 게임 조회
     │   ├── match                   # 매치/타임라인 (→ league port 의존)
     │   └── summoner                # 소환사 (→ league port 의존)

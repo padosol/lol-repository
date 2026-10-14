@@ -5,6 +5,7 @@ dependencies {
     // ── 수직 도메인 모듈 (컴포지션 루트가 전 컨텍스트 조립) ──
     implementation project(':module:domain:league')
     implementation project(':module:domain:champion')
+    implementation project(':module:domain:gamedata')
     implementation project(':module:domain:spectator')
     implementation project(':module:domain:match')
     implementation project(':module:domain:summoner')
