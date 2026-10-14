@@ -1,6 +1,11 @@
 server:
   port: ${SERVER_PORT:8111}
 
+# 공개 포트(server.port) / 내부 포트(/internal/** 전용) 분리. dev·prod 는 기본값 8081.
+lol:
+  web:
+    internal-port: ${INTERNAL_PORT:8112}
+
 logging:
   level:
     root: ${LOG_LEVEL_ROOT:INFO}
