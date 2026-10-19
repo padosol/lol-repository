@@ -19,6 +19,7 @@ flowchart TB
 
     subgraph domain["🟢 domain (인프라 무지)"]
       league["module:domain:league<br/>리그/랭킹/티어컷오프 (sink)"]
+      gamedata["module:domain:gamedata<br/>버전·시즌·패치노트·큐"]
       champion["module:domain:champion"]
       spectator["module:domain:spectator"]
       match["module:domain:match<br/>매치/타임라인 + readmodel"]
@@ -27,7 +28,7 @@ flowchart TB
 
     subgraph shared["🟡 공유 (도메인 아님)"]
       sharedM["module:shared<br/>enum"]
-      common["module:common<br/>error + MDC"]
+      common["module:common<br/>error + MDC + PageResult"]
       logging["module:support:logging<br/>@LogExecutionTime AOP"]
     end
 
@@ -40,11 +41,11 @@ flowchart TB
     end
 
     application --> api & pg & redis & rabbit & riot
-    application --> league & champion & spectator & match & summoner
+    application --> league & gamedata & champion & spectator & match & summoner
 
-    api --> league & champion & spectator & summoner
-    pg --> league & match & summoner
-    redis --> match
+    api --> league & gamedata & champion & spectator & summoner
+    pg --> league & gamedata & match & summoner
+    redis --> gamedata & champion & match
     rabbit --> league & match & summoner
     riot --> league & champion & spectator & match & summoner
 
@@ -52,7 +53,7 @@ flowchart TB
     summoner --> league
 
     domain --> sharedM
-    summoner --> common
+    league & gamedata & champion & summoner --> common
 
     rabbit --> redis & riot
 
@@ -60,7 +61,7 @@ flowchart TB
     classDef i fill:#e1eeff,stroke:#2d6cbf,color:#000
     classDef a fill:#fff4d6,stroke:#bf922d,color:#000
     classDef s fill:#fff9c4,stroke:#bfa52d,color:#000
-    class league,champion,spectator,match,summoner d
+    class league,gamedata,champion,spectator,match,summoner d
     class api,pg,redis,rabbit,riot i
     class application a
     class sharedM,common,logging s
