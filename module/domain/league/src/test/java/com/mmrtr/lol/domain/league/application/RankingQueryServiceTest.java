@@ -11,6 +11,10 @@ import com.mmrtr.lol.support.error.ErrorType;
 import com.mmrtr.lol.support.page.PageResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,30 +24,37 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+@ExtendWith(MockitoExtension.class)
 class RankingQueryServiceTest {
 
-    private final RankingQueryPort rankingQueryPort = mock(RankingQueryPort.class);
-    private final RankingQueryService service = new RankingQueryService(rankingQueryPort);
+    @Mock
+    private RankingQueryPort rankingQueryPort;
 
-    @DisplayName("리더보드: platform 이름은 저장 값으로, queue 는 큐 이름으로, tier 는 대문자로 바꿔 50개씩 조회")
+    @InjectMocks
+    private RankingQueryService service;
+
+    @DisplayName("리더보드: platform 이름은 저장 값으로, queue 는 큐 이름으로, tier 는 대문자로 바꿔 50개씩 조회한다")
     @Test
-    void rankingsQueryConditions() {
+    void getRankings_validInput_queriesWithStoredValues() {
+        // given
         given(rankingQueryPort.findRankings("NA1", "RANKED_FLEX_SR", "GOLD", 2, 50))
                 .willReturn(new PageResult<>(List.of(), 2, 50, 0, 0, false, true));
 
+        // when
         PageResult<RankingReadModel> result = service.getRankings("na", RankingQueue.FLEX, "gold", 2);
 
+        // then
         assertThat(result.page()).isEqualTo(2);
         verify(rankingQueryPort).findRankings("NA1", "RANKED_FLEX_SR", "GOLD", 2, 50);
     }
 
-    @DisplayName("리더보드: 빈 tier 는 필터 없음, 모스트 챔피언은 비어 있지 않은 것만 순서대로")
+    @DisplayName("리더보드: 빈 tier 는 필터 없음, 모스트 챔피언은 비어 있지 않은 것만 순서대로 담는다")
     @Test
-    void rankingsMapping() {
+    void getRankings_blankTier_mapsWithoutTierFilter() {
+        // given
         SummonerRanking ranking = SummonerRanking.builder()
                 .puuid("puuid-1").currentRank(1).tier("CHALLENGER")
                 .mostChampion1("Ahri").mostChampion2("").mostChampion3("Zed")
@@ -51,17 +62,37 @@ class RankingQueryServiceTest {
         given(rankingQueryPort.findRankings("KR", "RANKED_SOLO_5x5", null, 1, 50))
                 .willReturn(new PageResult<>(List.of(ranking), 1, 50, 1, 1, true, true));
 
+        // when
         PageResult<RankingReadModel> result = service.getRankings("kr", RankingQueue.SOLO, " ", 1);
 
+        // then
         assertThat(result.content()).singleElement()
                 .extracting(RankingReadModel::champions)
                 .isEqualTo(List.of("Ahri", "Zed"));
     }
 
-    @DisplayName("리더보드: page 1 미만·모르는 platform 은 500 이 아니라 INVALID_INPUT")
+    @DisplayName("리더보드: queue 가 null 로 바인딩되면 기본값 SOLO 로 조회한다")
     @Test
-    void rankingsInvalidInput() {
+    void getRankings_nullQueue_defaultsToSolo() {
+        // given
+        given(rankingQueryPort.findRankings("KR", "RANKED_SOLO_5x5", null, 1, 50))
+                .willReturn(new PageResult<>(List.of(), 1, 50, 0, 0, true, true));
+
+        // when
+        service.getRankings("kr", null, null, 1);
+
+        // then
+        verify(rankingQueryPort).findRankings("KR", "RANKED_SOLO_5x5", null, 1, 50);
+    }
+
+    @DisplayName("리더보드: page 1 미만·offset 이 int 를 넘는 page·모르는 platform 은 500 이 아니라 INVALID_INPUT")
+    @Test
+    void getRankings_invalidInput_throwsInvalidInput() {
+        // when & then
         assertThatThrownBy(() -> service.getRankings("kr", RankingQueue.SOLO, null, 0))
+                .isInstanceOf(CoreException.class)
+                .extracting("errorType").isEqualTo(ErrorType.INVALID_INPUT);
+        assertThatThrownBy(() -> service.getRankings("kr", RankingQueue.SOLO, null, RankingQueryService.MAX_PAGE + 1))
                 .isInstanceOf(CoreException.class)
                 .extracting("errorType").isEqualTo(ErrorType.INVALID_INPUT);
         assertThatThrownBy(() -> service.getRankings("xx", RankingQueue.SOLO, null, 1))
@@ -70,21 +101,24 @@ class RankingQueryServiceTest {
         verify(rankingQueryPort, never()).findRankings(any(), any(), any(), anyInt(), anyInt());
     }
 
-    @DisplayName("티어 컷오프: queue 는 대소문자 무시로 큐 이름 표기(RANKED_SOLO_5x5)에 맞추고 tier 는 대문자로")
+    @DisplayName("티어 컷오프: queue 는 대소문자 무시로 큐 이름 표기(RANKED_SOLO_5x5)에 맞추고 tier 는 대문자로 조회한다")
     @Test
-    void tierCutoffsQueryConditions() {
+    void getTierCutoffs_mixedCase_queriesWithCanonicalValues() {
+        // when
         service.getTierCutoffs("kr", "ranked_solo_5X5", null);
         service.getTierCutoffs("kr", "RANKED_SOLO_5X5", "challenger");
         service.getTierCutoffs("kr", null, null);
 
+        // then
         verify(rankingQueryPort).findTierCutoffs("KR", "RANKED_SOLO_5x5", null);
         verify(rankingQueryPort).findTierCutoffs("KR", "RANKED_SOLO_5x5", "CHALLENGER");
         verify(rankingQueryPort).findTierCutoffs("KR", null, null);
     }
 
-    @DisplayName("티어 컷오프: updatedAt 은 lol-server 와 같은 yyyy-MM-dd HH:mm:ss 문자열")
+    @DisplayName("티어 컷오프: updatedAt 은 lol-server 와 같은 yyyy-MM-dd HH:mm:ss 문자열이다")
     @Test
-    void tierCutoffsMapping() {
+    void getTierCutoffs_withUpdatedAt_formatsAsLolServer() {
+        // given
         TierCutoff cutoff = TierCutoff.builder()
                 .id(1L).queue("RANKED_SOLO_5x5").tier("CHALLENGER").platformId("KR")
                 .minLeaguePoints(1500).lpChange(-3).userCount(300)
@@ -92,14 +126,19 @@ class RankingQueryServiceTest {
                 .build();
         given(rankingQueryPort.findTierCutoffs("KR", null, null)).willReturn(List.of(cutoff));
 
-        assertThat(service.getTierCutoffs("kr", null, null)).singleElement()
+        // when
+        List<TierCutoffReadModel> result = service.getTierCutoffs("kr", null, null);
+
+        // then
+        assertThat(result).singleElement()
                 .extracting(TierCutoffReadModel::updatedAt)
                 .isEqualTo("2026-01-15 12:00:05");
     }
 
     @DisplayName("티어 컷오프: tier 만 주고 queue 를 빼면 INVALID_INPUT, 모르는 platform 도 INVALID_INPUT")
     @Test
-    void tierCutoffsInvalidInput() {
+    void getTierCutoffs_invalidInput_throwsInvalidInput() {
+        // when & then
         assertThatThrownBy(() -> service.getTierCutoffs("kr", null, "CHALLENGER"))
                 .isInstanceOf(CoreException.class)
                 .extracting("errorType").isEqualTo(ErrorType.INVALID_INPUT);

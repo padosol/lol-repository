@@ -20,7 +20,6 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -38,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * lol-server {@code RankControllerTest}·{@code TierCutoffControllerTest} 의 응답 필드 정의를 그대로 옮겨
  * 새 경로의 응답이 lol-server 와 같은지 검증한다. responseFields 는 문서화되지 않은 필드가 있거나 빠지면 실패한다.
+ * 입력 검증 규칙(tier 는 queue 와 함께 등)은 {@code RankingQueryServiceTest} 가 검증한다.
  */
 class RankingControllerTest extends RestDocsSupport {
 
@@ -48,14 +48,16 @@ class RankingControllerTest extends RestDocsSupport {
         return new RankingController(rankingQueryUseCase);
     }
 
-    @DisplayName("GET /api/v1/rankings")
+    @DisplayName("GET /api/v1/rankings — lol-server 와 같은 페이지 응답")
     @Test
-    void rankings() throws Exception {
+    void getRankings_validRequest_returnsLolServerPageShape() throws Exception {
+        // given
         RankingReadModel faker = new RankingReadModel("puuid-faker", 1, 0, "hide on bush", "KR1", 100, 50,
-                new BigDecimal("66.67"), "CHALLENGER", null, 1234, List.of("Ahri", "Zed"));
+                new BigDecimal("66.67"), "CHALLENGER", "I", 1234, List.of("Ahri", "Zed"));
         given(rankingQueryUseCase.getRankings("kr", RankingQueue.SOLO, null, 1))
                 .willReturn(new PageResult<>(List.of(faker), 1, 50, 1, 1, true, true));
 
+        // when & then
         mockMvc.perform(get("/api/v1/rankings")
                         .param("platform", "kr")
                         .param("queue", "SOLO")
@@ -82,7 +84,8 @@ class RankingControllerTest extends RestDocsSupport {
                                 fieldWithPath("data.content[].winRate").type(JsonFieldType.NUMBER).description("승률 (%)"),
                                 fieldWithPath("data.content[].tier").type(JsonFieldType.STRING)
                                         .description("티어 (CHALLENGER, GRANDMASTER, MASTER, DIAMOND 등)"),
-                                fieldWithPath("data.content[].rank").type(JsonFieldType.NULL)
+                                // lol-server 문서는 NULL 로 적었지만 저장 데이터는 마스터 이상도 "I" 를 갖는다
+                                fieldWithPath("data.content[].rank").type(JsonFieldType.STRING)
                                         .description("랭크 (I, II, III, IV 또는 null)").optional(),
                                 fieldWithPath("data.content[].leaguePoints").type(JsonFieldType.NUMBER).description("리그 포인트(LP)"),
                                 fieldWithPath("data.content[].champions").type(JsonFieldType.ARRAY).description("주요 챔피언 이름 목록"),
@@ -94,21 +97,25 @@ class RankingControllerTest extends RestDocsSupport {
                                 fieldWithPath("data.isLast").type(JsonFieldType.BOOLEAN).description("마지막 페이지 여부")))));
     }
 
-    @DisplayName("queue·page 를 생략하면 SOLO·1 페이지 (lol-server 와 같은 기본값)")
+    @DisplayName("queue·page 를 생략하면 SOLO·1 페이지로 조회한다 (lol-server 와 같은 기본값)")
     @Test
-    void rankingsDefaults() throws Exception {
+    void getRankings_queueAndPageOmitted_usesSoloAndFirstPage() throws Exception {
+        // given
         given(rankingQueryUseCase.getRankings(anyString(), any(), any(), anyInt()))
                 .willReturn(new PageResult<>(List.of(), 1, 50, 0, 0, true, true));
 
+        // when
         mockMvc.perform(get("/api/v1/rankings").param("platform", "kr"))
                 .andExpect(status().isOk());
 
+        // then
         verify(rankingQueryUseCase).getRankings("kr", RankingQueue.SOLO, null, 1);
     }
 
     @DisplayName("platform 누락·모르는 queue 는 400 INVALID_INPUT (lol-server 는 각각 400·500)")
     @Test
-    void rankingsInvalidInput() throws Exception {
+    void getRankings_missingPlatformOrUnknownQueue_returns400() throws Exception {
+        // when & then
         mockMvc.perform(get("/api/v1/rankings"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorMessage.errorCode").value("E400"));
@@ -120,13 +127,15 @@ class RankingControllerTest extends RestDocsSupport {
 
     @DisplayName("GET /api/v1/rankings/tier-cutoffs?platform=kr")
     @Test
-    void tierCutoffs() throws Exception {
+    void getTierCutoffs_platformOnly_returnsAllCutoffs() throws Exception {
+        // given
         given(rankingQueryUseCase.getTierCutoffs("kr", null, null)).willReturn(List.of(
                 cutoff(1L, "RANKED_SOLO_5x5", "CHALLENGER", 1500, 10, 300),
                 cutoff(2L, "RANKED_SOLO_5x5", "GRANDMASTER", 800, 5, 700),
                 cutoff(3L, "RANKED_FLEX_SR", "CHALLENGER", 1200, -3, 200),
                 cutoff(4L, "RANKED_FLEX_SR", "GRANDMASTER", 600, 2, 500)));
 
+        // when & then
         mockMvc.perform(get("/api/v1/rankings/tier-cutoffs").param("platform", "kr"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[2].lpChange").value(-3))
@@ -140,11 +149,13 @@ class RankingControllerTest extends RestDocsSupport {
 
     @DisplayName("GET /api/v1/rankings/tier-cutoffs?platform=kr&queue=RANKED_SOLO_5x5")
     @Test
-    void tierCutoffsByQueue() throws Exception {
+    void getTierCutoffs_withQueue_returnsQueueCutoffs() throws Exception {
+        // given
         given(rankingQueryUseCase.getTierCutoffs("kr", "RANKED_SOLO_5x5", null)).willReturn(List.of(
                 cutoff(1L, "RANKED_SOLO_5x5", "CHALLENGER", 1500, 10, 300),
                 cutoff(2L, "RANKED_SOLO_5x5", "GRANDMASTER", 800, 5, 700)));
 
+        // when & then
         mockMvc.perform(get("/api/v1/rankings/tier-cutoffs")
                         .param("platform", "kr")
                         .param("queue", "RANKED_SOLO_5x5"))
@@ -159,10 +170,12 @@ class RankingControllerTest extends RestDocsSupport {
 
     @DisplayName("GET /api/v1/rankings/tier-cutoffs?platform=kr&queue=RANKED_SOLO_5x5&tier=CHALLENGER (옛 단건 조회)")
     @Test
-    void tierCutoffByQueueAndTier() throws Exception {
+    void getTierCutoffs_withQueueAndTier_returnsSingleCutoff() throws Exception {
+        // given
         given(rankingQueryUseCase.getTierCutoffs("kr", "RANKED_SOLO_5x5", "CHALLENGER")).willReturn(List.of(
                 cutoff(1L, "RANKED_SOLO_5x5", "CHALLENGER", 1500, 10, 300)));
 
+        // when & then
         mockMvc.perform(get("/api/v1/rankings/tier-cutoffs")
                         .param("platform", "kr")
                         .param("queue", "RANKED_SOLO_5x5")
@@ -177,14 +190,17 @@ class RankingControllerTest extends RestDocsSupport {
                         responseFields(success(tierCutoffFields("티어 컷오프 목록 (단건)")))));
     }
 
-    @DisplayName("tier 만 주고 queue 를 빼면 400 INVALID_INPUT")
+    @DisplayName("유스케이스가 INVALID_INPUT 을 던지면 lol-server 와 같은 400 ApiResponse 에러로 응답한다")
     @Test
-    void tierCutoffsTierWithoutQueue() throws Exception {
-        given(rankingQueryUseCase.getTierCutoffs(anyString(), isNull(), anyString()))
+    void getTierCutoffs_useCaseThrowsInvalidInput_returns400ApiResponse() throws Exception {
+        // given
+        given(rankingQueryUseCase.getTierCutoffs("kr", null, "CHALLENGER"))
                 .willThrow(new CoreException(ErrorType.INVALID_INPUT, "tier 필터는 queue 와 함께 지정해야 합니다."));
 
+        // when & then
         mockMvc.perform(get("/api/v1/rankings/tier-cutoffs").param("platform", "kr").param("tier", "CHALLENGER"))
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.result").value("ERROR"))
                 .andExpect(jsonPath("$.errorMessage.errorCode").value("E400"))
                 .andExpect(jsonPath("$.errorMessage.message").value("잘못된 입력값입니다."));
     }

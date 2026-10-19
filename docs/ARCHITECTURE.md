@@ -52,8 +52,10 @@ flowchart TB
     match --> league
     summoner --> league
 
-    domain --> sharedM
+    league & champion & match --> sharedM
+    infra --> sharedM
     league & gamedata & champion & summoner --> common
+    api & pg & riot --> common
 
     rabbit --> redis & riot
 

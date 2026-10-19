@@ -17,9 +17,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
+import static org.springframework.util.StringUtils.hasText;
+
 /**
  * lol-server leaderboard({@code RankService})·gamedata({@code TierCutoffService}) 조회의 이전.
- * 서비스 단위 트랜잭션은 두지 않는다 — 조회마다 리포지토리 호출이 한 번이고 지연 로딩이 없다.
+ * 서비스 단위 트랜잭션은 두지 않는다 — 페이지 조회(본문+COUNT)는 어댑터 메서드가 한 트랜잭션으로 묶는다.
  */
 @Service
 @RequiredArgsConstructor
@@ -27,14 +29,19 @@ public class RankingQueryService implements RankingQueryUseCase {
 
     static final int PAGE_SIZE = 50;
 
+    /** 이보다 큰 page 는 JPA offset 이 int 를 넘어 500 이 난다. 데이터가 있을 수 없는 범위라 400 으로 끊는다. */
+    static final int MAX_PAGE = Integer.MAX_VALUE / PAGE_SIZE;
+
     private final RankingQueryPort rankingQueryPort;
 
     @Override
     public PageResult<RankingReadModel> getRankings(String platform, RankingQueue queue, String tier, int page) {
-        if (page < 1) {
-            throw new CoreException(ErrorType.INVALID_INPUT, "page 는 1 이상이어야 합니다: " + page);
+        if (page < 1 || page > MAX_PAGE) {
+            throw new CoreException(ErrorType.INVALID_INPUT, "page 는 1 이상 " + MAX_PAGE + " 이하여야 합니다: " + page);
         }
-        return rankingQueryPort.findRankings(resolvePlatformId(platform), queue.queueName(), upperOrNull(tier),
+        // queue=&queue= 처럼 값이 여러 개 비어 오면 defaultValue 가 적용되지 않고 null 로 바인딩된다
+        RankingQueue resolvedQueue = queue != null ? queue : RankingQueue.SOLO;
+        return rankingQueryPort.findRankings(resolvePlatformId(platform), resolvedQueue.queueName(), upperOrNull(tier),
                         page, PAGE_SIZE)
                 .map(RankingReadModel::from);
     }
@@ -50,11 +57,14 @@ public class RankingQueryService implements RankingQueryUseCase {
                 .toList();
     }
 
-    /** 플랫폼 이름(kr, na …)을 저장 값(KR, NA1 …)으로. 모르는 값은 빈 결과가 아니라 400 이다. */
+    /**
+     * 플랫폼 이름(kr, na …)을 저장 값(KR, NA1 …)으로. 모르는 값은 빈 결과가 아니라 400 이다.
+     * 메시지에 입력값을 넣지 않는다 — 예외 메시지가 그대로 로그에 남아 개행 주입으로 로그를 위조할 수 있다.
+     */
     private String resolvePlatformId(String platform) {
         Platform resolved = Platform.valueOfName(platform);
         if (resolved == null) {
-            throw new CoreException(ErrorType.INVALID_INPUT, "유효하지 않은 platform 입니다: " + platform);
+            throw new CoreException(ErrorType.INVALID_INPUT, "유효하지 않은 platform 입니다.");
         }
         return resolved.getPlatformId();
     }
@@ -76,9 +86,5 @@ public class RankingQueryService implements RankingQueryUseCase {
 
     private String upperOrNull(String value) {
         return hasText(value) ? value.toUpperCase(Locale.ROOT) : null;
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
     }
 }

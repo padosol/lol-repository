@@ -33,6 +33,7 @@ class RankingQueryPersistenceAdapterTest {
 
     @BeforeEach
     void setUp() {
+        // given
         sql("DELETE FROM summoner_ranking");
         sql("DELETE FROM tier_cutoff");
 
@@ -53,10 +54,12 @@ class RankingQueryPersistenceAdapterTest {
 
     @DisplayName("리더보드: 플랫폼·큐로 거르고 순위 오름차순, 페이지 메타데이터는 1부터")
     @Test
-    void rankingsPaged() {
+    void findRankings_noTier_returnsPlatformQueuePagesByRank() {
+        // when
         PageResult<SummonerRanking> first = adapter.findRankings("KR", "RANKED_SOLO_5x5", null, 1, 2);
         PageResult<SummonerRanking> second = adapter.findRankings("KR", "RANKED_SOLO_5x5", null, 2, 2);
 
+        // then
         assertThat(first.content()).extracting(SummonerRanking::getPuuid).containsExactly("p1", "p2");
         assertThat(first.page()).isEqualTo(1);
         assertThat(first.size()).isEqualTo(2);
@@ -70,16 +73,19 @@ class RankingQueryPersistenceAdapterTest {
 
     @DisplayName("리더보드: tier 필터")
     @Test
-    void rankingsByTier() {
+    void findRankings_withTier_returnsOnlyThatTier() {
+        // when
         PageResult<SummonerRanking> grandmasters = adapter.findRankings("KR", "RANKED_SOLO_5x5", "GRANDMASTER", 1, 50);
 
+        // then
         assertThat(grandmasters.content()).extracting(SummonerRanking::getPuuid).containsExactly("p3");
         assertThat(grandmasters.content().get(0).getMostChampion1()).isEqualTo("Zed");
     }
 
     @DisplayName("티어 컷오프: 플랫폼 전체 / 큐 / 큐+티어, id 오름차순")
     @Test
-    void tierCutoffs() {
+    void findTierCutoffs_byFilters_returnsMatchingCutoffsInIdOrder() {
+        // when & then
         assertThat(adapter.findTierCutoffs("KR", null, null))
                 .extracting(cutoff -> cutoff.getQueue() + ":" + cutoff.getTier())
                 .containsExactly("RANKED_SOLO_5x5:CHALLENGER", "RANKED_SOLO_5x5:GRANDMASTER", "RANKED_FLEX_SR:CHALLENGER");
