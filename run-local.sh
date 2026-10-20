@@ -11,9 +11,6 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-# Git 서브모듈 업데이트 (이 프로젝트는 lol-db-schema 서브모듈 사용)
-git submodule update --init --recursive
-
 echo "==> Gradle 빌드..."
 if [ "${SKIP_BUILD:-false}" != "true" ]; then
   "$SCRIPT_DIR/gradlew" build -x test --no-daemon
