@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.persistence.summoner.repository;
 import com.mmrtr.lol.common.type.Queue;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.MostChampion;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RecentGame;
+import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RiotId;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.TierInfo;
 import com.mmrtr.lol.infra.persistence.config.JpaConfig;
 import jakarta.persistence.EntityManager;
@@ -46,7 +47,7 @@ class DuoProfileQueryPersistenceAdapterTest {
                 "summoner")) {
             entityManager.createNativeQuery("DELETE FROM " + table).executeUpdate();
         }
-        insert("summoner", Map.of("puuid", ME));
+        insert("summoner", Map.of("puuid", ME, "game_name", "Hide on bush", "tag_line", "KR1"));
         insert("league_summoner", Map.of("puuid", ME, "queue", "RANKED_SOLO_5x5", "tier", "GOLD", "rank", "II",
                 "league_points", 45));
         insert("league_summoner", Map.of("puuid", ME, "queue", "RANKED_FLEX_SR", "tier", "PLATINUM", "rank", "IV",
@@ -65,12 +66,12 @@ class DuoProfileQueryPersistenceAdapterTest {
         insert("match_participant_challenges", Map.of("puuid", OTHER, "match_id", "M1"));
     }
 
-    @DisplayName("색인 여부는 summoner 행 존재로 판단한다")
+    @DisplayName("Riot ID 는 summoner 행에서, 행이 없으면(색인된 적 없음) 빈 값")
     @Test
-    void existsSummoner_byPuuid_checksSummonerRow() {
+    void findRiotId_byPuuid_readsSummonerRow() {
         // when & then
-        assertThat(adapter.existsSummoner(ME)).isTrue();
-        assertThat(adapter.existsSummoner("ghost")).isFalse();
+        assertThat(adapter.findRiotId(ME)).contains(new RiotId("Hide on bush", "KR1"));
+        assertThat(adapter.findRiotId("ghost")).isEmpty();
     }
 
     @DisplayName("티어는 요청한 큐의 league_summoner 행, 없으면 빈 값")

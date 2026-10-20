@@ -28,9 +28,10 @@ public class DuoProfileInternalController {
     private final DuoProfileQueryUseCase duoProfileQueryUseCase;
 
     @Operation(
-            summary = "duo 프로필 (솔로 랭크 티어·모스트 챔피언·최근 게임 요약)",
+            summary = "duo 프로필 (Riot ID·솔로 랭크 티어·모스트 챔피언·최근 게임 요약)",
             description = """
                     lol-server duo 가 모집글·신청 생성 시점에 스냅샷으로 저장하는 통계. 응답 형태는 lol-server `RiotAccountStats` 와 같다.
+                    - gameName·tagLine: Riot ID. 매칭이 확정된 상대에게 보여 준다
                     - tierInfo: 솔로 랭크 티어. 기록이 없으면 `UNRANKED` / `I` / 0
                     - mostChampions: 솔로 랭크 판 수 상위 3개 (전 시즌, challenges 가 적재된 게임만 센다)
                     - recentGameSummary: 최근 솔로 랭크 20게임의 승패, playedChampions 는 최신 게임부터""")

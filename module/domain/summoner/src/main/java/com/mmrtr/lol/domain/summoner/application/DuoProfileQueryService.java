@@ -5,6 +5,7 @@ import com.mmrtr.lol.domain.summoner.application.port.DuoProfileQueryPort;
 import com.mmrtr.lol.domain.summoner.application.usecase.DuoProfileQueryUseCase;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RecentGameSummary;
+import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RiotId;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.TierInfo;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
@@ -28,10 +29,11 @@ public class DuoProfileQueryService implements DuoProfileQueryUseCase {
     @Override
     public DuoProfileReadModel getDuoProfile(String puuid) {
         // 리그·매치 조회는 DB 만 보므로, 색인 안 된 소환사는 실제 티어와 무관하게 언랭으로 보인다 → 언랭과 구분한다
-        if (!duoProfileQueryPort.existsSummoner(puuid)) {
-            throw new CoreException(ErrorType.NOT_FOUND_PUUID);
-        }
+        RiotId riotId = duoProfileQueryPort.findRiotId(puuid)
+                .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND_PUUID));
         return new DuoProfileReadModel(
+                riotId.gameName(),
+                riotId.tagLine(),
                 duoProfileQueryPort.findTier(puuid, QUEUE).orElse(TierInfo.UNRANKED),
                 duoProfileQueryPort.findMostChampions(puuid, QUEUE, MOST_CHAMPION_LIMIT),
                 RecentGameSummary.from(duoProfileQueryPort.findRecentGames(puuid, QUEUE, RECENT_GAME_SIZE))

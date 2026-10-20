@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * duo 내부 API 응답이 lol-server duo {@code RiotAccountStats}(tierInfo·mostChampions·recentGameSummary) 와
+ * duo 내부 API 응답이 lol-server duo {@code RiotAccountStats}(gameName·tagLine·tierInfo·mostChampions·recentGameSummary) 와
  * 같은 필드 구성인지 검증한다. responseFields 는 문서화되지 않은 필드가 있거나 빠지면 실패한다.
  */
 class DuoProfileInternalControllerTest extends RestDocsSupport {
@@ -46,6 +46,7 @@ class DuoProfileInternalControllerTest extends RestDocsSupport {
     void getDuoProfile_indexedSummoner_returnsRiotAccountStatsShape() throws Exception {
         // given
         given(duoProfileQueryUseCase.getDuoProfile("puuid-1")).willReturn(new DuoProfileReadModel(
+                "Hide on bush", "KR1",
                 new TierInfo("GOLD", "II", 45),
                 List.of(new MostChampion(103, "Ahri", 12, 8, 4)),
                 new RecentGameSummary(1, 1, List.of(new PlayedChampion(103, "Ahri"), new PlayedChampion(238, "Zed")))));
@@ -53,6 +54,8 @@ class DuoProfileInternalControllerTest extends RestDocsSupport {
         // when & then
         mockMvc.perform(get("/internal/v1/summoners/{puuid}/duo-profile", "puuid-1"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gameName").value("Hide on bush"))
+                .andExpect(jsonPath("$.tagLine").value("KR1"))
                 .andExpect(jsonPath("$.tierInfo.tier").value("GOLD"))
                 .andExpect(jsonPath("$.mostChampions[0].wins").value(8))
                 .andExpect(jsonPath("$.recentGameSummary.playedChampions[1].championName").value("Zed"))
@@ -60,6 +63,8 @@ class DuoProfileInternalControllerTest extends RestDocsSupport {
                         preprocessResponse(prettyPrint()),
                         pathParameters(parameterWithName("puuid").description("소환사 PUUID")),
                         responseFields(
+                                fieldWithPath("gameName").type(JsonFieldType.STRING).description("Riot ID 게임 이름 — 매칭 상대에게 보여 준다"),
+                                fieldWithPath("tagLine").type(JsonFieldType.STRING).description("Riot ID 태그"),
                                 fieldWithPath("tierInfo").type(JsonFieldType.OBJECT).description("솔로 랭크 티어"),
                                 fieldWithPath("tierInfo.tier").type(JsonFieldType.STRING).description("티어 (기록 없으면 UNRANKED)"),
                                 fieldWithPath("tierInfo.rank").type(JsonFieldType.STRING).description("랭크 (기록 없으면 I)"),

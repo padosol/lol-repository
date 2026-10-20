@@ -12,7 +12,7 @@
 
 ## 내부 API — duo 프로필 (MP-142)
 
-- `GET /internal/v1/summoners/{puuid}/duo-profile` (내부 포트 전용) — lol-server duo `RiotAccountResolver` 의 4회 조회를 대체. 응답 JSON 은 lol-server `RiotAccountStats` 와 같다
+- `GET /internal/v1/summoners/{puuid}/duo-profile` (내부 포트 전용) — lol-server duo `RiotAccountResolver` 의 4회 조회를 대체. 응답 JSON 은 lol-server `RiotAccountStats` 와 같다. Riot ID(`gameName`·`tagLine`)는 lol-server 가 매칭 상대 이름으로 스냅샷한다 (lol-server 는 summoner 를 읽지 않는다)
 - 솔로 랭크 기준: 티어(없으면 `UNRANKED`/`I`/0) · 판 수 상위 3 챔피언(전 시즌, challenges 적재된 게임만) · 최근 20게임(게임 종료 시각 최신순)
 - 색인된 적 없는 소환사(`summoner` 행 없음)는 `NOT_FOUND_PUUID` 404 — lol-server 가 `SUMMONER_SEARCH_REQUIRED` 로 안내
 - 계약: `docs/api/internal-v1.openapi.yaml` (`InternalApiContractTest` 가 생성 결과와 비교)
