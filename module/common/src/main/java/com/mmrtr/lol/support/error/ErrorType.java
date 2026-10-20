@@ -16,6 +16,8 @@ public enum ErrorType {
 
     NOT_FOUND_API(HttpStatus.NOT_FOUND, ErrorCode.E404, "존재하지 않는 API 입니다.", LogLevel.INFO),
     NOT_FOUND_PUUID(HttpStatus.NOT_FOUND, ErrorCode.E404, "존재하지 않는 PUUID 입니다.", LogLevel.INFO),
+    // 저장된 platform_id 가 비었거나 모르는 값이라 Riot 을 어느 지역으로 부를지 정할 수 없다
+    UNKNOWN_SUMMONER_PLATFORM(HttpStatus.NOT_FOUND, ErrorCode.E404, "플랫폼 정보가 없는 소환사입니다.", LogLevel.WARN),
     NOT_FOUND_MATCH_ID(HttpStatus.NOT_FOUND, ErrorCode.E404, "존재하지 않는 MatchId 입니다.", LogLevel.INFO),
     NOT_FOUND_USER(HttpStatus.NOT_FOUND, ErrorCode.E404, "존재하지 않는 유저 입니다.", LogLevel.INFO),
     NOT_FOUND_PATCH_NOTE(HttpStatus.NOT_FOUND, ErrorCode.E404, "존재하지 않는 패치노트 입니다.", LogLevel.INFO),
