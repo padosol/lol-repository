@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.redis.adapter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,24 @@ public class JsonValueCache {
             redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(value), ttl);
         } catch (JsonProcessingException | RuntimeException e) {
             log.warn("cache write failed - key: {}, cause: {}", key, e.getMessage());
+        }
+    }
+
+    /** Redis 장애는 "없음" — 캐시가 없는 것처럼 원천을 본다. */
+    public boolean exists(String key) {
+        try {
+            return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+        } catch (RuntimeException e) {
+            log.warn("cache exists failed - key: {}, cause: {}", key, e.getMessage());
+            return false;
+        }
+    }
+
+    public void delete(Collection<String> keys) {
+        try {
+            redisTemplate.delete(keys);
+        } catch (RuntimeException e) {
+            log.warn("cache delete failed - keys: {}, cause: {}", keys, e.getMessage());
         }
     }
 }

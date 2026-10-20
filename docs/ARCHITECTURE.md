@@ -44,17 +44,17 @@ flowchart TB
     application --> league & gamedata & champion & spectator & match & summoner
 
     api --> league & gamedata & champion & spectator & summoner
-    pg --> league & gamedata & match & summoner
-    redis --> gamedata & champion & match & summoner
+    pg --> league & gamedata & spectator & match & summoner
+    redis --> gamedata & champion & spectator & match & summoner
     rabbit --> league & match & summoner
     riot --> league & champion & spectator & match & summoner
 
     match --> league
     summoner --> league
 
-    league & champion & match & summoner --> sharedM
+    league & champion & spectator & match & summoner --> sharedM
     infra --> sharedM
-    league & gamedata & champion & summoner --> common
+    league & gamedata & champion & spectator & summoner --> common
     api & pg & riot --> common
 
     rabbit --> redis & riot
