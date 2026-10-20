@@ -14,6 +14,12 @@ public interface TierCutoffJpaRepository extends JpaRepository<TierCutoffEntity,
 
     List<TierCutoffEntity> findByQueue(String queue);
 
+    List<TierCutoffEntity> findByPlatformIdOrderByIdAsc(String platformId);
+
+    List<TierCutoffEntity> findByPlatformIdAndQueueOrderByIdAsc(String platformId, String queue);
+
+    List<TierCutoffEntity> findByPlatformIdAndQueueAndTierOrderByIdAsc(String platformId, String queue, String tier);
+
     @Modifying
     @Query("DELETE FROM TierCutoffEntity tc WHERE tc.queue = :queue")
     void deleteByQueue(@Param("queue") String queue);
