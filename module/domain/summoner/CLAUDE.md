@@ -12,12 +12,15 @@
 
 ## 공개 API — 소환사 조회 (MP-134)
 
-lol-server summoner 모듈의 조회를 옮겼다 (공개 API 재설계 3.1절). 갱신·관전은 별도.
+lol-server summoner 모듈의 조회·갱신을 옮겼다 (공개 API 재설계 3.1절). 관전(`/{puuid}/active-game`)은 spectator 컨텍스트.
 
 - `GET /{puuid}` — 저장된 소환사만, 없으면 `NOT_FOUND_PUUID` 404
 - `GET /by-riot-id/{gameName-tagLine}?platform=` — `search_name` 으로 찾아 하나로 특정되면 그대로, 아니면 Riot 에서 찾아 저장한다(갱신 일시는 과거로 초기화). Riot 조회는 `SummonerLookupLockPort`(Redis `summoner:lock:lookup:*`, 5초 대기) 안에서, 기다린 요청은 저장된 결과를 다시 찾는다. 태그가 없으면 저장된 소환사만 찾는다
 - `GET /autocomplete?q=&platform=` — 랭크 기록이 있는 소환사, `search_name` 접두사, 최대 20건(이름순). 솔로 랭크 티어 우선. 빈 검색어는 빈 목록
 - `GET /{puuid}/leagues` — 현재 랭크와 이력(최신순). `oow` 는 현재 백분율 `"50.00"`, 이력 비율 `"0.50"` (lol-server 와 같다)
+- `POST /{puuid}/renewal` — 진행 중이면 SUCCESS, 클릭 쿨다운(10초, SET NX)·마지막 Riot 호출 2분 이내면 FAILED(200), 아니면 진행 표시(2분) 후 `mmrtr.exchange` 로 발행하고 SUCCESS(202). 메시지의 플랫폼은 이름(KR, NA …) — 컨슈머가 이름으로 읽는다
+- `GET /{puuid}/renewal` — 진행 표시가 있으면 PROGRESS, 없으면 SUCCESS. 진행 표시는 갱신 컨슈머가 끝날 때 지운다
+- 갱신 Redis 키(`summoner:renewal:*`·`summoner:click-cooldown:*`)는 lol-server 와 같은 키·값·TTL 이라 공유한다
 - `platform` 은 이름(kr, na …)으로 받아 저장 값(KR, NA1 …)으로 바꾼다. 모르는 값은 400 `INVALID_INPUT`
 
 ## 내부 API — duo 프로필 (MP-142)
@@ -30,7 +33,7 @@ lol-server summoner 모듈의 조회를 옮겼다 (공개 API 재설계 3.1절).
 
 ## 어댑터 위치
 
-이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: persistence(`SummonerQueryPersistenceAdapter`·`DuoProfileQueryPersistenceAdapter` 포함)·redis(`SummonerLookupLockRedisAdapter`)·rabbitmq·riot-client(SummonerApiAdapter)·api(`controller/summoner/SummonerQueryController`, `controller/internal/`).
+이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: persistence(`SummonerQueryPersistenceAdapter`·`DuoProfileQueryPersistenceAdapter` 포함)·redis(`SummonerLookupLockRedisAdapter`·`SummonerRenewalStateRedisAdapter`)·rabbitmq(발행은 league 의 `SummonerCollectionPublishPort`, 갱신 실행은 `SummonerRenewalService`)·riot-client(SummonerApiAdapter)·api(`controller/summoner/SummonerQueryController`·`SummonerRenewalController`, `controller/internal/`).
 
 ## 규칙
 
