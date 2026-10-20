@@ -27,7 +27,7 @@ class MatchTimelineReadModelTest {
         MatchTimelineReadModel timeline = MatchTimelineReadModel.from(events);
 
         // then
-        assertThat(timeline.participants().get(2)).isEqualTo(new ParticipantTimeline(
+        assertThat(timeline.participants()).containsEntry(2, new ParticipantTimeline(
                 List.of(new ItemSeq(1055, 0, "ITEM_PURCHASED"), new ItemSeq(2003, 2, "ITEM_PURCHASED")),
                 List.of(new SkillSeq(1, 1, "SKILL_LEVEL_UP"))));
         assertThat(timeline.participants().get(1).itemSeq()).containsExactly(new ItemSeq(0, 3, "ITEM_PURCHASED"));

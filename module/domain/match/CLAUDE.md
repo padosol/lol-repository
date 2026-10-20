@@ -6,9 +6,9 @@
 
 `com.mmrtr.lol.domain.match` 하위:
 - `domain/` — 도메인 모델 (인프라 무지 — `ArchitectureTest` 강제)
-- `application/port/` — Outbound Port (Repository/Api/Publish, 조회 전용 `MatchQueryPort`·`MatchCacheReadPort`)
+- `application/port/` — Outbound Port (Repository/Api/Publish, 조회 전용 `MatchQueryPort`·`MatchStatsQueryPort`·`MatchCacheReadPort`)
 - `application/usecase/` — UseCase (Inbound Port)
-- `readmodel/` — Riot 응답 DTO(`*Dto`)와 공개 API 응답 모델(`GameReadModel`·`ParticipantReadModel`·`MatchTimelineReadModel`). 공개 API 모델은 **lol-server 응답과 필드가 같아야 한다** (`MatchControllerTest` 가 검증)
+- `readmodel/` — Riot 응답 DTO(`*Dto`)와 공개 API 응답 모델(`GameReadModel`·`ParticipantReadModel`·`MatchTimelineReadModel`·`DailyGameCountReadModel`·`RankChampionsReadModel`). 공개 API 모델은 **lol-server 응답과 필드가 같아야 한다** (`MatchControllerTest` 가 검증)
 
 ## 공개 API — 매치 조회 (MP-135)
 
@@ -24,10 +24,12 @@ lol-server match 모듈의 조회를 옮긴다 (공개 API 재설계 3.2절).
 - `GET /matches?season=&queueId=&page=` — CLASSIC·CHERRY 만, 게임 종료 최신순. 페이지 매치들의 참가자·이벤트는 한 번씩 동시에 읽는다(`requestExecutor`)
 - 첫 페이지에는 **캐시 오버레이**: 갱신 직후 `MatchCacheWritePort` 가 쓴 `match:ids:v1:{puuid}`·`match:v1:{matchId}` 중 DB 에 아직 없는 매치를 DB 페이지 위에 얹는다. DB 첫 페이지 맨 아래보다 오래된 것·게임 모드·큐·시즌(게임 버전 첫 숫자)이 안 맞는 것은 뺀다. DB 꼬리는 자르지 않는다 (lol-server 와 같다)
 - `GET /match-ids?queueId=&page=` — 게임 모드와 무관하게 매치 ID 내림차순
+- `GET /matches/daily-count?season=&queueId=` — 최근 3개월(오늘 0시 기준) 게임 생성 날짜별 게임 수와 하루 최소·최대. season 필수(400), 큐가 없으면 솔로·자유 랭크
+- `GET /champions?season=` — 모스트 챔피언(옛 `/api/v1/rank/champions`). 솔로·자유 랭크를 큐·챔피언별로 평균(반올림 없음)·승패·승률, challenges 행이 있는 게임만 센다. season 이 없으면 전 시즌 (lol-server 는 500)
 
 ## 어댑터 위치
 
-이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: persistence(MatchRepositoryImpl 등, 조회는 `MatchQueryPersistenceAdapter`)·redis(캐시 쓰기 `MatchCacheWriteAdapter`·읽기 `MatchCacheReadAdapter`)·rabbitmq·riot-client(MatchApiAdapter)·api(`controller/match/MatchController`·`SummonerMatchController`).
+이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: persistence(MatchRepositoryImpl 등, 조회는 `MatchQueryPersistenceAdapter`·`MatchStatsQueryPersistenceAdapter`)·redis(캐시 쓰기 `MatchCacheWriteAdapter`·읽기 `MatchCacheReadAdapter`)·rabbitmq·riot-client(MatchApiAdapter)·api(`controller/match/MatchController`·`SummonerMatchController`).
 
 ## 규칙
 

@@ -31,6 +31,10 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class MatchQueryPersistenceAdapter implements MatchQueryPort {
 
+    /** 여러 쿼리가 같이 쓰는 컬럼·파라미터 이름. */
+    private static final String PUUID = "puuid";
+    private static final String MATCH_ID = "match_id";
+
     private static final String GAME_INFO_COLUMNS = """
             m.match_id, m.data_version, m.game_creation, m.game_duration, m.game_end_timestamp,
             m.game_start_timestamp, m.game_mode, m.game_type, m.game_version, m.map_id, m.queue_id, m.platform_id,
@@ -127,7 +131,7 @@ public class MatchQueryPersistenceAdapter implements MatchQueryPort {
     public SliceResult<GameInfo> findSummonerGameInfos(String puuid, Integer season, Integer queueId, int page,
                                                        int size) {
         StringBuilder sql = new StringBuilder(SUMMONER_GAME_INFOS_SQL);
-        MapSqlParameterSource params = new MapSqlParameterSource("puuid", puuid);
+        MapSqlParameterSource params = new MapSqlParameterSource(PUUID, puuid);
         if (season != null) {
             sql.append(" AND m.season = :season");
             params.addValue("season", season);
@@ -143,13 +147,13 @@ public class MatchQueryPersistenceAdapter implements MatchQueryPort {
     @Override
     public SliceResult<String> findSummonerMatchIds(String puuid, Integer queueId, int page, int size) {
         StringBuilder sql = new StringBuilder(SUMMONER_MATCH_IDS_SQL);
-        MapSqlParameterSource params = new MapSqlParameterSource("puuid", puuid);
+        MapSqlParameterSource params = new MapSqlParameterSource(PUUID, puuid);
         if (queueId != null) {
             sql.append(" AND m.queue_id = :queueId");
             params.addValue("queueId", queueId);
         }
         sql.append(" ORDER BY mp.match_id DESC");
-        return slice(sql, params, page, size, (rs, rowNum) -> rs.getString("match_id"));
+        return slice(sql, params, page, size, (rs, rowNum) -> rs.getString(MATCH_ID));
     }
 
     /** 한 건 더 읽어 다음 페이지가 있는지 본다. */
@@ -178,7 +182,7 @@ public class MatchQueryPersistenceAdapter implements MatchQueryPort {
         }
         return jdbcTemplate.query(TIMELINE_EVENTS_SQL, new MapSqlParameterSource("matchIds", matchIds),
                 (rs, rowNum) -> new Event(
-                        rs.getString("match_id"),
+                        rs.getString(MATCH_ID),
                         rs.getInt("participant_id"),
                         rs.getString("type"),
                         rs.getObject("item_id", Integer.class),
@@ -201,7 +205,7 @@ public class MatchQueryPersistenceAdapter implements MatchQueryPort {
                 rs.getString("platform_id"),
                 rs.getInt("queue_id"),
                 rs.getString("tournament_code"),
-                rs.getString("match_id"),
+                rs.getString(MATCH_ID),
                 GameInfo.averageTierOf(averageTier),
                 GameInfo.averageRankOf(averageTier));
     }
@@ -209,7 +213,7 @@ public class MatchQueryPersistenceAdapter implements MatchQueryPort {
     /** 숫자 컬럼의 NULL 은 0 이다 (lol-server 와 같다). absolute_points 만 null 을 그대로 둔다. */
     private ParticipantRecord toParticipantRecord(ResultSet rs) throws SQLException {
         ParticipantReadModel participant = ParticipantReadModel.builder()
-                .puuid(rs.getString("puuid"))
+                .puuid(rs.getString(PUUID))
                 .summonerId(rs.getString("summoner_id"))
                 .riotIdGameName(rs.getString("riot_id_game_name"))
                 .riotIdTagline(rs.getString("riot_id_tagline"))
@@ -267,7 +271,7 @@ public class MatchQueryPersistenceAdapter implements MatchQueryPort {
 
         TeamObjectives team = new TeamObjectives(rs.getInt("team_champion_kills"), rs.getInt("team_baron_kills"),
                 rs.getInt("team_dragon_kills"), rs.getInt("team_tower_kills"), rs.getInt("team_inhibitor_kills"));
-        return new ParticipantRecord(rs.getString("match_id"), participant, team,
+        return new ParticipantRecord(rs.getString(MATCH_ID), participant, team,
                 toIntegers(rs.getArray("gold_timeline")), toIntegers(rs.getArray("timestamps")));
     }
 

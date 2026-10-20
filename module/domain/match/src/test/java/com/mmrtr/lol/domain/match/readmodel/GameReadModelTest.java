@@ -23,8 +23,8 @@ class GameReadModelTest {
     void assemble_events_attachSequencesByParticipantId() {
         // given
         List<ParticipantRecord> participants = List.of(
-                record(participant(1, 100, true), objectives(10), List.of(500), List.of(60000)),
-                record(participant(2, 200, false), objectives(5), List.of(400), List.of(60000)));
+                participantRecord(participant(1, 100, true), objectives(10), List.of(500), List.of(60000)),
+                participantRecord(participant(2, 200, false), objectives(5), List.of(400), List.of(60000)));
         List<Event> events = List.of(
                 new Event(MATCH_ID, 1, "ITEM_PURCHASED", 1055, null, 60000),
                 new Event(MATCH_ID, 1, "SKILL_LEVEL_UP", null, 1, 120000));
@@ -45,10 +45,10 @@ class GameReadModelTest {
     void assemble_teamMembers_buildsTeamFromFirstMemberAndSumsGold() {
         // given — 2번은 프레임 기록이 짧고 3번은 기록이 없다
         List<ParticipantRecord> participants = List.of(
-                record(participant(1, 100, true), objectives(25), List.of(500, 3000, 8000), List.of(0, 60000, 120000)),
-                record(participant(2, 100, true), objectives(25), List.of(450, 2800), List.of(0, 60000)),
-                record(participant(3, 100, true), objectives(25), null, null),
-                record(participant(4, 200, false), objectives(9), null, null));
+                participantRecord(participant(1, 100, true), objectives(25), List.of(500, 3000, 8000), List.of(0, 60000, 120000)),
+                participantRecord(participant(2, 100, true), objectives(25), List.of(450, 2800), List.of(0, 60000)),
+                participantRecord(participant(3, 100, true), objectives(25), null, null),
+                participantRecord(participant(4, 200, false), objectives(9), null, null));
 
         // when
         GameReadModel game = GameReadModel.assemble(gameInfo(420), participants, List.of());
@@ -64,7 +64,7 @@ class GameReadModelTest {
     void assemble_missingTeams_leavesNull() {
         // when
         GameReadModel oneTeam = GameReadModel.assemble(gameInfo(420),
-                List.of(record(participant(1, 100, true), objectives(1), null, null)), List.of());
+                List.of(participantRecord(participant(1, 100, true), objectives(1), null, null)), List.of());
         GameReadModel empty = GameReadModel.assemble(gameInfo(420), List.of(), List.of());
 
         // then
@@ -78,9 +78,9 @@ class GameReadModelTest {
     void assemble_arenaQueue_sortsByPlacement() {
         // given
         List<ParticipantRecord> participants = List.of(
-                record(participant(1, 100, false).toBuilder().placement(3).build(), objectives(0), null, null),
-                record(participant(2, 100, true).toBuilder().placement(1).build(), objectives(0), null, null),
-                record(participant(3, 200, false).toBuilder().placement(2).build(), objectives(0), null, null));
+                participantRecord(participant(1, 100, false).toBuilder().placement(3).build(), objectives(0), null, null),
+                participantRecord(participant(2, 100, true).toBuilder().placement(1).build(), objectives(0), null, null),
+                participantRecord(participant(3, 200, false).toBuilder().placement(2).build(), objectives(0), null, null));
 
         // when
         GameReadModel arena = GameReadModel.assemble(gameInfo(1700), participants, List.of());
@@ -119,8 +119,8 @@ class GameReadModelTest {
         return new TeamObjectives(championKills, 1, 2, 3, 4);
     }
 
-    private static ParticipantRecord record(ParticipantReadModel participant, TeamObjectives team,
-                                            List<Integer> goldTimeline, List<Integer> timestamps) {
+    private static ParticipantRecord participantRecord(ParticipantReadModel participant, TeamObjectives team,
+                                                       List<Integer> goldTimeline, List<Integer> timestamps) {
         return new ParticipantRecord(MATCH_ID, participant, team, goldTimeline, timestamps);
     }
 }
