@@ -45,7 +45,7 @@ flowchart TB
 
     api --> league & gamedata & champion & spectator & summoner
     pg --> league & gamedata & match & summoner
-    redis --> gamedata & champion & match
+    redis --> gamedata & champion & match & summoner
     rabbit --> league & match & summoner
     riot --> league & champion & spectator & match & summoner
 

@@ -1,14 +1,24 @@
 # module:domain:summoner
 
-소환사 데이터 수집과 lol-server duo 용 내부 조회 API. `league` 의 port·모델에 의존하고 `module:common`(error)·`module:shared`(Queue)를 사용.
+소환사 데이터 수집, 공개 소환사 조회 API `/api/v1/summoners/**`, lol-server duo 용 내부 조회 API. `league` 의 port·모델에 의존하고 `module:common`(error)·`module:shared`(Platform·Queue)를 사용.
 
 ## 책임 / 구조
 
 `com.mmrtr.lol.domain.summoner` 하위:
-- `domain/` — 도메인 모델 (인프라 무지 — `ArchitectureTest` 강제)
-- `application/port/` — Outbound Port (Repository/Api/Publish, 조회 전용 `DuoProfileQueryPort`)
+- `domain/` — 도메인 모델 (인프라 무지 — `ArchitectureTest` 강제). `vo/RiotId` 는 경로의 `gameName-tagLine`
+- `application/port/` — Outbound Port (Repository/Api/Publish, 조회 전용 `SummonerQueryPort`·`DuoProfileQueryPort`, Riot 조회 락 `SummonerLookupLockPort`)
 - `application/usecase/` — UseCase (Inbound Port)
-- `readmodel/` — 조회 응답 모델 (`DuoProfileReadModel`)
+- `readmodel/` — 조회 응답 모델. 공개 API 모델(`Summoner*ReadModel`)은 **lol-server 응답과 필드가 같아야 한다** (`SummonerQueryControllerTest` 가 검증)
+
+## 공개 API — 소환사 조회 (MP-134)
+
+lol-server summoner 모듈의 조회를 옮겼다 (공개 API 재설계 3.1절). 갱신·관전은 별도.
+
+- `GET /{puuid}` — 저장된 소환사만, 없으면 `NOT_FOUND_PUUID` 404
+- `GET /by-riot-id/{gameName-tagLine}?platform=` — `search_name` 으로 찾아 하나로 특정되면 그대로, 아니면 Riot 에서 찾아 저장한다(갱신 일시는 과거로 초기화). Riot 조회는 `SummonerLookupLockPort`(Redis `summoner:lock:lookup:*`, 5초 대기) 안에서, 기다린 요청은 저장된 결과를 다시 찾는다. 태그가 없으면 저장된 소환사만 찾는다
+- `GET /autocomplete?q=&platform=` — 랭크 기록이 있는 소환사, `search_name` 접두사, 최대 20건(이름순). 솔로 랭크 티어 우선. 빈 검색어는 빈 목록
+- `GET /{puuid}/leagues` — 현재 랭크와 이력(최신순). `oow` 는 현재 백분율 `"50.00"`, 이력 비율 `"0.50"` (lol-server 와 같다)
+- `platform` 은 이름(kr, na …)으로 받아 저장 값(KR, NA1 …)으로 바꾼다. 모르는 값은 400 `INVALID_INPUT`
 
 ## 내부 API — duo 프로필 (MP-142)
 
@@ -20,7 +30,7 @@
 
 ## 어댑터 위치
 
-이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: persistence(`DuoProfileQueryPersistenceAdapter` 포함)·rabbitmq·riot-client(SummonerApiAdapter)·api(컨트롤러, `controller/internal/`).
+이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: persistence(`SummonerQueryPersistenceAdapter`·`DuoProfileQueryPersistenceAdapter` 포함)·redis(`SummonerLookupLockRedisAdapter`)·rabbitmq·riot-client(SummonerApiAdapter)·api(`controller/summoner/SummonerQueryController`, `controller/internal/`).
 
 ## 규칙
 

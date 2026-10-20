@@ -2,6 +2,7 @@ dependencies {
     implementation project(':module:domain:match')
     implementation project(':module:domain:gamedata')
     implementation project(':module:domain:champion')
+    implementation project(':module:domain:summoner')
     implementation project(':module:shared')
 
     // Redis
