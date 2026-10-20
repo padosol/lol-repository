@@ -3,14 +3,21 @@ package com.mmrtr.lol.domain.summoner.readmodel;
 import java.util.List;
 
 /**
- * lol-server duo 가 모집글·신청 생성 시점에 스냅샷으로 저장하는 Riot 계정 통계.
+ * lol-server duo 가 모집글·신청 생성 시점에 스냅샷으로 저장하는 Riot 계정 정보.
  * JSON 형태는 lol-server {@code RiotAccountStats} 와 같아서 그대로 역직렬화할 수 있다.
+ * {@code gameName}·{@code tagLine} 은 매칭이 확정된 상대에게 보여 주는 Riot ID 다 (lol-server 는 summoner 를 읽지 않는다).
  */
 public record DuoProfileReadModel(
+        String gameName,
+        String tagLine,
         TierInfo tierInfo,
         List<MostChampion> mostChampions,
         RecentGameSummary recentGameSummary
 ) {
+
+    /** 색인된 소환사의 Riot ID (포트 조회 행). */
+    public record RiotId(String gameName, String tagLine) {
+    }
 
     /** 솔로 랭크 티어. 솔로 랭크 기록이 없으면 {@link #UNRANKED}. */
     public record TierInfo(String tier, String rank, int leaguePoints) {

@@ -4,6 +4,7 @@ import com.mmrtr.lol.common.type.Queue;
 import com.mmrtr.lol.domain.summoner.application.port.DuoProfileQueryPort;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.MostChampion;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RecentGame;
+import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RiotId;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.TierInfo;
 import com.mmrtr.lol.infra.persistence.league.repository.LeagueSummonerJpaRepository;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
@@ -24,8 +25,9 @@ public class DuoProfileQueryPersistenceAdapter implements DuoProfileQueryPort {
     private final MatchSummonerJpaRepository matchSummonerJpaRepository;
 
     @Override
-    public boolean existsSummoner(String puuid) {
-        return summonerJpaRepository.existsById(puuid);
+    public Optional<RiotId> findRiotId(String puuid) {
+        return summonerJpaRepository.findById(puuid)
+                .map(summoner -> new RiotId(summoner.getGameName(), summoner.getTagLine()));
     }
 
     @Override

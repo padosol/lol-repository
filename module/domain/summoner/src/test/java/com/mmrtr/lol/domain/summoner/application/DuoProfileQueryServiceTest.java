@@ -7,6 +7,7 @@ import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.MostChampion;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.PlayedChampion;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RecentGame;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RecentGameSummary;
+import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RiotId;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.TierInfo;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
@@ -40,11 +41,11 @@ class DuoProfileQueryServiceTest {
     @InjectMocks
     private DuoProfileQueryService service;
 
-    @DisplayName("솔로 랭크 티어·모스트 3·최근 20게임을 모아 승패를 센다")
+    @DisplayName("Riot ID 와 솔로 랭크 티어·모스트 3·최근 20게임을 모아 승패를 센다")
     @Test
     void getDuoProfile_indexedSummoner_aggregatesSoloRankStats() {
         // given
-        given(duoProfileQueryPort.existsSummoner(PUUID)).willReturn(true);
+        given(duoProfileQueryPort.findRiotId(PUUID)).willReturn(Optional.of(new RiotId("Hide on bush", "KR1")));
         given(duoProfileQueryPort.findTier(PUUID, Queue.RANKED_SOLO_5x5))
                 .willReturn(Optional.of(new TierInfo("GOLD", "II", 45)));
         List<MostChampion> mostChampions = List.of(new MostChampion(103, "Ahri", 12, 8, 4));
@@ -58,6 +59,8 @@ class DuoProfileQueryServiceTest {
         DuoProfileReadModel profile = service.getDuoProfile(PUUID);
 
         // then
+        assertThat(profile.gameName()).isEqualTo("Hide on bush");
+        assertThat(profile.tagLine()).isEqualTo("KR1");
         assertThat(profile.tierInfo()).isEqualTo(new TierInfo("GOLD", "II", 45));
         assertThat(profile.mostChampions()).isEqualTo(mostChampions);
         assertThat(profile.recentGameSummary()).isEqualTo(new RecentGameSummary(2, 1, List.of(
@@ -68,7 +71,7 @@ class DuoProfileQueryServiceTest {
     @Test
     void getDuoProfile_noSoloRankData_returnsUnrankedAndEmpty() {
         // given
-        given(duoProfileQueryPort.existsSummoner(PUUID)).willReturn(true);
+        given(duoProfileQueryPort.findRiotId(PUUID)).willReturn(Optional.of(new RiotId("Hide on bush", "KR1")));
         given(duoProfileQueryPort.findTier(PUUID, Queue.RANKED_SOLO_5x5)).willReturn(Optional.empty());
         given(duoProfileQueryPort.findMostChampions(PUUID, Queue.RANKED_SOLO_5x5, 3)).willReturn(List.of());
         given(duoProfileQueryPort.findRecentGames(PUUID, Queue.RANKED_SOLO_5x5, 20)).willReturn(List.of());
@@ -86,7 +89,7 @@ class DuoProfileQueryServiceTest {
     @Test
     void getDuoProfile_notIndexedSummoner_throwsNotFoundPuuid() {
         // given
-        given(duoProfileQueryPort.existsSummoner(PUUID)).willReturn(false);
+        given(duoProfileQueryPort.findRiotId(PUUID)).willReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> service.getDuoProfile(PUUID))
