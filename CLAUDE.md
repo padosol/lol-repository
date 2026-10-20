@@ -141,8 +141,8 @@ com.mmrtr.lol.domain.{ctx}/
 ## 7. 코드 변경 후 검증 (필수)
 
 Java 코드를 추가/수정한 뒤에는 **반드시** 아래 중 하나를 실행해 검증한다.
-컴파일 통과만으로는 부족 — 이 프로젝트는 Checkstyle 을 build 단계에서
-강제하므로 위반이 있으면 CI 가 실패한다.
+컴파일 통과만으로는 부족 — CI(`ci.yml`)가 PR 마다 `./gradlew check`
+(Checkstyle + 전 모듈 테스트, Testcontainers 포함)를 돌리므로 위반이나 실패 테스트가 있으면 CI 가 실패한다.
 
 ```bash
 # 권장: 모듈 전체 검증 (compile + checkstyle + test)
