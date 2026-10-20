@@ -50,11 +50,11 @@ public record RankChampionsReadModel(List<RankChampion> solo, List<RankChampion>
     public static RankChampionsReadModel of(List<RankChampionRecord> records) {
         List<RankChampion> solo = new ArrayList<>();
         List<RankChampion> flex = new ArrayList<>();
-        for (RankChampionRecord record : records) {
-            if (record.queueId() == Queue.RANKED_SOLO_5x5.getQueueId()) {
-                solo.add(record.champion());
-            } else if (record.queueId() == Queue.RANKED_FLEX_SR.getQueueId()) {
-                flex.add(record.champion());
+        for (RankChampionRecord championRecord : records) {
+            if (championRecord.queueId() == Queue.RANKED_SOLO_5x5.getQueueId()) {
+                solo.add(championRecord.champion());
+            } else if (championRecord.queueId() == Queue.RANKED_FLEX_SR.getQueueId()) {
+                flex.add(championRecord.champion());
             }
         }
         return new RankChampionsReadModel(solo, flex);

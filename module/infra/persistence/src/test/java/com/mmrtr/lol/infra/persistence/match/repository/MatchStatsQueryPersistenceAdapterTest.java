@@ -85,13 +85,13 @@ class MatchStatsQueryPersistenceAdapterTest {
         List<RankChampionRecord> season15 = adapter.findRankChampions(ME, 15);
 
         // then — 정렬은 큐와 무관하게 판 수 내림차순 → 챔피언 ID 순 (서비스가 큐별로 나눈다)
-        assertThat(season15).extracting(RankChampionRecord::queueId, record -> record.champion().championId())
+        assertThat(season15).extracting(RankChampionRecord::queueId, row -> row.champion().championId())
                 .containsExactly(tuple(420, 103), tuple(420, 1), tuple(440, 99), tuple(420, 238));
         // 아리는 1승 1패 — challenges 값은 승리·패배 게임의 평균
         RankChampion ahri = season15.get(0).champion();
         assertThat(ahri).isEqualTo(new RankChampion(3.0, 2.0, 103.0, 103, "c103", 1L, 1L, 50.0,
                 600.0, 3.0, 55.0, 25.0, 400.0, 2L));
-        assertThat(adapter.findRankChampions(ME, null)).extracting(record -> record.champion().championId())
+        assertThat(adapter.findRankChampions(ME, null)).extracting(row -> row.champion().championId())
                 .contains(266);
     }
 

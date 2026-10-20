@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -120,10 +119,9 @@ public class MatchQueryService implements MatchQueryUseCase {
         }
 
         List<GameReadModel> dbContent = dbResult.content();
-        Set<String> dbMatchIds = new HashSet<>();
-        for (GameReadModel game : dbContent) {
-            dbMatchIds.add(game.gameInfoData().matchId());
-        }
+        Set<String> dbMatchIds = dbContent.stream()
+                .map(game -> game.gameInfoData().matchId())
+                .collect(Collectors.toSet());
         List<String> candidateIds = cachedIds.stream()
                 .filter(matchId -> !dbMatchIds.contains(matchId))
                 .toList();
@@ -143,33 +141,27 @@ public class MatchQueryService implements MatchQueryUseCase {
         return new SliceResult<>(merged, dbResult.hasNext());
     }
 
+    /** 후보 순서를 지킨 가변 목록 (뒤에서 정렬한다). */
     private List<GameReadModel> collectOverlay(
             List<String> candidateIds, Integer season, Integer queueId, long pageFloor) {
         Map<String, GameReadModel> cachedGames = matchCacheReadPort.findGames(candidateIds);
+        return candidateIds.stream()
+                .map(cachedGames::get)
+                .filter(game -> isOverlayable(game, season, queueId, pageFloor))
+                .collect(Collectors.toCollection(ArrayList::new));
+    }
 
-        List<GameReadModel> overlay = new ArrayList<>();
-        for (String matchId : candidateIds) {
-            // 캐시에 없으면 DB 로 다시 찾지 않는다. DB 에 있는 매치는 이미 DB 페이지가 맡는다
-            GameReadModel game = cachedGames.get(matchId);
-            if (game == null || game.gameInfoData() == null) {
-                continue;
-            }
-            // DB 첫 페이지 맨 아래보다 오래된 매치는 2페이지와 겹쳐 중복·순서 역전을 만든다
-            if (orderKeyOf(game) <= pageFloor) {
-                continue;
-            }
-            if (!isListableGameMode(game.gameInfoData())) {
-                continue;
-            }
-            if (queueId != null && game.gameInfoData().queueId() != queueId) {
-                continue;
-            }
-            if (season != null && !seasonMatches(game.gameInfoData(), season)) {
-                continue;
-            }
-            overlay.add(game);
+    private static boolean isOverlayable(GameReadModel game, Integer season, Integer queueId, long pageFloor) {
+        // 캐시에 없으면 DB 로 다시 찾지 않는다. DB 에 있는 매치는 이미 DB 페이지가 맡는다
+        if (game == null || game.gameInfoData() == null) {
+            return false;
         }
-        return overlay;
+        GameInfo gameInfo = game.gameInfoData();
+        // DB 첫 페이지 맨 아래보다 오래된 매치는 2페이지와 겹쳐 중복·순서 역전을 만든다
+        return orderKeyOf(game) > pageFloor
+                && isListableGameMode(gameInfo)
+                && (queueId == null || gameInfo.queueId() == queueId)
+                && (season == null || seasonMatches(gameInfo, season));
     }
 
     /** DB 첫 페이지의 가장 오래된 매치 정렬 키. 페이지가 비었으면 오버레이를 제한하지 않는다. */

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +33,7 @@ class MatchStatsQueryServiceTest {
     @Test
     void getDailyGameCounts_noQueue_countsRankedQueuesSinceThreeMonthsAgo() {
         // given
-        LocalDateTime from = LocalDate.now().minusMonths(3).atStartOfDay();
+        LocalDateTime from = LocalDate.now(ZoneId.systemDefault()).minusMonths(3).atStartOfDay();
         given(matchStatsQueryPort.findDailyGameCounts(PUUID, 15, List.of(420, 440), from)).willReturn(List.of(
                 new DailyCount(LocalDate.of(2026, 9, 1), 3L),
                 new DailyCount(LocalDate.of(2026, 9, 2), 1L),

@@ -104,7 +104,7 @@ class MatchQueryPersistenceAdapterTest {
         List<ParticipantRecord> records = adapter.findParticipants(List.of(MATCH_ID));
 
         // then
-        assertThat(records).extracting(record -> record.participant().participantId()).containsExactly(1, 2);
+        assertThat(records).extracting(row -> row.participant().participantId()).containsExactly(1, 2);
 
         ParticipantRecord first = records.get(0);
         ParticipantReadModel p1 = first.participant();

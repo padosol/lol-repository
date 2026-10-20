@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 /** lol-server {@code MatchService} 의 daily-count·랭크 챔피언 조회 이전. */
@@ -25,7 +26,8 @@ public class MatchStatsQueryService implements MatchStatsQueryUseCase {
 
     @Override
     public DailyGameCountReadModel getDailyGameCounts(String puuid, int season, Integer queueId) {
-        LocalDateTime from = LocalDate.now().minusMonths(DAILY_COUNT_MONTHS).atStartOfDay();
+        // game_create_datetime 은 시스템 기본 시간대(TimeZoneConfig 가 KST 로 고정)로 저장된다 — 같은 기준으로 자른다
+        LocalDateTime from = LocalDate.now(ZoneId.systemDefault()).minusMonths(DAILY_COUNT_MONTHS).atStartOfDay();
         List<Integer> queueIds = queueId == null ? RANKED_QUEUE_IDS : List.of(queueId);
         return DailyGameCountReadModel.of(matchStatsQueryPort.findDailyGameCounts(puuid, season, queueIds, from));
     }

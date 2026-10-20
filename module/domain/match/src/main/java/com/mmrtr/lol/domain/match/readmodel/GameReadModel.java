@@ -129,8 +129,8 @@ public record GameReadModel(
     public static GameReadModel assemble(GameInfo gameInfo, List<ParticipantRecord> participants, List<Event> events) {
         Map<Integer, ParticipantTimeline> timelines = MatchTimelineReadModel.from(events).participants();
         List<ParticipantReadModel> participantData = new ArrayList<>();
-        for (ParticipantRecord record : participants) {
-            ParticipantReadModel participant = record.participant();
+        for (ParticipantRecord participantRecord : participants) {
+            ParticipantReadModel participant = participantRecord.participant();
             participantData.add(participant.withTimeline(timelines.get(participant.participantId())));
         }
         if (ARENA_QUEUE_IDS.contains(gameInfo.queueId())) {
@@ -145,7 +145,7 @@ public record GameReadModel(
 
     private static TeamInfo teamInfo(List<ParticipantRecord> participants, int teamId) {
         List<ParticipantRecord> members = participants.stream()
-                .filter(record -> record.participant().teamId() == teamId)
+                .filter(member -> member.participant().teamId() == teamId)
                 .toList();
         if (members.isEmpty()) {
             return null;
@@ -157,18 +157,21 @@ public record GameReadModel(
                 sumGoldTimelines(members), firstTimestamps(members));
     }
 
-    /** 첫 번째로 기록이 있는 팀원의 프레임 수만큼, 팀원 골드를 프레임별로 더한다. */
+    /**
+     * 첫 번째로 기록이 있는 팀원의 프레임 수만큼, 팀원 골드를 프레임별로 더한다.
+     * 기록이 없으면 null — lol-server 응답과 같이 빈 배열이 아니다.
+     */
     private static List<Integer> sumGoldTimelines(List<ParticipantRecord> members) {
-        List<Integer> first = members.stream()
+        return members.stream()
                 .map(ParticipantRecord::goldTimeline)
                 .filter(gold -> gold != null && !gold.isEmpty())
                 .findFirst()
+                .map(first -> sumGold(members, first.size()))
                 .orElse(null);
-        if (first == null) {
-            return null;
-        }
+    }
 
-        int[] sum = new int[first.size()];
+    private static List<Integer> sumGold(List<ParticipantRecord> members, int frames) {
+        int[] sum = new int[frames];
         for (ParticipantRecord member : members) {
             List<Integer> gold = member.goldTimeline();
             if (gold == null) {
