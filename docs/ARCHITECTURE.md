@@ -52,7 +52,7 @@ flowchart TB
     match --> league
     summoner --> league
 
-    league & champion & match --> sharedM
+    league & champion & match & summoner --> sharedM
     infra --> sharedM
     league & gamedata & champion & summoner --> common
     api & pg & riot --> common

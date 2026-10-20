@@ -25,7 +25,7 @@ public class CoreExceptionAdvice {
 
         return ResponseEntity
                 .status(e.getErrorType().getHttpStatus())
-                .body(new ErrorMessage());
+                .body(new ErrorMessage(e.getErrorType()));
     }
 
     /** 허용 prefix 안이지만 매핑이 없는 경로. 핸들러가 없어 {@code PublicApiExceptionAdvice} 가 적용되지 않으므로 여기서 받는다. */

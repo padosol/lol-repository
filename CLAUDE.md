@@ -50,7 +50,7 @@ com.mmrtr.lol.domain.{ctx}/
 ├── application/
 │   ├── port/               # Outbound Port (Repository/Api/Publish Port)
 │   └── usecase/            # UseCase (Inbound Port)
-└── readmodel/ (match)      # Riot/응답 DTO
+└── readmodel/              # Riot/응답 DTO (match·league·gamedata·summoner)
 ```
 
 > 컨텍스트 경계는 `module/domain/{ctx}/src/test` 의 `ArchitectureTest` 로 강제(`./gradlew archTest`).
@@ -67,6 +67,7 @@ com.mmrtr.lol.domain.{ctx}/
 
 - **공개 포트**(`server.port`, Ingress 대상): 소유 prefix `/api/v1/{summoners,matches,rankings,champion-stats,game-data}` + 이행용 `lol.web.transitional-public-prefixes`(`/api/riot`·`/api/admin`·`/actuator`)만 받고 그 외 `ApiResponse` 404 (`PublicApiPathFilter`)
 - **내부 포트**(`lol.web.internal-port`, 기본 8081 / local 8112): `/internal/**` 전용. NetworkPolicy 로 lol-server 파드만 허용
+- **내부 API 계약**: `/internal/v1/**` 는 OpenAPI 계약 `docs/api/internal-v1.openapi.yaml` 을 따른다 (내부 포트 `/internal/v1/api-docs` 로도 제공). 바꾸면 `InternalApiContractTest` 가 실패하므로 `module/infra/api/build/openapi/` 의 생성 결과로 계약 파일을 갱신하고 lol-server 에 알린다
 - 공개 컨트롤러는 `@PublicApi` + `ApiResponse<T>` 반환 — 예외는 `PublicApiExceptionAdvice` 가 lol-server 와 같은 형식으로 응답. 소유 prefix 밖 매핑은 `PublicApiMappingTest` 가 실패시킨다
 - lol-server 에서 옮기는 API 는 `RestDocsSupport` 를 상속해 lol-server RestDocs 테스트의 필드 정의를 그대로 옮겨 응답 동일성을 검증한다
 
