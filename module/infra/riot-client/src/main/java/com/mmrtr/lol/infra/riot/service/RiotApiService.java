@@ -31,10 +31,11 @@ public class RiotApiService {
     public CompletableFuture<AccountDto> getAccountByRiotId(
             String gameName, String tagLine, Platform platform, Executor executor) {
         log.debug("getAccountByRiotId gameName {} tagLine {}", gameName, tagLine);
-        String path = String.format("/riot/account/v1/accounts/by-riot-id/%s/%s", gameName, tagLine);
+        // 공개 API 입력이라 템플릿 변수로 넘겨 / ? # { } 까지 인코딩한다 (경로에 그대로 붙이면 다른 Riot 경로를 부를 수 있다)
+        String path = "/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}";
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
-                                .uri(platform.getRegionalHost() + path)
+                                .uri(platform.getRegionalHost() + path, gameName, tagLine)
                                 .retrieve()
                                 .body(AccountDto.class)
                 , executor
