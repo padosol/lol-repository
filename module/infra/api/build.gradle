@@ -7,6 +7,7 @@ dependencies {
     implementation project(':module:domain:champion')
     implementation project(':module:domain:gamedata')
     implementation project(':module:domain:league')
+    implementation project(':module:domain:match')
     implementation project(':module:shared')
     implementation project(':module:common')
 
