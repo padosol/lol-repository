@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:tc:postgresql:16-alpine:///test
+    url: jdbc:tc:postgresql:16-alpine:///test?currentSchema=riot
     username: test
     password: test
     driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
@@ -10,6 +10,9 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  # 운영 설정(persistence-*.yml)과 같다 — riot 스키마만
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    locations: classpath:db/migration/riot
+    schemas: riot
+    default-schema: riot

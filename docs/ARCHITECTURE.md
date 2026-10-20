@@ -92,7 +92,7 @@ flowchart TB
 | 도메인 `application/usecase` (in port) 시그니처 | `module:infra:api` 컨트롤러 / `rabbitmq` 리스너 |
 | 도메인 객체 필드 추가 | `infra:persistence`(Entity), `infra:api`(응답), `infra:redis`(직렬화) |
 | `league` 도메인 모델/포트 | `match`·`summoner` (교차 의존) + 위 인프라 |
-| Flyway 마이그레이션(`lol-db-schema/`) | `infra:persistence` |
+| Flyway 마이그레이션(`infra:persistence` 의 `db/migration/riot`, `riot` 스키마) | `infra:persistence` (`RiotSchemaMigrationTest` 가 전 엔티티 validate) |
 | Riot API DTO | `infra:riot-client` (도메인은 모름) |
 
 ## See Also
