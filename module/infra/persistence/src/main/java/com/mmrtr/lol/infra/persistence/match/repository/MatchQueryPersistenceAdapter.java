@@ -9,7 +9,9 @@ import com.mmrtr.lol.domain.match.readmodel.ParticipantReadModel;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantReadModel.Item;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantReadModel.StatValue;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantReadModel.Style;
+import com.mmrtr.lol.support.page.SliceResult;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -21,16 +23,35 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-/** 공개 매치 조회 어댑터. 쿼리는 lol-server {@code MatchRepositoryCustomImpl}·{@code TimelineRepositoryCustomImpl} 과 같다. */
+/**
+ * 공개 매치 조회 어댑터. 쿼리는 lol-server {@code MatchRepositoryCustomImpl}·{@code MatchSummonerRepositoryCustomImpl}·
+ * {@code TimelineRepositoryCustomImpl} 과 같다.
+ */
 @Component
 @RequiredArgsConstructor
 public class MatchQueryPersistenceAdapter implements MatchQueryPort {
 
-    private static final String GAME_INFO_SQL = """
-            SELECT match_id, data_version, game_creation, game_duration, game_end_timestamp, game_start_timestamp,
-                   game_mode, game_type, game_version, map_id, queue_id, platform_id, tournament_code, average_tier
-            FROM match
-            WHERE match_id = :matchId
+    private static final String GAME_INFO_COLUMNS = """
+            m.match_id, m.data_version, m.game_creation, m.game_duration, m.game_end_timestamp,
+            m.game_start_timestamp, m.game_mode, m.game_type, m.game_version, m.map_id, m.queue_id, m.platform_id,
+            m.tournament_code, m.average_tier
+            """;
+
+    private static final String GAME_INFO_SQL = "SELECT " + GAME_INFO_COLUMNS + " FROM match m WHERE m.match_id = :matchId";
+
+    /** 소환사의 협곡·아레나만 (lol-server 는 대소문자를 무시하고 CLASSIC·CHERRY 를 비교한다). */
+    private static final String SUMMONER_GAME_INFOS_SQL = "SELECT " + GAME_INFO_COLUMNS + """
+            FROM match m
+            JOIN match_participant mp ON mp.match_id = m.match_id
+            WHERE mp.puuid = :puuid
+              AND lower(m.game_mode) IN ('classic', 'cherry')
+            """;
+
+    private static final String SUMMONER_MATCH_IDS_SQL = """
+            SELECT mp.match_id
+            FROM match_participant mp
+            JOIN match m ON m.match_id = mp.match_id
+            WHERE mp.puuid = :puuid
             """;
 
     /** 팀 집계와 참가자별 프레임 골드를 한 번에 읽는다. 이름은 저장된 소환사의 현재 Riot ID 가 우선한다. */
@@ -100,6 +121,45 @@ public class MatchQueryPersistenceAdapter implements MatchQueryPort {
                         (rs, rowNum) -> toGameInfo(rs))
                 .stream()
                 .findFirst();
+    }
+
+    @Override
+    public SliceResult<GameInfo> findSummonerGameInfos(String puuid, Integer season, Integer queueId, int page,
+                                                       int size) {
+        StringBuilder sql = new StringBuilder(SUMMONER_GAME_INFOS_SQL);
+        MapSqlParameterSource params = new MapSqlParameterSource("puuid", puuid);
+        if (season != null) {
+            sql.append(" AND m.season = :season");
+            params.addValue("season", season);
+        }
+        if (queueId != null) {
+            sql.append(" AND m.queue_id = :queueId");
+            params.addValue("queueId", queueId);
+        }
+        sql.append(" ORDER BY m.game_end_timestamp DESC, m.match_id DESC");
+        return slice(sql, params, page, size, (rs, rowNum) -> toGameInfo(rs));
+    }
+
+    @Override
+    public SliceResult<String> findSummonerMatchIds(String puuid, Integer queueId, int page, int size) {
+        StringBuilder sql = new StringBuilder(SUMMONER_MATCH_IDS_SQL);
+        MapSqlParameterSource params = new MapSqlParameterSource("puuid", puuid);
+        if (queueId != null) {
+            sql.append(" AND m.queue_id = :queueId");
+            params.addValue("queueId", queueId);
+        }
+        sql.append(" ORDER BY mp.match_id DESC");
+        return slice(sql, params, page, size, (rs, rowNum) -> rs.getString("match_id"));
+    }
+
+    /** 한 건 더 읽어 다음 페이지가 있는지 본다. */
+    private <T> SliceResult<T> slice(StringBuilder sql, MapSqlParameterSource params, int page, int size,
+                                     RowMapper<T> rowMapper) {
+        sql.append(" LIMIT :limit OFFSET :offset");
+        params.addValue("limit", size + 1).addValue("offset", (long) page * size);
+        List<T> rows = jdbcTemplate.query(sql.toString(), params, rowMapper);
+        boolean hasNext = rows.size() > size;
+        return new SliceResult<>(hasNext ? rows.subList(0, size) : rows, hasNext);
     }
 
     @Override
