@@ -6,6 +6,7 @@ import com.mmrtr.lol.domain.match.readmodel.GameReadModel.TeamObjectives;
 import com.mmrtr.lol.domain.match.readmodel.MatchTimelineReadModel.Event;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantReadModel;
 import com.mmrtr.lol.infra.persistence.config.JpaConfig;
+import com.mmrtr.lol.support.page.SliceResult;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -142,6 +143,59 @@ class MatchQueryPersistenceAdapterTest {
                 new Event(MATCH_ID, 1, "ITEM_PURCHASED", 1055, null, 60000),
                 new Event(MATCH_ID, 2, "ITEM_PURCHASED", 2003, null, 120000));
         assertThat(adapter.findTimelineEvents(List.of())).isEmpty();
+    }
+
+    @DisplayName("소환사 전적: 그 소환사의 CLASSIC·CHERRY(대소문자 무시)만, 시즌·큐 필터, 게임 종료 최신순, 한 건 더 읽어 hasNext")
+    @Test
+    void findSummonerGameInfos_filtersAndPages() {
+        // given — KR_1 은 setUp 의 다른 소환사 매치
+        summonerGame("S_1", "CLASSIC", 420, 15, 1000);
+        summonerGame("S_2", "classic", 440, 15, 4000);
+        summonerGame("S_3", "CHERRY", 1700, 15, 3000);
+        summonerGame("S_4", "ARAM", 450, 15, 5000);
+        summonerGame("S_5", "CLASSIC", 420, 14, 2000);
+
+        // when
+        SliceResult<GameInfo> all = adapter.findSummonerGameInfos("me", null, null, 0, 20);
+        SliceResult<GameInfo> firstPage = adapter.findSummonerGameInfos("me", null, null, 0, 2);
+        SliceResult<GameInfo> lastPage = adapter.findSummonerGameInfos("me", null, null, 1, 2);
+
+        // then
+        assertThat(all.content()).extracting(GameInfo::matchId).containsExactly("S_2", "S_3", "S_5", "S_1");
+        assertThat(all.hasNext()).isFalse();
+        assertThat(firstPage.content()).extracting(GameInfo::matchId).containsExactly("S_2", "S_3");
+        assertThat(firstPage.hasNext()).isTrue();
+        assertThat(lastPage.content()).extracting(GameInfo::matchId).containsExactly("S_5", "S_1");
+        assertThat(lastPage.hasNext()).isFalse();
+        assertThat(adapter.findSummonerGameInfos("me", 15, null, 0, 20).content())
+                .extracting(GameInfo::matchId).containsExactly("S_2", "S_3", "S_1");
+        assertThat(adapter.findSummonerGameInfos("me", 15, 420, 0, 20).content())
+                .extracting(GameInfo::matchId).containsExactly("S_1");
+        assertThat(adapter.findSummonerGameInfos("ghost", null, null, 0, 20).content()).isEmpty();
+    }
+
+    @DisplayName("소환사 매치 ID: 게임 모드와 무관하게 매치 ID 내림차순, 큐 필터, 한 건 더 읽어 hasNext")
+    @Test
+    void findSummonerMatchIds_ordersByMatchIdAndPages() {
+        // given
+        summonerGame("S_1", "CLASSIC", 420, 15, 3000);
+        summonerGame("S_3", "ARAM", 450, 15, 1000);
+        summonerGame("S_2", "CLASSIC", 440, 15, 2000);
+
+        // when
+        SliceResult<String> firstPage = adapter.findSummonerMatchIds("me", null, 0, 2);
+
+        // then
+        assertThat(firstPage.content()).containsExactly("S_3", "S_2");
+        assertThat(firstPage.hasNext()).isTrue();
+        assertThat(adapter.findSummonerMatchIds("me", null, 1, 2)).isEqualTo(new SliceResult<>(List.of("S_1"), false));
+        assertThat(adapter.findSummonerMatchIds("me", 420, 0, 20).content()).containsExactly("S_1");
+    }
+
+    private void summonerGame(String matchId, String gameMode, int queueId, int season, long gameEnd) {
+        insert("match", Map.of("match_id", matchId, "game_mode", gameMode, "queue_id", queueId, "season", season,
+                "game_end_timestamp", gameEnd));
+        insert("match_participant", Map.of("puuid", "me", "match_id", matchId, "participant_id", 1));
     }
 
     private void event(String matchId, long timestamp, int eventIndex, String data) {
