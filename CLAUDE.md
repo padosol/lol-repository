@@ -12,7 +12,7 @@ LOL Repository는 League of Legends 데이터 처리를 위한 컨슈머 서비�
 - PostgreSQL (JPA/Hibernate)
 - Redis + Redisson 3.46.0 (캐싱, 분산 락)
 - RabbitMQ (비동기 메시지 처리)
-- Flyway (DB 마이그레이션)
+- Flyway (DB 마이그레이션) — `riot` 스키마 전용, 아래 "DB 스키마" 참고
 
 ## 3. 프로젝트 구조
 
@@ -20,7 +20,6 @@ LOL Repository는 League of Legends 데이터 처리를 위한 컨슈머 서비�
 
 ```
 lol-repository (루트)
-├── lol-db-schema/                  # Git 서브모듈 - Flyway 마이그레이션 SQL
 ├── buildSrc/                       # lolrepo.web/persistence-conventions 컨벤션 플러그인
 └── module/
     ├── app/application             # Spring Boot 진입점 + 컴포지션 루트 + backfill 배치 (bootJar)
@@ -30,15 +29,18 @@ lol-repository (루트)
     ├── domain/
     │   ├── league                  # 리그/랭킹/티어컷오프 (sink 컨텍스트)
     │   ├── champion                # 챔피언 로테이션
+    │   ├── gamedata                # 패치 버전·시즌·패치노트·큐 조회 (공개 API game-data)
     │   ├── spectator               # 활성 게임 조회
     │   ├── match                   # 매치/타임라인 (→ league port 의존)
-    │   └── summoner                # 소환사 (→ league port 의존)
+    │   ├── summoner                # 소환사 (→ league port 의존)
+    │   └── championstats           # 챔피언 통계 조회 (BigQuery 집계, 공개 API champion-stats)
     └── infra/                      # 어댑터(driven/driving) — 도메인 모듈에 의존
         ├── api                     # REST 컨트롤러 (driving)
         ├── persistence             # JPA 엔티티/리포지토리 구현 (driven)
         ├── redis                   # Redis 캐싱/분산 락 (driven)
         ├── rabbitmq                # 메시지 큐 리스너/서비스 (driving/driven)
-        └── riot-client             # RIOT API RestClient + RateLimit (driven)
+        ├── riot-client             # RIOT API RestClient + RateLimit (driven)
+        └── bigquery                # BigQuery 집계 조회 (driven, champion-stats)
 ```
 
 ### 도메인 모듈 내부 구조 (module/domain/{ctx})
@@ -49,7 +51,7 @@ com.mmrtr.lol.domain.{ctx}/
 ├── application/
 │   ├── port/               # Outbound Port (Repository/Api/Publish Port)
 │   └── usecase/            # UseCase (Inbound Port)
-└── readmodel/ (match)      # Riot/응답 DTO
+└── readmodel/              # Riot/응답 DTO (match·league·gamedata·summoner·championstats)
 ```
 
 > 컨텍스트 경계는 `module/domain/{ctx}/src/test` 의 `ArchitectureTest` 로 강제(`./gradlew archTest`).
@@ -62,15 +64,24 @@ com.mmrtr.lol.domain.{ctx}/
 3. CompletableFuture 패턴을 활용한 비동기 처리
 4. 배치 데이터베이스 삽입 (배치 크기 1000, 1초 간격)
 
+### 공개 API · 포트 분리
+
+- **공개 포트**(`server.port`, Ingress 대상): 소유 prefix `/api/v1/{summoners,matches,rankings,champion-stats,game-data}` + 이행용 `lol.web.transitional-public-prefixes`(`/api/riot`·`/api/admin`·`/actuator`)만 받고 그 외 `ApiResponse` 404 (`PublicApiPathFilter`)
+- **내부 포트**(`lol.web.internal-port`, 기본 8081 / local 8112): `/internal/**` 전용. NetworkPolicy 로 lol-server 파드만 허용
+- **내부 API 계약**: `/internal/v1/**` 는 OpenAPI 계약 `docs/api/internal-v1.openapi.yaml` 을 따른다 (내부 포트 `/internal/v1/api-docs` 로도 제공). 바꾸면 `InternalApiContractTest` 가 실패하므로 `module/infra/api/build/openapi/` 의 생성 결과로 계약 파일을 갱신하고 lol-server 에 알린다
+- 공개 컨트롤러는 `@PublicApi` + `ApiResponse<T>` 반환 — 예외는 `PublicApiExceptionAdvice` 가 lol-server 와 같은 형식으로 응답. 소유 prefix 밖 매핑은 `PublicApiMappingTest` 가 실패시킨다
+- lol-server 에서 옮기는 API 는 `RestDocsSupport` 를 상속해 lol-server RestDocs 테스트의 필드 정의를 그대로 옮겨 응답 동일성을 검증한다
+
+### DB 스키마 (`riot` 전용)
+
+- lol-repository 는 PostgreSQL `riot` 스키마만 쓴다. 마이그레이션은 이 레포가 소유: `module/infra/persistence/src/main/resources/db/migration/riot` (V1 = 공유 lol-db-schema V1~V35 의 riot 객체, 새 변경은 V2 부터)
+- Flyway `schemas`/`default-schema: riot` (history = `riot.flyway_schema_history`), JDBC URL `currentSchema=riot` — JPA·native query·JdbcTemplate·Spring Batch 가 스키마 이름 없이 riot 만 본다. SQL 에 스키마 이름을 박지 않는다
+- member·community·duo 등 앱 테이블은 lol-server 소유(`app` 스키마)라 여기 없다
+- `RiotSchemaMigrationTest` 가 빈 DB 에 체인을 적용하고 `ddl-auto=validate` 로 전 엔티티를 검증한다
+
 ## 4. 명령어
 
 ```bash
-# 서브모듈 초기화 (최초 클론 후)
-git submodule update --init --recursive
-
-# 서브모듈 최신화
-git submodule update --remote lol-db-schema
-
 # 전체 모듈 빌드
 ./gradlew build
 
@@ -91,11 +102,11 @@ git submodule update --remote lol-db-schema
 
 # 특정 모듈 빌드
 ./gradlew :module:app:application:build
-./gradlew :module:domain:summoner:build      # match / league / champion / spectator 동일
+./gradlew :module:domain:summoner:build      # match / league / champion / spectator / championstats 동일
 ./gradlew :module:shared:build
 ./gradlew :module:common:build
 ./gradlew :module:support:logging:build
-./gradlew :module:infra:persistence:build    # api / redis / rabbitmq / riot-client 동일
+./gradlew :module:infra:persistence:build    # api / redis / rabbitmq / riot-client / bigquery 동일
 ```
 
 ## 5. 코드 스타일
@@ -132,8 +143,8 @@ git submodule update --remote lol-db-schema
 ## 7. 코드 변경 후 검증 (필수)
 
 Java 코드를 추가/수정한 뒤에는 **반드시** 아래 중 하나를 실행해 검증한다.
-컴파일 통과만으로는 부족 — 이 프로젝트는 Checkstyle 을 build 단계에서
-강제하므로 위반이 있으면 CI 가 실패한다.
+컴파일 통과만으로는 부족 — CI(`ci.yml`)가 PR 마다 `./gradlew check`
+(Checkstyle + 전 모듈 테스트, Testcontainers 포함)를 돌리므로 위반이나 실패 테스트가 있으면 CI 가 실패한다.
 
 ```bash
 # 권장: 모듈 전체 검증 (compile + checkstyle + test)

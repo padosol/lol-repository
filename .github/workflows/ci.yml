@@ -14,9 +14,6 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          token: ${{ secrets.SUBMODULE_PAT }}
 
       - uses: actions/setup-java@v5
         with:
@@ -24,12 +21,20 @@ jobs:
           java-version: 21
           cache: gradle
 
+      # check = Checkstyle + 테스트 (ArchUnit 경계, Testcontainers Postgres 위 riot 마이그레이션, 내부 API 계약)
+      # --continue: 한 모듈이 실패해도 나머지 모듈의 실패까지 한 번에 보고한다
       - name: Build & Test
-        run: ./gradlew :module:app:application:bootJar --no-daemon
+        run: ./gradlew :module:app:application:bootJar check --continue --no-daemon
 
-      - name: Checkstyle
-        if: always()
-        run: ./gradlew checkstyleMain --no-daemon
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            module/**/build/reports/tests/test/
+            module/**/build/test-results/test/
+          retention-days: 7
 
   notify:
     name: Slack Notification

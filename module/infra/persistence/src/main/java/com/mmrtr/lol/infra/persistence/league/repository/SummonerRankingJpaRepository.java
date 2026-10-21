@@ -1,6 +1,8 @@
 package com.mmrtr.lol.infra.persistence.league.repository;
 
 import com.mmrtr.lol.infra.persistence.league.entity.SummonerRankingEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -9,6 +11,11 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface SummonerRankingJpaRepository extends JpaRepository<SummonerRankingEntity, Long> {
+
+    Page<SummonerRankingEntity> findByPlatformIdAndQueue(String platformId, String queue, Pageable pageable);
+
+    Page<SummonerRankingEntity> findByPlatformIdAndQueueAndTier(
+            String platformId, String queue, String tier, Pageable pageable);
 
     @Modifying
     @Query("DELETE FROM SummonerRankingEntity sr WHERE sr.queue = :queue")

@@ -1,0 +1,5 @@
+bigquery:
+  project-id: ${BIGQUERY_PROJECT_ID:lol-local}
+  dataset: ${BIGQUERY_DATASET:lol_analytics}
+  # 비우면 ADC (gcloud auth application-default login)
+  credentials-location: ${BIGQUERY_CREDENTIALS:}

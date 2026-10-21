@@ -1,5 +1,6 @@
 // module:domain:match - 매치/타임라인 컨텍스트 (도메인 + application port.in/out + readmodel)
 dependencies {
+    implementation project(':module:common')           // CoreException 등 error 사용
     implementation project(':module:shared')
     implementation project(':module:domain:league')   // SaveMatchDataUseCase 가 league port.in/model 참조
 

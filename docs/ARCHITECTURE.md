@@ -19,15 +19,17 @@ flowchart TB
 
     subgraph domain["🟢 domain (인프라 무지)"]
       league["module:domain:league<br/>리그/랭킹/티어컷오프 (sink)"]
+      gamedata["module:domain:gamedata<br/>버전·시즌·패치노트·큐"]
       champion["module:domain:champion"]
       spectator["module:domain:spectator"]
       match["module:domain:match<br/>매치/타임라인 + readmodel"]
       summoner["module:domain:summoner"]
+      championstats["module:domain:championstats<br/>챔피언 통계 (sink)"]
     end
 
     subgraph shared["🟡 공유 (도메인 아님)"]
       sharedM["module:shared<br/>enum"]
-      common["module:common<br/>error + MDC"]
+      common["module:common<br/>error + MDC + PageResult"]
       logging["module:support:logging<br/>@LogExecutionTime AOP"]
     end
 
@@ -37,22 +39,26 @@ flowchart TB
       redis["module:infra:redis<br/>Cache + Redisson Lock"]
       rabbit["module:infra:rabbitmq<br/>큐 리스너/서비스"]
       riot["module:infra:riot-client<br/>Riot RestClient + RateLimit"]
+      bq["module:infra:bigquery<br/>BigQuery 집계 조회"]
     end
 
-    application --> api & pg & redis & rabbit & riot
-    application --> league & champion & spectator & match & summoner
+    application --> api & pg & redis & rabbit & riot & bq
+    application --> league & gamedata & champion & spectator & match & summoner & championstats
 
-    api --> league & champion & spectator & summoner
-    pg --> league & match & summoner
-    redis --> match
+    api --> league & gamedata & champion & spectator & match & summoner & championstats
+    pg --> league & gamedata & spectator & match & summoner
+    redis --> gamedata & champion & spectator & match & summoner & championstats
     rabbit --> league & match & summoner
     riot --> league & champion & spectator & match & summoner
+    bq --> championstats
 
     match --> league
     summoner --> league
 
-    domain --> sharedM
-    summoner --> common
+    league & champion & spectator & match & summoner & championstats --> sharedM
+    infra --> sharedM
+    league & gamedata & champion & spectator & match & summoner & championstats --> common
+    api & pg & riot --> common
 
     rabbit --> redis & riot
 
@@ -60,8 +66,8 @@ flowchart TB
     classDef i fill:#e1eeff,stroke:#2d6cbf,color:#000
     classDef a fill:#fff4d6,stroke:#bf922d,color:#000
     classDef s fill:#fff9c4,stroke:#bfa52d,color:#000
-    class league,champion,spectator,match,summoner d
-    class api,pg,redis,rabbit,riot i
+    class league,gamedata,champion,spectator,match,summoner,championstats d
+    class api,pg,redis,rabbit,riot,bq i
     class application a
     class sharedM,common,logging s
 ```
@@ -89,7 +95,7 @@ flowchart TB
 | 도메인 `application/usecase` (in port) 시그니처 | `module:infra:api` 컨트롤러 / `rabbitmq` 리스너 |
 | 도메인 객체 필드 추가 | `infra:persistence`(Entity), `infra:api`(응답), `infra:redis`(직렬화) |
 | `league` 도메인 모델/포트 | `match`·`summoner` (교차 의존) + 위 인프라 |
-| Flyway 마이그레이션(`lol-db-schema/`) | `infra:persistence` |
+| Flyway 마이그레이션(`infra:persistence` 의 `db/migration/riot`, `riot` 스키마) | `infra:persistence` (`RiotSchemaMigrationTest` 가 전 엔티티 validate) |
 | Riot API DTO | `infra:riot-client` (도메인은 모름) |
 
 ## See Also

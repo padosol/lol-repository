@@ -24,7 +24,7 @@ LOL Repository 는 League of Legends 데이터 **수집/저장 전용 컨슈머*
 | Framework | Spring Boot 3.5.9 |
 | Build | Gradle (Multi-Module) |
 | Database | PostgreSQL + JPA/Hibernate (`reWriteBatchedInserts`, `batch_size=1000`) |
-| Migration | Flyway (`lol-db-schema` Git 서브모듈) |
+| Migration | Flyway — `riot` 스키마 전용 체인 (`module/infra/persistence/src/main/resources/db/migration/riot`) |
 | Cache / 분산 락 | Redis + Redisson 3.46.0 |
 | Message Queue | RabbitMQ 3.13 |
 | Batch | Spring Batch (백필 잡), Google Cloud Storage (NDJSON export) |
@@ -51,7 +51,6 @@ LOL Repository 는 League of Legends 데이터 **수집/저장 전용 컨슈머*
 lol-repository/
 ├── app/                    # Spring Boot 진입점 (LolRepositoryApplication)
 │   └── backfill/           # Spring Batch 기반 매치 백필 잡 + GCS export
-├── lol-db-schema/          # Git 서브모듈 — Flyway 마이그레이션 SQL
 ├── core/
 │   ├── domain/             # DDD 도메인 (Port + UseCase + Application Service)
 │   └── enum/               # 공유 enum (Region, Platform, Tier, Queue, ...)
@@ -158,16 +157,6 @@ PostgreSQL 적재는 두 단계로 흡수:
 - **JDBC 배치** — Hibernate `batch_size=1000`, `order_inserts/updates`, JDBC URL 에 `reWriteBatchedInserts=true`.
 
 ## 빌드 & 실행
-
-### 사전 준비
-
-```bash
-# 최초 클론 후 서브모듈 초기화 (lol-db-schema)
-git submodule update --init --recursive
-
-# 서브모듈 최신화
-git submodule update --remote lol-db-schema
-```
 
 ### 인프라 (Docker Compose)
 

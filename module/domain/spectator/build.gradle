@@ -1,5 +1,8 @@
 // module:domain:spectator - 활성 게임 조회 컨텍스트 (도메인 + application port.in/out)
 dependencies {
+    implementation project(':module:common')           // CoreException 등 error 사용
+    implementation project(':module:shared')           // Platform (저장된 platform_id → Riot 지역)
+
     // Spring
     implementation 'org.springframework:spring-context'
     implementation 'org.springframework:spring-tx'
