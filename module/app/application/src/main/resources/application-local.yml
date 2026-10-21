@@ -6,6 +6,7 @@ spring:
       - rabbitmq-local.yml
       - redis-local.yml
       - riot-local.yml
+      - bigquery-local.yml
 
 lol:
   backfill:

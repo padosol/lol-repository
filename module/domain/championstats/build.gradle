@@ -1,0 +1,16 @@
+// module:domain:championstats - 챔피언 통계 컨텍스트 (BigQuery 집계 조회 + single-flight 캐시, application port.in/out)
+dependencies {
+    implementation project(':module:shared')
+    implementation project(':module:common')
+
+    // Spring
+    implementation 'org.springframework:spring-context'
+
+    // Jackson (ReadModel DTO 어노테이션)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Logging
+    implementation 'org.slf4j:slf4j-api'
+
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
+}

@@ -9,6 +9,7 @@ dependencies {
     implementation project(':module:domain:spectator')
     implementation project(':module:domain:match')
     implementation project(':module:domain:summoner')
+    implementation project(':module:domain:championstats')
     implementation project(':module:shared')
     implementation project(':module:common')
     implementation project(':module:support:logging')
@@ -17,6 +18,7 @@ dependencies {
     implementation project(':module:infra:redis')
     implementation project(':module:infra:rabbitmq')
     implementation project(':module:infra:riot-client')
+    implementation project(':module:infra:bigquery')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-batch'

@@ -4,6 +4,7 @@ dependencies {
     implementation project(':module:domain:champion')
     implementation project(':module:domain:summoner')
     implementation project(':module:domain:spectator')
+    implementation project(':module:domain:championstats')
     implementation project(':module:shared')
 
     // Redis

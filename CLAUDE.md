@@ -32,13 +32,15 @@ lol-repository (루트)
     │   ├── gamedata                # 패치 버전·시즌·패치노트·큐 조회 (공개 API game-data)
     │   ├── spectator               # 활성 게임 조회
     │   ├── match                   # 매치/타임라인 (→ league port 의존)
-    │   └── summoner                # 소환사 (→ league port 의존)
+    │   ├── summoner                # 소환사 (→ league port 의존)
+    │   └── championstats           # 챔피언 통계 조회 (BigQuery 집계, 공개 API champion-stats)
     └── infra/                      # 어댑터(driven/driving) — 도메인 모듈에 의존
         ├── api                     # REST 컨트롤러 (driving)
         ├── persistence             # JPA 엔티티/리포지토리 구현 (driven)
         ├── redis                   # Redis 캐싱/분산 락 (driven)
         ├── rabbitmq                # 메시지 큐 리스너/서비스 (driving/driven)
-        └── riot-client             # RIOT API RestClient + RateLimit (driven)
+        ├── riot-client             # RIOT API RestClient + RateLimit (driven)
+        └── bigquery                # BigQuery 집계 조회 (driven, champion-stats)
 ```
 
 ### 도메인 모듈 내부 구조 (module/domain/{ctx})
@@ -49,7 +51,7 @@ com.mmrtr.lol.domain.{ctx}/
 ├── application/
 │   ├── port/               # Outbound Port (Repository/Api/Publish Port)
 │   └── usecase/            # UseCase (Inbound Port)
-└── readmodel/              # Riot/응답 DTO (match·league·gamedata·summoner)
+└── readmodel/              # Riot/응답 DTO (match·league·gamedata·summoner·championstats)
 ```
 
 > 컨텍스트 경계는 `module/domain/{ctx}/src/test` 의 `ArchitectureTest` 로 강제(`./gradlew archTest`).
@@ -100,11 +102,11 @@ com.mmrtr.lol.domain.{ctx}/
 
 # 특정 모듈 빌드
 ./gradlew :module:app:application:build
-./gradlew :module:domain:summoner:build      # match / league / champion / spectator 동일
+./gradlew :module:domain:summoner:build      # match / league / champion / spectator / championstats 동일
 ./gradlew :module:shared:build
 ./gradlew :module:common:build
 ./gradlew :module:support:logging:build
-./gradlew :module:infra:persistence:build    # api / redis / rabbitmq / riot-client 동일
+./gradlew :module:infra:persistence:build    # api / redis / rabbitmq / riot-client / bigquery 동일
 ```
 
 ## 5. 코드 스타일
