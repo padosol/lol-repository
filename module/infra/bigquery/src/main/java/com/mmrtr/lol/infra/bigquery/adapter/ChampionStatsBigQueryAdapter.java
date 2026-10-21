@@ -25,12 +25,12 @@ import com.mmrtr.lol.infra.bigquery.config.BigQueryProperties;
 import org.springframework.stereotype.Component;
 
 import java.util.AbstractMap;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 /** lol-server {@code ChampionStatsBigQueryAdapter} 이전. 쿼리·파라미터·행 매핑이 같다. */
 @Component
@@ -291,10 +291,8 @@ public class ChampionStatsBigQueryAdapter implements ChampionStatsQueryPort {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("BigQuery query interrupted", e);
         }
-        List<T> rows = new ArrayList<>();
-        for (FieldValueList row : result.iterateAll()) {
-            rows.add(mapper.apply(row));
-        }
-        return rows;
+        return StreamSupport.stream(result.iterateAll().spliterator(), false)
+                .map(mapper)
+                .toList();
     }
 }
