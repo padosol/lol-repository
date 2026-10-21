@@ -6,6 +6,7 @@ spring:
       - rabbitmq-dev.yml
       - redis-dev.yml
       - riot-dev.yml
+      - bigquery-dev.yml
 
 lol:
   backfill:

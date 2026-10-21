@@ -6,6 +6,7 @@ spring:
       - rabbitmq-prod.yml
       - redis-prod.yml
       - riot-prod.yml
+      - bigquery-prod.yml
 
 lol:
   backfill:

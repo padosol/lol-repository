@@ -1,0 +1,4 @@
+bigquery:
+  project-id: ${BIGQUERY_PROJECT_ID:lol-dev}
+  dataset: ${BIGQUERY_DATASET:lol_analytics}
+  credentials-location: ${BIGQUERY_CREDENTIALS:}

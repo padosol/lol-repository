@@ -24,6 +24,7 @@ flowchart TB
       spectator["module:domain:spectator"]
       match["module:domain:match<br/>매치/타임라인 + readmodel"]
       summoner["module:domain:summoner"]
+      championstats["module:domain:championstats<br/>챔피언 통계 (sink)"]
     end
 
     subgraph shared["🟡 공유 (도메인 아님)"]
@@ -38,23 +39,25 @@ flowchart TB
       redis["module:infra:redis<br/>Cache + Redisson Lock"]
       rabbit["module:infra:rabbitmq<br/>큐 리스너/서비스"]
       riot["module:infra:riot-client<br/>Riot RestClient + RateLimit"]
+      bq["module:infra:bigquery<br/>BigQuery 집계 조회"]
     end
 
-    application --> api & pg & redis & rabbit & riot
-    application --> league & gamedata & champion & spectator & match & summoner
+    application --> api & pg & redis & rabbit & riot & bq
+    application --> league & gamedata & champion & spectator & match & summoner & championstats
 
-    api --> league & gamedata & champion & spectator & match & summoner
+    api --> league & gamedata & champion & spectator & match & summoner & championstats
     pg --> league & gamedata & spectator & match & summoner
-    redis --> gamedata & champion & spectator & match & summoner
+    redis --> gamedata & champion & spectator & match & summoner & championstats
     rabbit --> league & match & summoner
     riot --> league & champion & spectator & match & summoner
+    bq --> championstats
 
     match --> league
     summoner --> league
 
-    league & champion & spectator & match & summoner --> sharedM
+    league & champion & spectator & match & summoner & championstats --> sharedM
     infra --> sharedM
-    league & gamedata & champion & spectator & match & summoner --> common
+    league & gamedata & champion & spectator & match & summoner & championstats --> common
     api & pg & riot --> common
 
     rabbit --> redis & riot
@@ -63,8 +66,8 @@ flowchart TB
     classDef i fill:#e1eeff,stroke:#2d6cbf,color:#000
     classDef a fill:#fff4d6,stroke:#bf922d,color:#000
     classDef s fill:#fff9c4,stroke:#bfa52d,color:#000
-    class league,gamedata,champion,spectator,match,summoner d
-    class api,pg,redis,rabbit,riot i
+    class league,gamedata,champion,spectator,match,summoner,championstats d
+    class api,pg,redis,rabbit,riot,bq i
     class application a
     class sharedM,common,logging s
 ```

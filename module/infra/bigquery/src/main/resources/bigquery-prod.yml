@@ -1,0 +1,7 @@
+bigquery:
+  # app-secrets 가 lol-server 와 같이 주입한다
+  project-id: ${BIGQUERY_PROJECT_ID}
+  dataset: ${BIGQUERY_DATASET}
+  # 키 파일은 lol-deploy 가 마운트한다 (file:/etc/bigquery/bigquery.json).
+  # lol-server 와 달리 기본값을 비워 둔다 — 키가 없으면 기동은 하고 champion-stats 조회만 실패한다
+  credentials-location: ${BIGQUERY_CREDENTIALS:}
