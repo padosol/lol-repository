@@ -20,6 +20,10 @@ public interface LeagueSummonerJpaRepository extends JpaRepository<LeagueSummone
 
     List<LeagueSummonerEntity> findAllByPuuidInAndQueue(Collection<String> puuids, String queue);
 
+    List<LeagueSummonerEntity> findAllByPuuidIn(Collection<String> puuids);
+
+    List<LeagueSummonerEntity> findAllByPuuidOrderByIdAsc(String puuid);
+
     @Query("""
             SELECT ls.puuid as puuid,
                    ls.queue as queue,

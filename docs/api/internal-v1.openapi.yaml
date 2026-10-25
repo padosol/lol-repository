@@ -1,0 +1,119 @@
+openapi: 3.1.0
+info:
+  description: lol-server 전용. 내부 포트(lol.web.internal-port)에서만 받고 NetworkPolicy 로 lol-server
+    파드만 허용한다.
+  title: lol-repository internal API
+  version: v1
+servers:
+- description: 클러스터 내부 Service (internal 포트)
+  url: http://lol-repository:8081
+tags:
+- description: 소환사 (lol-server duo 용)
+  name: summoners
+paths:
+  /internal/v1/summoners/{puuid}/duo-profile:
+    get:
+      description: |-
+        lol-server duo 가 모집글·신청 생성 시점에 스냅샷으로 저장하는 통계. 응답 형태는 lol-server `RiotAccountStats` 와 같다.
+        - gameName·tagLine: Riot ID. 매칭이 확정된 상대에게 보여 준다
+        - tierInfo: 솔로 랭크 티어. 기록이 없으면 `UNRANKED` / `I` / 0
+        - mostChampions: 솔로 랭크 판 수 상위 3개 (전 시즌, challenges 가 적재된 게임만 센다)
+        - recentGameSummary: 최근 솔로 랭크 20게임의 승패, playedChampions 는 최신 게임부터
+      operationId: getDuoProfile
+      parameters:
+      - in: path
+        name: puuid
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuoProfileReadModel"
+          description: 조회 성공
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+          description: 색인된 적 없는 소환사 — lol-server 는 SUMMONER_SEARCH_REQUIRED 로 안내
+      summary: duo 프로필 (Riot ID·솔로 랭크 티어·모스트 챔피언·최근 게임 요약)
+      tags:
+      - summoners
+components:
+  schemas:
+    DuoProfileReadModel:
+      type: object
+      properties:
+        gameName:
+          type: string
+        mostChampions:
+          type: array
+          items:
+            $ref: "#/components/schemas/MostChampion"
+        recentGameSummary:
+          $ref: "#/components/schemas/RecentGameSummary"
+        tagLine:
+          type: string
+        tierInfo:
+          $ref: "#/components/schemas/TierInfo"
+    ErrorMessage:
+      type: object
+      properties:
+        errorCode:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    MostChampion:
+      type: object
+      properties:
+        championId:
+          type: integer
+          format: int32
+        championName:
+          type: string
+        losses:
+          type: integer
+          format: int64
+        playCount:
+          type: integer
+          format: int64
+        wins:
+          type: integer
+          format: int64
+    PlayedChampion:
+      type: object
+      properties:
+        championId:
+          type: integer
+          format: int32
+        championName:
+          type: string
+    RecentGameSummary:
+      type: object
+      properties:
+        losses:
+          type: integer
+          format: int32
+        playedChampions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlayedChampion"
+        wins:
+          type: integer
+          format: int32
+    TierInfo:
+      type: object
+      properties:
+        leaguePoints:
+          type: integer
+          format: int32
+        rank:
+          type: string
+        tier:
+          type: string

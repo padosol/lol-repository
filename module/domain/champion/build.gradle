@@ -1,5 +1,8 @@
 // module:domain:champion - 챔피언 로테이션 컨텍스트 (도메인 + application port.in/out)
 dependencies {
+    implementation project(':module:shared')
+    implementation project(':module:common')
+
     // Spring
     implementation 'org.springframework:spring-context'
     implementation 'org.springframework:spring-tx'

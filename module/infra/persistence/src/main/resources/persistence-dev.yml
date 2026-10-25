@@ -11,11 +11,15 @@ spring:
           batch_size: 1000
           order_inserts: true
           order_updates: true
+  # riot 스키마만 쓴다 — 이 레포의 마이그레이션 체인, history 는 riot.flyway_schema_history
   flyway:
     enabled: true
-    baseline-on-migrate: true
+    locations: classpath:db/migration/riot
+    schemas: riot
+    default-schema: riot
   datasource:
-    url: jdbc:postgresql://lol-postgres:5432/postgres?reWriteBatchedInserts=true&tcpKeepAlive=true
+    # currentSchema: JPA·native query·JdbcTemplate·Spring Batch 의 스키마 미지정 SQL 이 riot 만 본다
+    url: jdbc:postgresql://lol-postgres:5432/postgres?currentSchema=riot&reWriteBatchedInserts=true&tcpKeepAlive=true
     driver-class-name: org.postgresql.Driver
     username: postgres
     password: postgres

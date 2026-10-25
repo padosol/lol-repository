@@ -21,8 +21,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          submodules: recursive
-          token: ${{ secrets.SUBMODULE_PAT }}
 
       - name: Extract version and SHA
         id: version

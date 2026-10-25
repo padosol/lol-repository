@@ -98,6 +98,6 @@ subprojects {
 tasks.register('archTest') {
     group = 'verification'
     description = '수직 도메인 모듈의 ArchUnit 경계 테스트(*ArchitectureTest) 실행'
-    dependsOn(['league', 'champion', 'spectator', 'match', 'summoner']
+    dependsOn(['league', 'champion', 'gamedata', 'spectator', 'match', 'summoner', 'championstats']
             .collect { ":module:domain:${it}:test" })
 }

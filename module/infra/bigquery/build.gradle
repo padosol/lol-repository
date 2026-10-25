@@ -1,0 +1,17 @@
+// module:infra:bigquery - BigQuery 집계 조회 어댑터 (champion-stats)
+dependencies {
+    implementation project(':module:domain:championstats')
+    implementation project(':module:shared')
+
+    implementation 'org.springframework.boot:spring-boot-starter'
+
+    // BigQuery (챔피언 통계 OLAP) — app 모듈의 GCS 와 같은 BOM
+    implementation platform('com.google.cloud:libraries-bom:26.43.0')
+    implementation 'com.google.cloud:google-cloud-bigquery'
+
+    // Jackson (빌드 아이템 배열 JSON 파싱)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Metrics (single-flight fallback 카운터)
+    implementation 'io.micrometer:micrometer-core'
+}

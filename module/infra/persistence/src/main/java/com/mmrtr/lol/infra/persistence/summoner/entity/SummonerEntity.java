@@ -2,6 +2,7 @@ package com.mmrtr.lol.infra.persistence.summoner.entity;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
+import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
 import com.mmrtr.lol.domain.summoner.domain.vo.RevisionInfo;
 import com.mmrtr.lol.domain.summoner.domain.vo.StatusInfo;
 import jakarta.persistence.Entity;
@@ -17,6 +18,7 @@ import org.hibernate.annotations.Comment;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.Set;
 
 @Getter
 @Entity
@@ -66,13 +68,17 @@ public class SummonerEntity {
     }
 
     public Summoner toDomain() {
+        return toDomain(new HashSet<>());
+    }
+
+    public Summoner toDomain(Set<LeagueInfo> leagueInfos) {
         return Summoner.builder()
                 .puuid(this.puuid)
                 .gameIdentity(new GameIdentity(this.gameName, this.tagLine))
                 .platformId(this.platformId)
                 .statusInfo(new StatusInfo(this.profileIconId, this.summonerLevel))
                 .revisionInfo(new RevisionInfo(this.revisionDate, this.lastRiotCallDate))
-                .leagueInfos(new HashSet<>())
+                .leagueInfos(leagueInfos)
                 .build();
     }
 

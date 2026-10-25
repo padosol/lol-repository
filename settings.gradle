@@ -6,6 +6,7 @@ include 'module:infra:persistence'
 include 'module:infra:redis'
 include 'module:infra:rabbitmq'
 include 'module:infra:riot-client'
+include 'module:infra:bigquery'
 
 // ── 공유 모듈 (수직 컨텍스트 재구성) ──
 include 'module:shared'
@@ -15,6 +16,8 @@ include 'module:support:logging'
 // ── 수직(컨텍스트별) 도메인 모듈 ──
 include 'module:domain:league'
 include 'module:domain:champion'
+include 'module:domain:gamedata'
 include 'module:domain:spectator'
 include 'module:domain:match'
 include 'module:domain:summoner'
+include 'module:domain:championstats'
