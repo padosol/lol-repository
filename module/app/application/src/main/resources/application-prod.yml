@@ -7,6 +7,16 @@ spring:
       - redis-prod.yml
       - riot-prod.yml
       - bigquery-prod.yml
+  main:
+    banner-mode: off  # stdout 을 JSON 로그만으로 유지
+
+logging:
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: lol-repository
 
 lol:
   backfill:
