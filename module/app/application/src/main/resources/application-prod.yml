@@ -7,6 +7,19 @@ spring:
       - redis-prod.yml
       - riot-prod.yml
       - bigquery-prod.yml
+  main:
+    banner-mode: off  # stdout 을 JSON 로그만으로 유지
+
+# Loki 기준 — 최상위 level 로 detected_level 을 잡고, 평평해야 `| json` 필드명이 짧다.
+# 서비스명은 OTel 이 service_name 라벨로 붙이므로 줄에 넣지 않는다.
+logging:
+  structured:
+    format:
+      console: logstash
+    json:
+      exclude:
+        - "@version"
+        - level_value
 
 lol:
   backfill:
