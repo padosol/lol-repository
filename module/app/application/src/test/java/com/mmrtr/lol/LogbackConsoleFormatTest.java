@@ -27,8 +27,9 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * logback-spring.xml 의 프로파일별 콘솔 포맷. 운영(prod)은 로그 수집기가 줄 단위로 파싱하므로 스택트레이스까지
- * 한 줄 JSON 이어야 하고, 그 외 프로파일은 기존 패턴을 유지한다. 전체 컨텍스트 없이 실제 설정 파일로 로깅만 초기화한다.
+ * logback-spring.xml 의 프로파일별 콘솔 포맷. 운영(prod)은 Loki 가 줄 단위로 수집하므로 스택트레이스까지 한 줄
+ * JSON 이어야 하고, 최상위 {@code level} 로 detected_level 을 잡도록 평평해야 한다. 그 외 프로파일은 기존 패턴을
+ * 유지한다. 전체 컨텍스트 없이 실제 설정 파일로 로깅만 초기화한다.
  */
 @ExtendWith(OutputCaptureExtension.class)
 class LogbackConsoleFormatTest {
@@ -55,7 +56,7 @@ class LogbackConsoleFormatTest {
         new ContextInitializer(loggerContext).autoConfig();
     }
 
-    @DisplayName("prod 프로파일은 MDC·예외를 포함해 콘솔 로그를 한 줄 JSON 으로 출력한다")
+    @DisplayName("prod 프로파일은 MDC·예외를 포함해 콘솔 로그를 평평한 한 줄 JSON 으로 출력한다")
     @Test
     void prodProfileWritesJson(CapturedOutput output) throws Exception {
         MockEnvironment environment = new MockEnvironment();
@@ -74,11 +75,16 @@ class LogbackConsoleFormatTest {
         JsonNode info = objectMapper.readTree(lines.get(0));
         JsonNode error = objectMapper.readTree(lines.get(1));
         assertThat(info.path("message").asText()).isEqualTo("json-info");
-        assertThat(info.at("/log/level").asText()).isEqualTo("INFO");
-        assertThat(info.at("/service/name").asText()).isEqualTo("lol-repository");
+        assertThat(info.path("level").asText()).isEqualTo("INFO");
+        assertThat(info.path("logger_name").asText()).isEqualTo(LogbackConsoleFormatTest.class.getName());
         assertThat(info.path("traceId").asText()).isEqualTo("abcd1234");
-        assertThat(error.at("/log/level").asText()).isEqualTo("ERROR");
-        assertThat(error.at("/error/stack_trace").asText()).contains("IllegalStateException: boom");
+        assertThat(info.has("@version")).isFalse();
+        assertThat(info.has("level_value")).isFalse();
+        assertThat(error.path("level").asText()).isEqualTo("ERROR");
+        assertThat(error.path("stack_trace").asText()).contains("IllegalStateException: boom");
+        assertThat(List.of(info, error))
+                .flatMap(JsonNode::properties)
+                .allSatisfy(field -> assertThat(field.getValue().isValueNode()).as(field.getKey()).isTrue());
     }
 
     @DisplayName("prod 가 아닌 프로파일은 기존 패턴으로 출력한다")
