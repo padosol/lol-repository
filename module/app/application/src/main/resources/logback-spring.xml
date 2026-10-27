@@ -2,7 +2,6 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <!-- 운영: 콘솔을 JSON 한 줄로 출력 (포맷은 logging.structured.format.console) -->
     <springProfile name="prod">
         <include resource="org/springframework/boot/logging/logback/structured-console-appender.xml"/>
     </springProfile>
