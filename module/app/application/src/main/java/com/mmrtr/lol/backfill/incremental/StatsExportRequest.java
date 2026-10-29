@@ -23,6 +23,18 @@ public record StatsExportRequest(
         int exportEpoch
 ) {
 
+    public StatsExportRequest {
+        // 빈 patches 는 잡에서 "전체 패치" 로 해석된다 — 증분은 반드시 고정된 대상 패치로만 돈다
+        if (patchVersions == null || patchVersions.isEmpty()) {
+            throw new IllegalArgumentException("patchVersions 가 비어 있습니다 (빈 목록은 전체 패치를 뜻한다)");
+        }
+        if (queueIds == null || queueIds.isEmpty()) {
+            throw new IllegalArgumentException("queueIds 가 비어 있습니다");
+        }
+        patchVersions = List.copyOf(patchVersions);
+        queueIds = List.copyOf(queueIds);
+    }
+
     public String runId() {
         return "inc-" + factType.code() + "-" + startId + "-" + endId;
     }

@@ -9,6 +9,7 @@ import org.springframework.batch.core.JobParameters;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class StatsExportRequestTest {
 
@@ -38,5 +39,29 @@ class StatsExportRequestTest {
 
         // then
         assertThat(runId0).isEqualTo("inc-match-ban-100-200").isEqualTo(runId3);
+    }
+
+    @Test
+    @DisplayName("대상 패치가 비면 '전체 패치' 로 해석되므로 요청을 만들 수 없다")
+    void create_emptyPatchVersions_throws() {
+        // when / then
+        assertThatThrownBy(() -> new StatsExportRequest(
+                BackfillFactType.MATCH, 100, 200, 16, List.of(), List.of(420), 0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new StatsExportRequest(
+                BackfillFactType.MATCH, 100, 200, 16, null, List.of(420), 0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("큐 목록이 비면 요청을 만들 수 없다")
+    void create_emptyQueueIds_throws() {
+        // when / then
+        assertThatThrownBy(() -> new StatsExportRequest(
+                BackfillFactType.MATCH, 100, 200, 16, List.of("16.21"), List.of(), 0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new StatsExportRequest(
+                BackfillFactType.MATCH, 100, 200, 16, List.of("16.21"), null, 0))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

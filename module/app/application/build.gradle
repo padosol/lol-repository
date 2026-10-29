@@ -23,6 +23,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-batch'
     implementation 'org.springframework.batch:spring-batch-integration'
+    // @Validated 설정 바인딩 (lol.stats-export.*) — 런타임에만 있던 hibernate-validator 를 컴파일 경로에도 둔다
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
 
     // DevTools — 소스 변경 시 자동 재시작 (실행 모듈에만 적용, 운영 빌드에서는 제외)
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
