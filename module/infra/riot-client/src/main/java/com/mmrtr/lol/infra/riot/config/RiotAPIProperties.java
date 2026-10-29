@@ -4,11 +4,10 @@ import java.time.Duration;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
+/** {@link RiotApiConfig} 의 {@code @EnableConfigurationProperties} 로만 등록한다. */
 @Getter
 @Setter
-@Component
 @ConfigurationProperties(prefix = "riot")
 public class RiotAPIProperties {
     private String apiKey;
