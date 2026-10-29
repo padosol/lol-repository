@@ -119,6 +119,22 @@ class BigQueryLoaderTest {
         assertThat(captured.getValue().getJobId().getJob()).isEqualTo("base_p0_a1");
     }
 
+    @DisplayName("이미 있는 시도의 대기 결과가 null(사라짐)이면 다음 시도로 넘기지 않고 예외")
+    @Test
+    void load_existingJobVanishesWhileWaiting_throwsWithoutNextAttempt() throws Exception {
+        // given
+        Job vanishing = mock(Job.class);
+        when(vanishing.waitFor()).thenReturn(null);
+        stubGetJob("base_p0_a0", vanishing);
+
+        // when / then
+        assertThatThrownBy(() -> loader.load(TABLE, ONE_URI, "base"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("base_p0_a0");
+        verify(bigQuery, never()).create(any(JobInfo.class));
+        verify(bigQuery, never()).getJob(argThat((JobId j) -> j != null && "base_p0_a1".equals(j.getJob())));
+    }
+
     @DisplayName("제출한 Load 가 실패하면 예외")
     @Test
     void load_submittedJobFails_throws() throws Exception {

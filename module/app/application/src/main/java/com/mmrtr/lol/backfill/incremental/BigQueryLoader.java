@@ -55,7 +55,12 @@ public class BigQueryLoader {
             JobId jobId = jobIdOf(table, jobId(baseJobId, part, attempt));
             Job existing = bigQuery.getJob(jobId);
             if (existing != null) {
-                if (succeeded(await(existing))) {
+                Job existingDone = await(existing);
+                if (existingDone == null) {
+                    // 방금 보인 job 이 대기 중 사라졌다 — 성공 여부를 모르므로 다음 시도로 넘기지 않는다(중복 방지)
+                    throw new IllegalStateException("BigQuery Load job 이 완료 대기 중 사라짐: " + jobId.getJob());
+                }
+                if (succeeded(existingDone)) {
                     log.info("BigQuery Load 이미 성공: {}", jobId.getJob());
                     return;
                 }

@@ -39,12 +39,15 @@ class BqLoadTaskletTest {
     }
 
     private BqLoadTasklet newTasklet(JobExecution execution) {
-        BackfillProperties backfill = new BackfillProperties(
+        return new BqLoadTasklet(loader, new BigQueryProperties(null, "ds", null), "match", backfill(), execution);
+    }
+
+    private static BackfillProperties backfill() {
+        return new BackfillProperties(
                 new BackfillProperties.Range(null, null),
                 new BackfillProperties.Chunk(1000, 2, 100),
                 new BackfillProperties.Filter(16, List.of(420)),
                 new BackfillProperties.Gcs("b"));
-        return new BqLoadTasklet(loader, new BigQueryProperties(null, "ds", null), "match", backfill, execution);
     }
 
     @DisplayName("startId/endId 가 없으면 결정적 jobId 를 만들 수 없어 예외")
@@ -75,7 +78,7 @@ class BqLoadTaskletTest {
         assertThat(jobExecution.getExecutionContext().getLong(BqLoadTasklet.CTX_ROWS_LOADED)).isZero();
     }
 
-    @DisplayName("행이 있으면 결정적 base jobId 로 Load 하고 행 수를 남긴다")
+    @DisplayName("행이 있으면 데이터셋을 포함한 결정적 base jobId 로 Load 하고 행 수를 남긴다")
     @Test
     void execute_withRows_loadsWithDeterministicJobId() {
         // given
@@ -87,7 +90,25 @@ class BqLoadTaskletTest {
         tasklet.execute(null, null);
 
         // then
-        verify(loader).load(TableId.of("ds", "match_fact"), uris, "stats_export_match_100_200");
+        verify(loader).load(TableId.of("ds", "match_fact"), uris, "stats_export_ds_match_100_200");
         assertThat(jobExecution.getExecutionContext().getLong(BqLoadTasklet.CTX_ROWS_LOADED)).isEqualTo(42L);
+    }
+
+    @DisplayName("같은 범위라도 데이터셋이 다르면 base jobId 가 달라 환경 간 jobId 가 겹치지 않는다")
+    @Test
+    void execute_differentDataset_differentBaseJobId() {
+        // given
+        ArrayList<String> uris = new ArrayList<>(List.of("gs://b/a.ndjson.gz"));
+        jobExecution.getExecutionContext().put(ManifestTasklet.CTX_SOURCE_URIS, uris);
+        jobExecution.getExecutionContext().putLong(ManifestTasklet.CTX_TOTAL_ROWS, 42L);
+        BqLoadTasklet local = new BqLoadTasklet(loader, new BigQueryProperties("proj", "lol_local", null),
+                "match-ban", backfill(), jobExecution);
+
+        // when
+        local.execute(null, null);
+
+        // then
+        verify(loader).load(TableId.of("proj", "lol_local", "match_ban_fact"), uris,
+                "stats_export_lol_local_match-ban_100_200");
     }
 }

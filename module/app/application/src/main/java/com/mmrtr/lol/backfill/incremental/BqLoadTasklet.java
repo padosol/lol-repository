@@ -64,9 +64,16 @@ public class BqLoadTasklet implements Tasklet {
         TableId table = StringUtils.hasText(bigQueryProperties.projectId())
                 ? TableId.of(bigQueryProperties.projectId(), bigQueryProperties.dataset(), factType.bqTable())
                 : TableId.of(bigQueryProperties.dataset(), factType.bqTable());
-        String baseJobId = "stats_export_" + factType.code() + "_" + params.startId() + "_" + params.endId();
-        loader.load(table, uris, baseJobId);
+        loader.load(table, uris, baseJobId(bigQueryProperties.dataset(), factType, params.startId(), params.endId()));
         jobCtx.putLong(CTX_ROWS_LOADED, totalRows);
         return RepeatStatus.FINISHED;
+    }
+
+    /**
+     * 결정적 base jobId. 데이터셋을 넣어 같은 GCP 프로젝트·로케이션을 쓰는 다른 환경(local/dev 는 ID 가 0 부터)의
+     * 같은 범위와 jobId 가 겹쳐 운영이 "이미 적재됨" 으로 건너뛰는 일을 막는다. jobId 허용 문자: 영숫자, _, -.
+     */
+    static String baseJobId(String dataset, BackfillFactType factType, long startId, long endId) {
+        return "stats_export_" + dataset + "_" + factType.code() + "_" + startId + "_" + endId;
     }
 }

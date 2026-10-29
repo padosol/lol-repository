@@ -247,15 +247,17 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
 - **Load Job 1건당 소스 URI 상한 10,000** → 청크가 그보다 많으면 여러 Load Job 으로 나눈다 (part 번호).
 - **멱등성 — 결정적 jobId + 시도 번호**:
   ```
-  base  = stats_export_{fact}_{startId}_{endId}_p{part}
+  base  = stats_export_{dataset}_{fact}_{startId}_{endId}      -- dataset = bigquery.dataset
   for a in 0..999:                                      -- 상한 1000 (BigQueryLoader.MAX_ATTEMPTS)
-      job = bigquery.getJob(base + "_a" + a)
+      job = bigquery.getJob(base + "_p" + part + "_a" + a)
       없음            → 이 id 로 제출 후 완료 대기 → 성공이면 끝, 실패면 예외
       DONE & 성공     → 이미 적재됨, 끝 (재시작/재배포 시 중복 방지 핵심)
       DONE & 실패     → 다음 a
-      실행 중         → 완료 대기 후 위 판정
+      실행 중         → 완료 대기 후 위 판정 (대기 중 사라지면 성공 여부를 모르므로 다음 a 로 넘기지 않고 예외)
   ```
   실패한 jobId 는 재사용할 수 없으므로 시도 번호로 넘어가고, 성공한 시도가 하나라도 있으면 다시 넣지 않는다.
+  `dataset` 을 넣는 이유: local/dev 와 운영이 같은 GCP 프로젝트·로케이션을 쓰면 ID 가 0 부터인 로컬 DB 의 같은 범위가
+  운영 jobId 와 겹쳐, 운영이 "이미 적재됨" 으로 건너뛰는 조용한 누락이 생긴다 (jobId 허용 문자: 영숫자, `_`, `-`).
   상한이 작으면 결정적 실패(첫 배포의 스키마 불일치 등)가 시도를 소진해 스키마를 고친 뒤에도 영영 적재되지 않으므로
   1000 으로 둔다 — 이미 쓴 시도마다 드는 비용은 `getJob` 조회 1회뿐이다 (2시간 주기면 약 83일).
   같은 jobId 의 중복 거절이 유지되는 기간(문서 확인 필요)은 재시작이 같은 날 안에 일어나는 운영 전제와 충분히 겹친다.
