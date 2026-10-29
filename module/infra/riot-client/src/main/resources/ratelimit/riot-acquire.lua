@@ -1,6 +1,8 @@
 -- Riot 호출 한 건의 한도 확인과 증가를 원자적으로 한다. RedisRiotRateLimiter#acquire 가 부른다.
 -- ARGV: routing, method, level, appDefault, safetyRatio, lookaheadSeconds, reserveRatio, nowMillis(빈 문자열이면 Redis TIME)
 -- 반환: 기다릴 ms(0 이상), -1 = USER 예약 범위 초과, -2 = 낮은 우선순위 양보
+-- TIME 뒤에 쓰기를 하므로 효과 복제를 켠다 (Redis 5 이상에서는 기본값이라 no-op)
+redis.replicate_commands()
 local P = 'riot:rl:'
 local routing = ARGV[1]
 local method = ARGV[2]

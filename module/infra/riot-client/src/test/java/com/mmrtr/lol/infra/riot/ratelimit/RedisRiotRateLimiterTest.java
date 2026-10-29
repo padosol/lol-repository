@@ -9,12 +9,14 @@ import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.redisson.Redisson;
+import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.config.Config;
@@ -233,15 +235,20 @@ class RedisRiotRateLimiterTest {
     }
 
     @Test
-    @DisplayName("마지막으로 본 한도와 같으면 Redis 에 다시 쓰지 않는다")
-    void learnLimits_skipsWriteWhenUnchanged() {
-        RedisRiotRateLimiter limiter = limiter();
+    @DisplayName("같은 한도는 30초 안에는 다시 쓰지 않고, 30초가 지나면 다시 써서 잃어버린 한도를 복구한다")
+    void learnLimits_rewritesUnchangedLimitAfterRefreshInterval() {
+        AtomicLong clock = new AtomicLong(NOW);
+        RedisRiotRateLimiter limiter = new RedisRiotRateLimiter(redisson, new RiotAPIProperties(), clock::get);
         limiter.learnLimits(ROUTING, METHOD, "100:10", null);
-        redisson.getMap("riot:rl:limits", StringCodec.INSTANCE).delete();
+        limitsHash().delete();
 
+        clock.addAndGet(29_999);
         limiter.learnLimits(ROUTING, METHOD, "100:10", null);
+        assertThat(limitsHash().isExists()).isFalse();
 
-        assertThat(redisson.getMap("riot:rl:limits", StringCodec.INSTANCE).isExists()).isFalse();
+        clock.addAndGet(2);
+        limiter.learnLimits(ROUTING, METHOD, "100:10", null);
+        assertThat(limitsHash().get("asia|app")).isEqualTo("100:10");
     }
 
     @Test
@@ -278,6 +285,10 @@ class RedisRiotRateLimiterTest {
 
     private static RedisRiotRateLimiter limiter(RiotAPIProperties properties) {
         return new RedisRiotRateLimiter(redisson, properties, () -> NOW);
+    }
+
+    private static RMap<String, String> limitsHash() {
+        return redisson.getMap("riot:rl:limits", StringCodec.INSTANCE);
     }
 
     private static String counter(String key) {

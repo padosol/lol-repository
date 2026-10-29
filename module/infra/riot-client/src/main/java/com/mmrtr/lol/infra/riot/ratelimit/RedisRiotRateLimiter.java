@@ -32,6 +32,8 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
 
     private static final String PREFIX = "riot:rl:";
     private static final String LIMITS_KEY = PREFIX + "limits";
+    /** 같은 한도라도 마지막으로 쓴 지 이만큼 지나면 다시 쓴다. Redis 가 limits 해시를 잃어도 복구된다. */
+    private static final long LIMIT_REFRESH_MILLIS = 30_000;
 
     private final RedissonClient redissonClient;
     private final RiotAPIProperties.RateLimit config;
@@ -39,8 +41,8 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
     private final String appDefault;
     private final LuaScript acquireScript = new LuaScript("ratelimit/riot-acquire.lua");
     private final LuaScript pauseScript = new LuaScript("ratelimit/riot-pause.lua");
-    /** 이 인스턴스가 마지막으로 본 한도. 같으면 Redis 에 다시 쓰지 않는다. */
-    private final Map<String, String> lastSeenLimits = new ConcurrentHashMap<>();
+    /** 이 인스턴스가 필드별로 마지막에 쓴 한도와 그 시각. */
+    private final Map<String, WrittenLimit> lastWrittenLimits = new ConcurrentHashMap<>();
 
     @Autowired
     public RedisRiotRateLimiter(RedissonClient redissonClient, RiotAPIProperties properties) {
@@ -88,8 +90,7 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
         if (horizon == null) {
             return 0;
         }
-        long now = nowMillisOverride != null ? nowMillisOverride.getAsLong() : System.currentTimeMillis();
-        return Math.max(0, Long.parseLong(horizon) * 1000 - now);
+        return Math.max(0, Long.parseLong(horizon) * 1000 - localNowMillis());
     }
 
     @Override
@@ -99,14 +100,24 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
                 RateLimitWindow.parse(learned != null ? learned : appDefault), config.getSafetyRatio());
     }
 
+    /** 마지막에 쓴 값과 다르거나 쓴 지 {@link #LIMIT_REFRESH_MILLIS} 가 지났으면 HSET 한다. 필드별 확인·갱신은 원자적이다. */
     private void learn(String field, String header) {
         String limits = normalize(header);
-        if (limits == null || limits.equals(lastSeenLimits.get(field))) {
+        if (limits == null) {
             return;
         }
-        limits().fastPut(field, limits);
-        lastSeenLimits.put(field, limits);
-        log.info("Riot 한도 갱신 [{}] {}", field, limits);
+        lastWrittenLimits.compute(field, (key, written) -> {
+            long now = localNowMillis();
+            boolean changed = written == null || !written.limits().equals(limits);
+            if (!changed && now - written.writtenAtMillis() <= LIMIT_REFRESH_MILLIS) {
+                return written;
+            }
+            limits().fastPut(field, limits);
+            if (changed) {
+                log.info("Riot 한도 갱신 [{}] {}", field, limits);
+            }
+            return new WrittenLimit(limits, now);
+        });
     }
 
     private RMap<String, String> limits() {
@@ -115,6 +126,10 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
 
     private String nowArg() {
         return nowMillisOverride != null ? String.valueOf(nowMillisOverride.getAsLong()) : "";
+    }
+
+    private long localNowMillis() {
+        return nowMillisOverride != null ? nowMillisOverride.getAsLong() : System.currentTimeMillis();
     }
 
     private static String appBucket(String routing) {
@@ -143,6 +158,9 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
             }
         }
         return false;
+    }
+
+    private record WrittenLimit(String limits, long writtenAtMillis) {
     }
 
     /** 처음 쓸 때 scriptLoad 하고 evalSha 로 부른다. Redis 재시작으로 캐시가 비면(NOSCRIPT) 다시 올려 한 번 더 부른다. */
