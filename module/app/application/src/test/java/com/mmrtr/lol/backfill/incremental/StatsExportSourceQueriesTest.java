@@ -66,7 +66,7 @@ class StatsExportSourceQueriesTest {
         long outside = insertMatch("M-5", "16.40", 420);
 
         // when
-        var result = queries.maxPatchInRange(MATCH, from, outside - 1, List.of(420));
+        var result = queries.maxPatchInRange(MATCH, from, outside, List.of(420));
 
         // then
         assertThat(result).contains(PatchVersion.parse("16.21"));
@@ -94,10 +94,12 @@ class StatsExportSourceQueriesTest {
         long p3 = rows.insert("match_participant", Map.of("match_id", "M-3", "participant_id", 1, "team_id", 100));
 
         // when
-        var result = queries.maxPatchInRange(BackfillFactType.MATCH_PARTICIPANT_BUILD, p1, p3, List.of(420));
+        var result = queries.maxPatchInRange(BackfillFactType.MATCH_PARTICIPANT_BUILD, p1, p3 + 1, List.of(420));
+        var endExclusive = queries.maxPatchInRange(BackfillFactType.MATCH_PARTICIPANT_BUILD, p1, p3, List.of(420, 440));
 
         // then
         assertThat(result).contains(PatchVersion.parse("16.21"));
+        assertThat(endExclusive).contains(PatchVersion.parse("16.21"));
     }
 
     @Test

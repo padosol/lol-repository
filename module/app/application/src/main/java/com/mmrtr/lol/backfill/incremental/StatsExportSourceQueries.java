@@ -26,7 +26,7 @@ public class StatsExportSourceQueries {
         return next == null ? 1L : next;
     }
 
-    /** [start, end] (양끝 포함) id 범위 행이 속한 매치 중 지정 큐의 최대 패치. */
+    /** [start, end) (end 미포함, export SQL 의 id &gt;= :startId AND id &lt; :endId 와 같다) id 범위 행이 속한 매치 중 지정 큐의 최대 패치. */
     public Optional<PatchVersion> maxPatchInRange(BackfillFactType factType, long start, long end, List<Integer> queueIds) {
         if (queueIds.isEmpty()) {
             return Optional.empty();
@@ -36,7 +36,7 @@ public class StatsExportSourceQueries {
         String from = direct ? "match m" : factType.sourceTable() + " x JOIN match m ON m.match_id = x.match_id";
         String idRef = (direct ? "m." : "x.") + factType.sourceIdColumn();
         String sql = "SELECT m.patch_version FROM " + from
-                + " WHERE " + idRef + " BETWEEN ? AND ? AND m.queue_id IN (" + placeholders + ")"
+                + " WHERE " + idRef + " >= ? AND " + idRef + " < ? AND m.queue_id IN (" + placeholders + ")"
                 + " AND m.patch_version IS NOT NULL"
                 + " ORDER BY split_part(m.patch_version, '.', 1)::int DESC, split_part(m.patch_version, '.', 2)::int DESC"
                 + " LIMIT 1";
