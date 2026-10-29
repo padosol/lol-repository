@@ -36,4 +36,7 @@ dependencies {
     // Google Cloud Storage (match_participant_build backfill: NDJSON export → GCS)
     implementation platform('com.google.cloud:libraries-bom:26.43.0')
     implementation 'com.google.cloud:google-cloud-storage'
+
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter'
 }

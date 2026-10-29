@@ -1,6 +1,7 @@
 -- match_participant_build 백필 집계 쿼리.
 -- Spring Batch 청크 단위 호출: :startId (inclusive), :endId (exclusive),
--- :season, :queueIds (List -> IN (?, ?) 확장).
+-- :season, :queueIds (List -> IN (?, ?) 확장),
+-- :allPatches (boolean), :patchVersions (List, 비면 안 됨 — 전체 패치면 List.of("")).
 WITH mp_batch AS MATERIALIZED (
     SELECT mp.match_id,
         m.season,
@@ -46,6 +47,7 @@ WITH mp_batch AS MATERIALIZED (
         AND mp.match_participant_id < :endId
         AND m.season = :season
         AND m.queue_id IN (:queueIds)
+        AND (CAST(:allPatches AS boolean) OR m.patch_version IN (:patchVersions))
 ),
 target_matches AS MATERIALIZED (
     SELECT DISTINCT match_id
@@ -151,9 +153,10 @@ start_item_net AS (
             ie.type = 'ITEM_PURCHASED'
             AND ie.item_id IN (
                 SELECT item_id
-                FROM starting_item_exclusion
+                FROM item_meta
                 WHERE season = :season
                     AND active = true
+                    AND type IN ('TRINKET', 'STARTING_EXCLUSION')
             )
         )
     GROUP BY ie.match_id,
