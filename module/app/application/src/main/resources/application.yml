@@ -34,3 +34,14 @@ lol:
   vt:
     executors:
       enabled: true
+  stats-export:
+    scheduler:
+      enabled: ${LOL_STATS_EXPORT_SCHEDULER_ENABLED:false}
+    cron: "0 20 */2 * * *"
+    patch-count: 1
+    queue-ids: [420]
+    seed-id: 0
+    chunk:
+      size: 50000
+      parallelism: 2
+    bq-location: ${BIGQUERY_LOCATION:}
