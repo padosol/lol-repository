@@ -1,0 +1,186 @@
+package com.mmrtr.lol.infra.riot.interceptor;
+
+import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
+import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
+import com.mmrtr.lol.infra.riot.ratelimit.RateLimitWindow;
+import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
+import com.mmrtr.lol.infra.riot.ratelimit.RiotRequestAttributes;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.ClientHttpResponse;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.function.LongSupplier;
+
+/**
+ * 보내기 전 {@link RiotRateLimiter} 로 허가를 받고, 응답 헤더로 한도를 배우며 429 시 버킷을 정지한다.
+ */
+@Slf4j
+public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
+
+    private static final String UNKNOWN = "unknown";
+    private static final Duration NEAR_LIMIT_PAUSE = Duration.ofSeconds(1);
+
+    private final RiotRateLimiter limiter;
+    private final RiotAPIProperties.RateLimit props;
+    private final MeterRegistry meterRegistry;
+    private final Sleeper sleeper;
+    private final LongSupplier clock;
+
+    public RiotRateLimitInterceptor(RiotRateLimiter limiter, RiotAPIProperties properties,
+                                    MeterRegistry meterRegistry) {
+        this(limiter, properties, meterRegistry, Thread::sleep, System::currentTimeMillis);
+    }
+
+    RiotRateLimitInterceptor(RiotRateLimiter limiter, RiotAPIProperties properties,
+                             MeterRegistry meterRegistry, Sleeper sleeper, LongSupplier clock) {
+        this.limiter = limiter;
+        this.props = properties.getRateLimit();
+        this.meterRegistry = meterRegistry;
+        this.sleeper = sleeper;
+        this.clock = clock;
+    }
+
+    @FunctionalInterface
+    interface Sleeper {
+        void sleep(long ms) throws InterruptedException;
+    }
+
+    @Override
+    public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution)
+            throws IOException {
+        String routing = routingOf(request);
+        RiotCallPriority priority = request.getAttributes().get(RiotRequestAttributes.PRIORITY)
+                instanceof RiotCallPriority p ? p : RiotCallPriority.USER;
+        String method = request.getAttributes().get(RiotRequestAttributes.METHOD) instanceof String m
+                ? m : UNKNOWN;
+
+        awaitPermit(routing, method, priority);
+
+        ClientHttpResponse response = execution.execute(request, body);
+        try {
+            afterResponse(routing, method, response);
+        } catch (RuntimeException e) {
+            // 응답은 이미 받았으므로 Redis 오류로 호출을 실패시키지 않는다.
+            log.warn("Riot rate limit 후처리 실패 (응답은 반환) routing={}, method={}", routing, method, e);
+        }
+        return response;
+    }
+
+    private void awaitPermit(String routing, String method, RiotCallPriority priority) throws IOException {
+        long start = clock.getAsLong();
+        long maxWaitMs = maxWaitMs(priority);
+        while (true) {
+            long result = limiter.acquire(routing, method, priority);
+            if (result == RiotRateLimiter.NO_CAPACITY) {
+                throw rejected(routing, priority);
+            }
+            if (result >= 0L) {
+                sleep(result);
+                meterRegistry.timer("riot.ratelimit.wait", "routing", routing, "priority", priority.name())
+                        .record(Duration.ofMillis(Math.max(0L, clock.getAsLong() - start)));
+                return;
+            }
+            // YIELD: 양보 후 재시도. 누적 대기가 상한을 넘으면 포기한다.
+            if (clock.getAsLong() - start >= maxWaitMs) {
+                throw rejected(routing, priority);
+            }
+            sleep(props.getYieldBackoff().toMillis());
+        }
+    }
+
+    private long maxWaitMs(RiotCallPriority priority) {
+        return switch (priority) {
+            case DEFERRED -> props.getDeferredMaxWait().toMillis();
+            case USER, BACKGROUND -> props.getBackgroundMaxWait().toMillis();
+        };
+    }
+
+    private RiotBudgetExceededException rejected(String routing, RiotCallPriority priority) {
+        meterRegistry.counter("riot.ratelimit.rejected",
+                "routing", routing, "priority", priority.name()).increment();
+        return new RiotBudgetExceededException(routing, priority);
+    }
+
+    private void sleep(long ms) throws IOException {
+        if (ms <= 0L) {
+            return;
+        }
+        try {
+            sleeper.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("RiotRateLimitInterceptor wait interrupted", e);
+        }
+    }
+
+    private void afterResponse(String routing, String method, ClientHttpResponse response) throws IOException {
+        HttpHeaders headers = response.getHeaders();
+        String appLimit = headers.getFirst("X-App-Rate-Limit");
+        String methodLimit = headers.getFirst("X-Method-Rate-Limit");
+        limiter.learnLimits(routing, method, appLimit, methodLimit);
+
+        double ratio = props.getCountPauseRatio();
+        if (nearLimit(appLimit, headers.getFirst("X-App-Rate-Limit-Count"), ratio)) {
+            throttled(routing, "app");
+            limiter.pause(routing, null, NEAR_LIMIT_PAUSE);
+        }
+        if (nearLimit(methodLimit, headers.getFirst("X-Method-Rate-Limit-Count"), ratio)) {
+            throttled(routing, "method");
+            limiter.pause(routing, method, NEAR_LIMIT_PAUSE);
+        }
+
+        if (HttpStatus.TOO_MANY_REQUESTS.equals(response.getStatusCode())) {
+            Duration pause = retryAfter(headers.getFirst("Retry-After"));
+            if ("application".equalsIgnoreCase(headers.getFirst("X-Rate-Limit-Type"))) {
+                throttled(routing, "application");
+                limiter.pause(routing, null, pause);
+            } else {
+                throttled(routing, "method");
+                limiter.pause(routing, method, pause);
+            }
+        }
+    }
+
+    private boolean nearLimit(String limitHeader, String countHeader, double ratio) {
+        if (limitHeader == null || countHeader == null) {
+            return false;
+        }
+        return RateLimitWindow.nearLimit(
+                RateLimitWindow.parse(limitHeader), RateLimitWindow.parse(countHeader), ratio);
+    }
+
+    private Duration retryAfter(String header) {
+        if (header != null && !header.isBlank()) {
+            try {
+                long seconds = Long.parseLong(header.trim());
+                if (seconds > 0L) {
+                    return Duration.ofSeconds(seconds);
+                }
+            } catch (NumberFormatException e) {
+                log.debug("Failed to parse Retry-After header: {}", header);
+            }
+        }
+        return props.getDefaultPause();
+    }
+
+    private void throttled(String routing, String type) {
+        meterRegistry.counter("riot.ratelimit.throttled", "routing", routing, "type", type).increment();
+    }
+
+    private String routingOf(HttpRequest request) {
+        String host = request.getURI().getHost();
+        if (host == null) {
+            return UNKNOWN;
+        }
+        int dot = host.indexOf('.');
+        return dot < 0 ? host : host.substring(0, dot);
+    }
+}
