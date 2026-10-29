@@ -117,6 +117,20 @@ class StatsExportSourceQueriesTest {
     }
 
     @Test
+    @DisplayName("패치 행이 아직 없는 다음 시즌은 건너뛰고, 패치가 있는 최신 시즌을 쓴다")
+    void latestSeasonPatches_newestSeasonWithoutPatches_usesLatestSeasonWithPatches() {
+        // given
+        insertSeason(16, 16L, "16.20", "16.21");
+        insertSeason(17, 17L);
+
+        // when
+        var result = queries.latestSeasonPatches(3);
+
+        // then
+        assertThat(result).containsExactly(PatchVersion.parse("16.21"), PatchVersion.parse("16.20"));
+    }
+
+    @Test
     @DisplayName("앞자리 0 패치는 정규화된다")
     void latestSeasonPatches_leadingZero_normalized() {
         // given

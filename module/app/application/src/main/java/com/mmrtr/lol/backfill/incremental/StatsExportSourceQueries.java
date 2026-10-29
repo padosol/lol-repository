@@ -47,12 +47,20 @@ public class StatsExportSourceQueries {
         return jdbc.queryForList(sql, String.class, args.toArray()).stream().findFirst().map(PatchVersion::parse);
     }
 
+    /**
+     * 패치 행이 있는 시즌 중 최신 시즌의 최근 limit 개 패치 (최신순). 첫 패치보다 먼저 들어온 다음 시즌 행이
+     * 모든 fact 를 보류시키지 않게 패치가 없는 시즌은 건너뛴다 — 그 시즌의 매치가 들어오면 rangeMax 로 보류된다.
+     */
     public List<PatchVersion> latestSeasonPatches(int limit) {
         return jdbc.queryForList("""
                 SELECT pv.version_value
                 FROM patch_version pv
                 JOIN season s ON s.season_id = pv.season_id
-                WHERE s.season_value = (SELECT MAX(season_value) FROM season)
+                WHERE s.season_value = (
+                    SELECT MAX(s2.season_value)
+                    FROM season s2
+                    JOIN patch_version pv2 ON pv2.season_id = s2.season_id
+                )
                 ORDER BY split_part(pv.version_value, '.', 1)::int DESC, split_part(pv.version_value, '.', 2)::int DESC
                 LIMIT ?
                 """, String.class, limit).stream().map(PatchVersion::parse).toList();

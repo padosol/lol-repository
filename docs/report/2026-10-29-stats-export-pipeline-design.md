@@ -166,7 +166,7 @@ UPDATE stats_export_watermark
 
 ```
 -- 범위 첫 시도 때만 (range_patches 가 NULL 일 때)
-S       = SELECT MAX(season_value) FROM season                                    -- 최신 시즌
+S       = SELECT MAX(s.season_value) FROM season s JOIN patch_version v USING (season_id)   -- 패치 행이 있는 최신 시즌
 targets = SELECT v.version_value FROM patch_version v JOIN season s USING (season_id)
           WHERE s.season_value = S
           ORDER BY split_part(v.version_value,'.',1)::int DESC, split_part(v.version_value,'.',2)::int DESC
@@ -179,6 +179,8 @@ range_patches ← targets
 ```
 
 - 예: N=1, 테이블 최신 16.21 → 16.21 만. N=3 → 16.19~16.21 (테이블에 있는 것만). 17시즌 행이 추가되면 17.x 만 (사용자 결정: 최신 시즌만).
+- `S` 는 **패치 행이 하나라도 있는 시즌** 중 최신이다. 17시즌 `season` 행이 첫 패치 행보다 먼저 들어와도 모든 fact 가
+  보류되지 않고 16시즌으로 계속 돈다 — 17시즌 매치가 범위에 들어오면 `rangeMax > max(targets)` 로 보류된다.
 - 정렬은 `version_value` 의 숫자 순 — 앱의 `version_id DESC` 와 행이 순서대로 들어왔다면 같고, 순서가 어긋나도 안전하다 (설계자 판단).
 - **보류 = 새 패치를 놓치지 않기 위한 장치**: 패치 출시 후 테이블에 새 행이 들어가기 전에 그 패치 매치가 범위에 들어오면,
   그대로 진행할 경우 새 패치 행이 대상 밖으로 영구히 건너뛰어진다. 그래서 그 fact 는 워터마크를 멈추고 기다린다.
