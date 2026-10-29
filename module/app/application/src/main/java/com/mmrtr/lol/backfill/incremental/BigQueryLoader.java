@@ -1,0 +1,116 @@
+package com.mmrtr.lol.backfill.incremental;
+
+import com.google.cloud.bigquery.BigQuery;
+import com.google.cloud.bigquery.BigQueryException;
+import com.google.cloud.bigquery.FormatOptions;
+import com.google.cloud.bigquery.Job;
+import com.google.cloud.bigquery.JobId;
+import com.google.cloud.bigquery.JobInfo;
+import com.google.cloud.bigquery.LoadJobConfiguration;
+import com.google.cloud.bigquery.TableId;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+
+import java.util.List;
+
+/**
+ * NDJSON 파일들을 BigQuery 테이블에 APPEND 한다. jobId 가 결정적이라 크래시 후 재시도해도
+ * 이미 성공한 Load 를 다시 제출하지 않는다 (중복 적재 방지).
+ */
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class BigQueryLoader {
+
+    static final int MAX_ATTEMPTS = 10;
+    static final int MAX_URIS_PER_JOB = 10_000;
+    private static final int HTTP_CONFLICT = 409;
+
+    private final BigQuery bigQuery;
+    private final StatsExportProperties props;
+
+    public static String jobId(String baseJobId, int part, int attempt) {
+        return baseJobId + "_p" + part + "_a" + attempt;
+    }
+
+    public void load(TableId table, List<String> sourceUris, String baseJobId) {
+        int part = 0;
+        for (int from = 0; from < sourceUris.size(); from += MAX_URIS_PER_JOB) {
+            List<String> uris = sourceUris.subList(from, Math.min(from + MAX_URIS_PER_JOB, sourceUris.size()));
+            loadPart(table, uris, baseJobId, part++);
+        }
+    }
+
+    private void loadPart(TableId table, List<String> uris, String baseJobId, int part) {
+        for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            JobId jobId = jobIdOf(jobId(baseJobId, part, attempt));
+            Job existing = bigQuery.getJob(jobId);
+            if (existing != null) {
+                if (succeeded(await(existing))) {
+                    log.info("BigQuery Load 이미 성공: {}", jobId.getJob());
+                    return;
+                }
+                log.warn("BigQuery Load 이전 시도 실패, 다음 시도로: {}", jobId.getJob());
+                continue;
+            }
+            Job submitted = submit(table, uris, jobId);
+            if (submitted == null) {
+                // 409: 같은 id 를 이미 제출한 쪽이 있다 — 다시 조회해 판정한다
+                Job raced = bigQuery.getJob(jobId);
+                if (raced != null && succeeded(await(raced))) {
+                    return;
+                }
+                continue;
+            }
+            Job done = await(submitted);
+            if (!succeeded(done)) {
+                throw new IllegalStateException("BigQuery Load 실패: " + jobId.getJob() + " error="
+                        + (done == null ? "job vanished" : done.getStatus().getError()));
+            }
+            log.info("BigQuery Load 완료: {} uris={}", jobId.getJob(), uris.size());
+            return;
+        }
+        throw new IllegalStateException("BigQuery Load " + MAX_ATTEMPTS + "회 시도가 모두 실패: "
+                + baseJobId + " part=" + part);
+    }
+
+    private Job submit(TableId table, List<String> uris, JobId jobId) {
+        LoadJobConfiguration cfg = LoadJobConfiguration.newBuilder(table, uris)
+                .setFormatOptions(FormatOptions.json())
+                .setWriteDisposition(JobInfo.WriteDisposition.WRITE_APPEND)
+                .setCreateDisposition(JobInfo.CreateDisposition.CREATE_NEVER)
+                .setMaxBadRecords(0)
+                .build();
+        try {
+            return bigQuery.create(JobInfo.newBuilder(cfg).setJobId(jobId).build());
+        } catch (BigQueryException e) {
+            if (e.getCode() == HTTP_CONFLICT) {
+                return null;
+            }
+            throw e;
+        }
+    }
+
+    private Job await(Job job) {
+        try {
+            return job.waitFor();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("BigQuery Load 대기 중 인터럽트", e);
+        }
+    }
+
+    private static boolean succeeded(Job job) {
+        return job != null && job.getStatus() != null && job.getStatus().getError() == null;
+    }
+
+    private JobId jobIdOf(String id) {
+        JobId.Builder builder = JobId.newBuilder().setJob(id);
+        if (StringUtils.hasText(props.bqLocation())) {
+            builder.setLocation(props.bqLocation());
+        }
+        return builder.build();
+    }
+}
