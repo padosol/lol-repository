@@ -209,7 +209,7 @@ class RetryInterceptorTest {
     @DisplayName("시나리오 8: 로컬 limiter (RiotRateLimitException) → retry → 성공 (unit-level)")
     void scenario8_local_limiter_then_200() throws IOException {
         // Spring InterceptingRequestExecution 은 single-pass iterator 라 RestClient chain 안의
-        // fake interceptor 가 retry 두번째 시도에 다시 호출되지 않는다 (production 의 RateLimitInterceptor
+        // fake interceptor 가 retry 두번째 시도에 다시 호출되지 않는다 (production 의 RiotRateLimitInterceptor
         // 도 동일한 한계 — 기존 spring-retry 시절부터 존재). 따라서 시나리오 8 은 RetryInterceptor 의
         // RiotRateLimitException catch + retry 동작을 unit-level (ClientHttpRequestExecution lambda) 로 검증.
         HttpRequest request = new TestHttpRequest(URI.create("http://example.com/x"), HttpMethod.GET);

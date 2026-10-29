@@ -4,13 +4,12 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.infra.riot.interceptor.ConcurrencyInterceptor;
-import com.mmrtr.lol.infra.riot.interceptor.RateLimitInterceptor;
 import com.mmrtr.lol.infra.riot.interceptor.RetryInterceptor;
-import com.mmrtr.lol.infra.riot.ratelimit.HostRateLimitResolver;
+import com.mmrtr.lol.infra.riot.interceptor.RiotRateLimitInterceptor;
+import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RedissonClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.context.annotation.Bean;
@@ -35,8 +34,7 @@ public class RiotApiConfig {
     private static final int CONCURRENCY_LIMIT = 20;
 
     private final RiotAPIProperties riotAPIProperties;
-    private final RedissonClient redissonClient;
-    private final HostRateLimitResolver hostRateLimitResolver;
+    private final RiotRateLimiter riotRateLimiter;
     private final MeterRegistry meterRegistry;
 
     @Bean
@@ -49,13 +47,13 @@ public class RiotApiConfig {
         requestFactory.setReadTimeout(Duration.ofSeconds(riotAPIProperties.getReadTimeout()));
 
         RetryInterceptor retryInterceptor = new RetryInterceptor(meterRegistry);
-        RateLimitInterceptor rateLimitInterceptor = new RateLimitInterceptor(
-                redissonClient, hostRateLimitResolver);
+        RiotRateLimitInterceptor rateLimitInterceptor = new RiotRateLimitInterceptor(
+                riotRateLimiter, riotAPIProperties, meterRegistry);
         ConcurrencyInterceptor concurrencyInterceptor = new ConcurrencyInterceptor(CONCURRENCY_LIMIT);
 
         // Interceptor 실행 순서 (등록 순서 = 호출 순서, 첫번째가 가장 바깥):
         // 1. retryInterceptor (가장 바깥 - 429/5xx/IOException 재시도)
-        // 2. rateLimitInterceptor (로컬 Redisson limiter)
+        // 2. rateLimitInterceptor (Redis 기반 한도 관리 — 우선순위·헤더 학습·429 정지)
         // 3. logRequest (로깅)
         // 4. concurrencyInterceptor (동시 요청 수 제한 - 가장 안쪽)
         return RestClient.builder()

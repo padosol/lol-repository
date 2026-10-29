@@ -243,12 +243,15 @@ class RiotRateLimitInterceptorTest {
         final Deque<Long> results = new ArrayDeque<>();
         final List<String> learned = new ArrayList<>();
         final List<String> pauses = new ArrayList<>();
+        final java.util.concurrent.atomic.AtomicInteger acquireCount =
+                new java.util.concurrent.atomic.AtomicInteger();
         boolean alwaysYield;
         RuntimeException acquireFailure;
         RuntimeException learnFailure;
 
         @Override
         public long acquire(String routing, String method, RiotCallPriority priority) {
+            acquireCount.incrementAndGet();
             if (acquireFailure != null) {
                 throw acquireFailure;
             }
