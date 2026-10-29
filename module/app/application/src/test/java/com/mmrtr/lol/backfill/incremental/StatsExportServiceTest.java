@@ -28,6 +28,7 @@ import static com.mmrtr.lol.backfill.BackfillFactType.MATCH;
 import static com.mmrtr.lol.backfill.BackfillFactType.MATCH_BAN;
 import static com.mmrtr.lol.backfill.BackfillFactType.MATCH_PARTICIPANT_BUILD;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -274,6 +275,29 @@ class StatsExportServiceTest {
 
         // then
         verify(lock, org.mockito.Mockito.times(2)).unlock();
+    }
+
+    @Test
+    @DisplayName("비동기 트리거용 실행은 틱 예외를 삼키고(로그) 락을 푼다")
+    void runTickQuietly_tickThrows_swallowsAndUnlocks() {
+        // given
+        given(sourceQueries.latestSeasonPatches(3)).willThrow(new IllegalStateException("db down"));
+
+        // when / then
+        assertThatCode(() -> service.runTickQuietly("스케줄"))
+                .doesNotThrowAnyException();
+        verify(lock).unlock();
+    }
+
+    @Test
+    @DisplayName("비동기 트리거용 실행도 틱을 한 번 돌려 보고서를 남긴다")
+    void runTickQuietly_runsTick() {
+        // when
+        service.runTickQuietly("수동");
+
+        // then
+        verify(staleCleaner).markStaleExecutionsFailed();
+        assertThat(service.lastReport()).isPresent();
     }
 
     @Test

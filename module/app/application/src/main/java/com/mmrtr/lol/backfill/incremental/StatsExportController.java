@@ -2,7 +2,6 @@ package com.mmrtr.lol.backfill.incremental;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 내부 전용: 증분 적재 틱을 수동 실행하고 상태를 조회한다.
  */
-@Slf4j
 @RestController
 @RequestMapping("/internal/stats-export")
 public class StatsExportController {
@@ -38,20 +36,12 @@ public class StatsExportController {
     @PostMapping("/run")
     public ResponseEntity<Map<String, Object>> run() {
         try {
-            triggerExecutor.execute(this::runQuietly);
+            triggerExecutor.execute(() -> service.runTickQuietly("수동"));
         } catch (TaskRejectedException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("accepted", false, "reason", "already running"));
         }
         return ResponseEntity.accepted().body(Map.of("accepted", true));
-    }
-
-    private void runQuietly() {
-        try {
-            service.runTick();
-        } catch (RuntimeException e) {
-            log.error("수동 통계 적재 틱 실패", e);
-        }
     }
 
     @GetMapping("/status")

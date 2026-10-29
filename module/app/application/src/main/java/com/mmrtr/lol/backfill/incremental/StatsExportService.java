@@ -88,6 +88,19 @@ public class StatsExportService {
         return Optional.ofNullable(lastReport);
     }
 
+    /**
+     * 비동기 트리거(스케줄러·수동 /run)용. 실행기 스레드에서 예외가 조용히 사라지지 않게 로그로 남기고 삼킨다.
+     *
+     * @param trigger 로그에 남길 트리거 이름 (예: 스케줄, 수동)
+     */
+    public void runTickQuietly(String trigger) {
+        try {
+            runTick();
+        } catch (RuntimeException e) {
+            log.error("{} 통계 적재 틱 실패", trigger, e);
+        }
+    }
+
     public TickReport runTick() {
         RLock lock = redisson.getLock(LOCK_NAME);
         if (!lock.tryLock()) {

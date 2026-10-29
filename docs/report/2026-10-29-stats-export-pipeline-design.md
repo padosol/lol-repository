@@ -281,6 +281,8 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
 - **트리거**: 앱 내 `@Scheduled(cron = "${lol.stats-export.cron:0 20 */2 * * *}", zone = "Asia/Seoul")`,
   `@ConditionalOnProperty(lol.stats-export.scheduler.enabled)` — 운영 기본 `false` 로 배포하고 부트스트랩(§12) 후 켠다.
   수동 `POST /internal/stats-export/run`(즉시 1틱, 202 반환 후 비동기)과 `GET /internal/stats-export/status` 는 같은 서비스를 쓴다.
+  스케줄 틱도 수동 실행과 같은 트리거 실행기(`statsExportTriggerExecutor`, 동시 1개·대기열 없음)로 넘겨 공용 스케줄러 스레드를
+  잡지 않는다 — 이미 틱이 돌고 있으면 수동은 409, 스케줄은 그 회차를 건너뛴다. 틱 예외는 실행기 안에서 ERROR 로그로 남긴다.
   나중에 외부 스케줄러(k8s CronJob 등)로 옮길 때는 스케줄러만 끄면 된다.
 - **중복 실행 방지**: Redisson `RLock("stats-export:lock")` `tryLock(0, watchdog)` → 못 잡으면 skip.
   롤링 배포로 파드 2개가 겹쳐도 한 쪽만 돈다. 결정적 runId + 낙관적 워터마크 갱신이 2차 방어.

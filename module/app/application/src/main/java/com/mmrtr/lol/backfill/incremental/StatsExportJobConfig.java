@@ -127,7 +127,7 @@ public class StatsExportJobConfig {
         return launcher;
     }
 
-    /** 스케줄러 트리거용. 동시에 1개만 돌리고 대기열은 두지 않는다(겹치면 거절). */
+    /** 틱 트리거용(스케줄러·수동 /run 공용). 동시에 1개만 돌리고 대기열은 두지 않는다(겹치면 거절). */
     @Bean
     public TaskExecutor statsExportTriggerExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

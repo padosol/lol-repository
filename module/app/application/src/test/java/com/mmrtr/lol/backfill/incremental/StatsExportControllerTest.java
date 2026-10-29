@@ -50,7 +50,7 @@ class StatsExportControllerTest {
 
         // then
         result.andExpect(status().isAccepted()).andExpect(jsonPath("$.accepted").value(true));
-        verify(service).runTick();
+        verify(service).runTickQuietly("수동");
     }
 
     @Test
@@ -67,6 +67,7 @@ class StatsExportControllerTest {
         result.andExpect(status().isConflict())
                 .andExpect(jsonPath("$.accepted").value(false))
                 .andExpect(jsonPath("$.reason").value("already running"));
+        verify(service, never()).runTickQuietly(any());
         verify(service, never()).runTick();
     }
 
