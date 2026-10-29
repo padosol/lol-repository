@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -33,6 +34,8 @@ class MatchDataProcessorTest {
     private MatchRedisService redis;
     private MatchBatchProcessor batch;
     private CompletableFuture<MatchDto> matchResult;
+    private CompletableFuture<TimelineDto> timelineResult;
+    private MatchApiPort port;
     private MatchDataProcessor processor;
 
     @BeforeEach
@@ -42,8 +45,9 @@ class MatchDataProcessorTest {
         when(redis.tryMarkProcessing(anyString())).thenReturn(true);
         when(batch.add(any())).thenReturn(true);
         matchResult = CompletableFuture.completedFuture(new MatchDto());
+        timelineResult = CompletableFuture.completedFuture(new TimelineDto());
 
-        MatchApiPort port = new MatchApiPort() {
+        port = new MatchApiPort() {
             @Override
             public CompletableFuture<List<String>> fetchMatchIdsByPuuid(String p, String pl, Executor e) {
                 return CompletableFuture.completedFuture(List.of());
@@ -64,7 +68,7 @@ class MatchDataProcessorTest {
             @Override
             public CompletableFuture<TimelineDto> fetchTimelineById(String id, String pl, Executor e) {
                 seen.add(RiotCallScope.current());
-                return CompletableFuture.completedFuture(new TimelineDto());
+                return timelineResult;
             }
         };
         processor = new MatchDataProcessor(port, redis, batch, Runnable::run);
@@ -87,6 +91,19 @@ class MatchDataProcessorTest {
 
         assertThat(processor.process("KR_1", "KR")).isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
         verify(redis, times(1)).releaseProcessing("KR_1");
+    }
+
+    @Test
+    @DisplayName("fetch 가 시간 안에 끝나지 않으면(한도 대기 등) QUEUE_FULL 로 requeue 하고 표시를 풀고 호출을 취소한다")
+    void fetchTimeout_requeuesReleasesMarkAndCancels() {
+        matchResult = new CompletableFuture<>();
+        timelineResult = new CompletableFuture<>();
+        processor = new MatchDataProcessor(port, redis, batch, Runnable::run, Duration.ofMillis(50));
+
+        assertThat(processor.process("KR_1", "KR")).isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
+        verify(redis, times(1)).releaseProcessing("KR_1");
+        assertThat(matchResult).isCancelled();
+        assertThat(timelineResult).isCancelled();
     }
 
     @Test

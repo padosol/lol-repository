@@ -7,11 +7,12 @@ import com.mmrtr.lol.infra.redis.service.MatchRedisService;
 import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotCallScope;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.util.Pair;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -20,15 +21,31 @@ import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class MatchDataProcessor {
 
-    private static final int FETCH_TIMEOUT_SECONDS = 30;
+    /** BACKGROUND 한도 대기(backgroundMaxWait 30초)에 재시도 backoff 까지 들어가도록 넉넉히 잡는다. */
+    private static final Duration FETCH_TIMEOUT = Duration.ofSeconds(90);
 
     private final MatchApiPort matchApiPort;
     private final MatchRedisService matchRedisService;
     private final MatchBatchProcessor matchBatchProcessor;
     private final Executor riotApiExecutor;
+    private final Duration fetchTimeout;
+
+    @Autowired
+    public MatchDataProcessor(MatchApiPort matchApiPort, MatchRedisService matchRedisService,
+                              MatchBatchProcessor matchBatchProcessor, Executor riotApiExecutor) {
+        this(matchApiPort, matchRedisService, matchBatchProcessor, riotApiExecutor, FETCH_TIMEOUT);
+    }
+
+    MatchDataProcessor(MatchApiPort matchApiPort, MatchRedisService matchRedisService,
+                       MatchBatchProcessor matchBatchProcessor, Executor riotApiExecutor, Duration fetchTimeout) {
+        this.matchApiPort = matchApiPort;
+        this.matchRedisService = matchRedisService;
+        this.matchBatchProcessor = matchBatchProcessor;
+        this.riotApiExecutor = riotApiExecutor;
+        this.fetchTimeout = fetchTimeout;
+    }
 
     public enum Result {
         DUPLICATE,
@@ -53,10 +70,14 @@ public class MatchDataProcessor {
         try {
             dtoPair = CompletableFuture.allOf(matchFuture, timelineFuture)
                     .thenApply(v -> Pair.of(matchFuture.join(), timelineFuture.join()))
-                    .get(FETCH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                    .get(fetchTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            log.warn("Timeout fetching match data for matchId {}", matchId);
-            return Result.FAILURE;
+            // 한도 대기로 늦어진 경우가 대부분이라 혼잡으로 보고 다시 큐에 넣는다
+            log.warn("Timeout fetching match data, requeueing matchId {}", matchId);
+            matchFuture.cancel(true);
+            timelineFuture.cancel(true);
+            matchRedisService.releaseProcessing(matchId);
+            return Result.QUEUE_FULL;
         } catch (InterruptedException e) {
             log.warn("Interrupted while fetching match data for matchId {}", matchId);
             Thread.currentThread().interrupt();
