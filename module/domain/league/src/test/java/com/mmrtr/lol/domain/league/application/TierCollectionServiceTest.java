@@ -12,9 +12,13 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class TierCollectionServiceTest {
@@ -35,5 +39,24 @@ class TierCollectionServiceTest {
 
         assertThat(seen).isNotEmpty().allMatch(p -> p == RiotCallPriority.BACKGROUND);
         assertThat(RiotCallScope.current()).isEqualTo(RiotCallPriority.USER);
+    }
+
+    @Test
+    @DisplayName("수집한 소환사는 사용자 갱신이 아니라 수집용(background)으로 발행한다")
+    void collectedSummoners_publishedForCollection() {
+        LeagueApiPort leaguePort = mock(LeagueApiPort.class);
+        LeagueApiPort.LeagueEntry entry =
+                new LeagueApiPort.LeagueEntry("p1", 0, "I", 0, 0, false, false, false, false);
+        when(leaguePort.getLeagueEntries(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenReturn(Set.<LeagueApiPort.LeagueEntry>of());
+        when(leaguePort.getLeagueEntries(anyString(), anyString(), eq("I"), eq(1), anyString()))
+                .thenReturn(Set.of(entry));
+        SummonerCollectionPublishPort publishPort = mock(SummonerCollectionPublishPort.class);
+        TierCollectionService service = new TierCollectionService(leaguePort, publishPort);
+
+        service.execute("KR");
+
+        verify(publishPort).publishForCollection(List.of("p1"), "KR");
+        verify(publishPort, never()).publishForRenewal(any(), any());
     }
 }

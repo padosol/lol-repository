@@ -58,7 +58,7 @@ public class TierCollectionService implements CollectTierDataUseCase {
                 List<String> puuids = entries.stream()
                         .map(LeagueApiPort.LeagueEntry::puuid)
                         .toList();
-                publishPort.publishForRenewal(puuids, platformName);
+                publishPort.publishForCollection(puuids, platformName);
 
                 page++;
             }

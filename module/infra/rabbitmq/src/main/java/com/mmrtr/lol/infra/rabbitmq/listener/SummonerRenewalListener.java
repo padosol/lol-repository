@@ -44,9 +44,10 @@ public class SummonerRenewalListener {
         }
 
         try {
-            // 이 큐는 티어 수집·lol-server 발행용이라 사용자 요청이 아니다
-            RiotCallScope.run(RiotCallPriority.BACKGROUND,
-                    () -> summonerRenewalService.renewSummoner(puuid, platform));
+            // 같은 큐에 사용자 갱신과 티어 수집이 함께 온다. 티어 수집만 background 로 표시된다
+            RiotCallPriority priority = summonerMessage.isBackground()
+                    ? RiotCallPriority.BACKGROUND : RiotCallPriority.USER;
+            RiotCallScope.run(priority, () -> summonerRenewalService.renewSummoner(puuid, platform));
         } catch (Exception e) {
             log.error(e.getMessage());
         } finally {
