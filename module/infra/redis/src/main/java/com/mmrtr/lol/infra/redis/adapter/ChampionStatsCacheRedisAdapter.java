@@ -5,11 +5,15 @@ import com.mmrtr.lol.domain.championstats.readmodel.ChampionStatsReadModel;
 import com.mmrtr.lol.domain.championstats.readmodel.PositionChampionStatsReadModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RKeys;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.redisson.api.options.KeysScanOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -32,9 +36,15 @@ public class ChampionStatsCacheRedisAdapter implements ChampionStatsCachePort {
     static final long LOCK_WAIT_SECONDS = 3L;
     // BigQuery 가 멈춰도 락이 계속 잡혀 있지 않게 lease 를 둔다 (넘기면 다른 요청이 한 번 더 조회할 뿐이다)
     static final long LOCK_LEASE_SECONDS = 30L;
+    static final int EVICT_BATCH_SIZE = 500;
 
     private final JsonValueCache cache;
     private final RedissonClient redissonClient;
+
+    // 과도기 설정: lol-server 가 챔피언 통계를 서빙하는 동안만 그쪽 캐시 키(champion-stats:v*)도 함께 비운다.
+    // MP-179 Ingress 전환 후 championstats.cache.legacy-evict-patterns 를 비운다. (생성자 주입 대상 아님)
+    @Value("${championstats.cache.legacy-evict-patterns:champion-stats:v[0-9]*}")
+    private List<String> legacyEvictPatterns;
 
     @Override
     public Optional<ChampionStatsReadModel> findChampionStats(
@@ -79,6 +89,42 @@ public class ChampionStatsCacheRedisAdapter implements ChampionStatsCachePort {
     @Override
     public void unlockByPosition(String patch, String platformId, String tierDisplay) {
         unlock(POSITIONS_LOCK_PREFIX + positionsSuffix(patch, platformId, tierDisplay));
+    }
+
+    @Override
+    public long evictAll() {
+        List<String> patterns = new ArrayList<>(List.of(DETAIL_KEY_PREFIX + "*", POSITIONS_KEY_PREFIX + "*"));
+        if (legacyEvictPatterns != null) {
+            patterns.addAll(legacyEvictPatterns);
+        }
+        long deleted = 0;
+        try {
+            RKeys keys = redissonClient.getKeys();
+            for (String pattern : patterns) {
+                deleted += unlinkByPattern(keys, pattern);
+            }
+        } catch (RuntimeException e) {
+            log.warn("champion-stats cache evict failed - deleted so far: {}, cause: {}", deleted, e.getMessage());
+            return deleted;
+        }
+        return deleted;
+    }
+
+    // SCAN 으로 훑어 일정 개수씩 UNLINK 한다 (KEYS 는 Redis 를 막으므로 쓰지 않는다)
+    private long unlinkByPattern(RKeys keys, String pattern) {
+        long deleted = 0;
+        List<String> batch = new ArrayList<>(EVICT_BATCH_SIZE);
+        for (String key : keys.getKeys(KeysScanOptions.defaults().pattern(pattern).chunkSize(EVICT_BATCH_SIZE))) {
+            batch.add(key);
+            if (batch.size() >= EVICT_BATCH_SIZE) {
+                deleted += keys.unlink(batch.toArray(new String[0]));
+                batch.clear();
+            }
+        }
+        if (!batch.isEmpty()) {
+            deleted += keys.unlink(batch.toArray(new String[0]));
+        }
+        return deleted;
     }
 
     private boolean tryLock(String lockKey) {

@@ -16,22 +16,28 @@ import com.mmrtr.lol.domain.championstats.readmodel.PositionChampionStatsReadMod
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.redisson.api.RKeys;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.redisson.api.options.KeysScanOptions;
+import org.redisson.client.RedisException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /** 챔피언 통계 캐시 — 키·TTL·JSON 왕복·장애 시 미스, 그리고 single-flight 락 (lol-server {@code ChampionStatsCacheAdapterTest} 대응). */
@@ -176,5 +182,57 @@ class ChampionStatsCacheRedisAdapterTest {
         // then
         verify(held).unlock();
         verify(notHeld, never()).unlock();
+    }
+
+    @DisplayName("자기 상세·포지션 키와 레거시 패턴 키를 SCAN 으로 찾아 UNLINK 한다")
+    @Test
+    void evictAll_unlinksOwnAndLegacyKeys() {
+        // given
+        ReflectionTestUtils.setField(adapter, "legacyEvictPatterns", List.of("champion-stats:v[0-9]*"));
+        RKeys rKeys = mock(RKeys.class);
+        given(redissonClient.getKeys()).willReturn(rKeys);
+        given(rKeys.getKeys(any(KeysScanOptions.class))).willReturn(List.of("k1"));
+        given(rKeys.unlink(any(String[].class))).willReturn(1L);
+
+        // when
+        long evicted = adapter.evictAll();
+
+        // then
+        assertThat(evicted).isEqualTo(3);
+        verify(rKeys, times(3)).getKeys(any(KeysScanOptions.class));
+        verify(rKeys, times(3)).unlink(any(String[].class));
+    }
+
+    @DisplayName("레거시 패턴이 null 이면 자기 키 패턴만 지운다")
+    @Test
+    void evictAll_nullLegacyPatterns_onlyOwnKeys() {
+        // given
+        ReflectionTestUtils.setField(adapter, "legacyEvictPatterns", null);
+        RKeys rKeys = mock(RKeys.class);
+        given(redissonClient.getKeys()).willReturn(rKeys);
+        given(rKeys.getKeys(any(KeysScanOptions.class))).willReturn(List.of("k1"));
+        given(rKeys.unlink(any(String[].class))).willReturn(1L);
+
+        // when
+        long evicted = adapter.evictAll();
+
+        // then
+        assertThat(evicted).isEqualTo(2);
+        verify(rKeys, times(2)).getKeys(any(KeysScanOptions.class));
+    }
+
+    @DisplayName("Redis 장애면 예외 없이 0")
+    @Test
+    void evictAll_redisFailure_returnsZero() {
+        // given
+        RKeys rKeys = mock(RKeys.class);
+        given(redissonClient.getKeys()).willReturn(rKeys);
+        given(rKeys.getKeys(any(KeysScanOptions.class))).willThrow(new RedisException("down"));
+
+        // when
+        long evicted = adapter.evictAll();
+
+        // then
+        assertThat(evicted).isZero();
     }
 }

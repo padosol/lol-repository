@@ -181,6 +181,14 @@ class ChampionStatsQueryServiceConcurrencyTest {
         }
 
         @Override
+        public long evictAll() {
+            long count = detailCache.size() + positionsCache.size();
+            detailCache.clear();
+            positionsCache.clear();
+            return count;
+        }
+
+        @Override
         public Optional<ChampionStatsReadModel> findChampionStats(
                 int championId, String patch, String platformId, String tierDisplay) {
             return Optional.ofNullable(detailCache.get(detailKey(championId, patch, platformId, tierDisplay)));

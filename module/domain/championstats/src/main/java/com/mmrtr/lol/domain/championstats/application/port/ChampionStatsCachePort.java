@@ -30,4 +30,7 @@ public interface ChampionStatsCachePort {
     boolean tryLockByPosition(String patch, String platformId, String tierDisplay);
 
     void unlockByPosition(String patch, String platformId, String tierDisplay);
+
+    /** 상세·포지션 통계 캐시를 모두 지운다 (락 키는 제외). 캐시 장애는 로그 후 지금까지 지운 수를 돌려준다. */
+    long evictAll();
 }
