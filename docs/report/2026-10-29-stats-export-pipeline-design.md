@@ -1,6 +1,6 @@
 # 챔피언 통계 자동 적재 파이프라인 설계 (PG → GCS → BigQuery)
 
-> 작성일: 2026-10-29 · 상태: 설계 (리뷰 대기) · 기준 코드: `origin/develop` @ `c05cb5f`
+> 작성일: 2026-10-29 · 상태: 설계 (사용자 검토 대기) · 기준 코드: `origin/develop` @ `c05cb5f`
 >
 > 2026-10-01 미커밋 초안(`match-stats-incremental-export-design.md`)을 이어받아 대체한다.
 > 초안과 달라진 점은 §15 에 모았다.
@@ -16,13 +16,17 @@
 GCS 로 export 하고, BigQuery 적재는 코드가 없다(수동 `bq load` 로 추정). 이 문서는 그 구간을
 주기 실행으로 자동화한다.
 
-**사용자 결정**: 범위는 "백필 잡이 자동으로 돌아 BigQuery 에 적재되는 파이프라인" 이다.
-페이지에 보이는 숫자는 실제 게임보다 **최대 6시간 정도 늦어도 된다.**
+**사용자 결정**
+- 범위는 "백필 잡이 자동으로 돌아 BigQuery 에 적재되는 파이프라인" 이다.
+- 페이지에 보이는 숫자는 실제 게임보다 **최대 6시간 정도 늦어도 된다.**
+- **최신 시즌의 최신 패치만 적재한다** (예: 16시즌 16.21 이 최신이면 16.21 만). 나중에 **최근 N개 패치**로 늘릴 수 있어야 한다.
+- 운영 DB 의 `riot` 스키마 이전은 끝났고 데이터는 새로 쌓고 있다. 파이프라인은 켜도 된다.
+- `starting_item_exclusion` 테이블은 운영에 만든 적이 없다.
 
 ## 2. 목표 · 비목표 · 안티목표
 
 **목표**
-- 주기 실행으로 신규 매치의 3종 fact(`match`, `match-ban`, `match-participant-build`)를 BigQuery 에 append
+- 주기 실행으로 신규 매치의 3종 fact(`match`, `match-ban`, `match-participant-build`) 중 **대상 패치(최신 시즌의 최근 N개, 기본 1)** 행을 BigQuery 에 append
 - 게임 종료 → 페이지 반영까지 최악 지연 6시간 이내 (설계상 약 4시간 + 실행 시간)
 - 누락 0 · 중복 0 — 재시도, 재배포, 중복 트리거, 적재 직후 장애에도
 - 기존 백필 잡, 집계 SQL, MV, 조회 API 를 그대로 재사용
@@ -31,7 +35,7 @@ GCS 로 export 하고, BigQuery 적재는 코드가 없다(수동 `bq load` 로 
 - 화면/API 확장: 시즌·큐 선택, 룬 파편, 4~6번째 아이템, 패치별 추세 (후속 과제)
 - BigQuery MV / 조회 쿼리 변경
 - 분 단위 실시간 통계
-- 과거 시즌 재집계 (기존 수동 백필 API 로 계속 수행)
+- 과거 시즌·지난 패치 재집계 (기존 수동 백필 API 로 계속 수행). 대상에서 밀려난 패치의 BigQuery 데이터는 그 시점 값으로 남는다
 
 **안티목표** — 동작은 해도 이렇게 되면 실패다
 - **조용한 중복**: 같은 매치가 두 번 들어가 승률/픽률이 왜곡되는 것. 지연보다 나쁘다.
@@ -54,9 +58,11 @@ GCS 로 export 하고, BigQuery 적재는 코드가 없다(수동 `bq load` 로 
 | 조회 서빙 | 운영 Ingress `/api/v1/champion-stats` → **lol-server** (MP-152). lol-repository 이전(MP-179)은 진행 중. 두 서비스가 같은 Redis 를 쓴다 |
 | 캐시 | lol-server `champion-stats:v7:detail:*`, `champion-stats:v4:positions:*` / lol-repository `championstats:v1:*` — 모두 TTL 6h, 요청 시 lazy 적재 |
 | MV | 10종, `enable_refresh` 30분, `max_staleness` 미설정 → MV 조회 시 base 의 신규 append 분을 BigQuery 가 합쳐 최신 결과를 준다 |
-| DB 스키마 | `b894f3a`(10-20) 부터 앱은 `currentSchema=riot` 만 보고, 마이그레이션은 이 레포 `module/infra/persistence/src/main/resources/db/migration/riot/` 가 소유한다 (V1 = 옛 lol-db-schema V1~V35 의 riot 객체 + `item_meta` 기준 데이터, 다음은 V2). lol-db-schema 서브모듈은 제거됐다. **`public` 의 기존 데이터는 그대로 두고 이전은 별도 진행** — 레포에 이전 런북은 없다 |
-| 스키마 누락 | `match.tier_bucket`(generated) 이 riot V1 에 없다 (운영 `public.match` 에는 수동 적용된 것으로 보임). 집계 SQL 이 쓰는 **`starting_item_exclusion` 테이블은 어떤 마이그레이션에도 없다** (옛 V1~V36, riot V1 모두) |
-| `season` 테이블 | riot V1 에 테이블만 있고 이 레포에 쓰는 코드가 없다 |
+| DB 스키마 | `b894f3a`(10-20) 부터 앱은 `currentSchema=riot` 만 보고, 마이그레이션은 이 레포 `module/infra/persistence/src/main/resources/db/migration/riot/` 가 소유한다 (V1 = 옛 lol-db-schema V1~V35 의 riot 객체 + `item_meta` 기준 데이터, 다음은 V2). lol-db-schema 서브모듈은 제거됐다. **운영 이전 완료, `riot` 에는 데이터를 새로 쌓는 중** (사용자 확인) |
+| 스키마 누락 | `match.tier_bucket`(generated) 이 riot V1 에 없다 → 지금 운영에서 집계 SQL 3종이 모두 실패한다. 집계 SQL 이 쓰는 **`starting_item_exclusion` 테이블은 어떤 마이그레이션에도, 운영에도 없다** (사용자 확인) |
+| `item_meta` 16시즌 시드 | `LEGENDARY` 255 · `POTION` 16 · `TRINKET` 3(3340·3363·3364). **`BOOTS` 0건** → 그대로면 신발 통계가 빈다. `STARTING_EXCLUSION` 은 14·15시즌에만 있다 (16시즌은 같은 와드가 `TRINKET`) |
+| `season`·`patch_version` 테이블 | riot V1 에 테이블만 있고 이 레포에 쓰는 코드가 없다 → 파이프라인은 의존하지 않는다 |
+| 패치 표기 | `match.patch_version` = "16.21" 형식, 집계 SQL 이 `patch_version_int = major*100 + minor` (예: 1621) 로 내보낸다. `match.season` = major |
 | 스케줄러 패턴 | `@EnableScheduling` + `SummonerRankingScheduler`(`fixedDelay` 2h). Redisson 사용 중 |
 | 배포 | k8s, lol-repository `replicas: 1`. 롤링 배포 중 잠시 2개 파드 공존 가능 |
 
@@ -74,12 +80,13 @@ GCS 로 export 하고, BigQuery 적재는 코드가 없다(수동 `bq load` 로 
            │     ├─ nowMax  = SELECT COALESCE(MAX(id),0)+1          (잡 실행 전 관측)
            │     ├─ range   = [exported_until, observed_until)       (§5)
            │     ├─ range 비었으면 observed_until 만 nowMax 로 전진
-           │     ├─ 아니면 범위 안 시즌마다 lolStatsExportJob(동기) 실행 (§6)
+           │     ├─ 대상 패치 결정(범위 첫 시도 때 고정) — 없으면 잡 없이 전진 (§6)
+           │     ├─ lolStatsExportJob(동기, season + patches) 실행
            │     │     PartitionStep → ManifestStep → BqLoadStep
            │     │         │              │              └─ Load Job (결정적 jobId, WRITE_APPEND)
            │     │         ▼              ▼                       ▼
            │     │   GCS chunk_*.ndjson.gz  _manifest.json   lol_analytics.*_fact ─▶ MV(자동)
-           │     └─ 모든 시즌 잡 COMPLETED(또는 이미 완료) → 워터마크 조건부 UPDATE
+           │     └─ 잡 COMPLETED(또는 이미 완료) → 워터마크 조건부 UPDATE
            └─ 2. 이번 틱에 적재 행 > 0 이면 챔피언 통계 캐시 무효화 (§10)
 ```
 
@@ -87,20 +94,27 @@ GCS 로 export 하고, BigQuery 적재는 코드가 없다(수동 `bq load` 로 
 
 ## 5. 증분 범위 — 워터마크 (1-틱 지연)
 
-### 5.1 테이블 (lol-db-schema 신규 마이그레이션)
+### 5.1 테이블 (riot 체인 신규 마이그레이션, §15)
 
 ```sql
 CREATE TABLE IF NOT EXISTS stats_export_watermark (
     fact_type        VARCHAR(64)  PRIMARY KEY,      -- match / match-ban / match-participant-build
     exported_until   BIGINT       NOT NULL,         -- [.., exported_until) BQ 적재 완료
     observed_until   BIGINT       NOT NULL,         -- 직전 틱에서 관측한 MAX(id)+1 = 이번 틱 export 상한
+    range_patches    VARCHAR(100),                  -- 진행 중 범위 [exported_until, observed_until) 의 대상 패치 (예: "1621"), 첫 시도 때 고정·성공 시 NULL
     last_run_id      VARCHAR(128),
     last_success_at  TIMESTAMP,
     updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS stats_export_patch_window (
+    id               SMALLINT     PRIMARY KEY DEFAULT 1 CHECK (id = 1),   -- 단일 행
+    latest_patch     INTEGER      NOT NULL,         -- 지금까지 관측한 최신 patch_version_int (단조 증가)
+    updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-행이 없으면 서비스가 `exported_until = observed_until = lol.stats-export.seed-id`(기본 0)로 만든다 (§12).
+행이 없으면 서비스가 `exported_until = observed_until = lol.stats-export.seed-id`(기본 0), `latest_patch = 0` 으로 만든다 (§12).
 
 ### 5.2 틱 알고리즘 (fact 별)
 
@@ -108,11 +122,13 @@ CREATE TABLE IF NOT EXISTS stats_export_watermark (
 E, O  = 워터마크 (exported_until, observed_until)
 nowMax = SELECT COALESCE(MAX(<idCol>), 0) + 1 FROM <table>      -- 잡 실행 '전'에 잰다
 if O > E:
-    for s in 범위 안 시즌 (§6):
-        run lolStatsExportJob(factType, startId=E, endId=O, season=s)   -- runId = inc-{fact}-{E}-{O}-s{s}
+    patches = range_patches ?: 대상 패치 결정 후 range_patches 에 저장 (§6)
+    if patches 비어 있지 않음:
+        run lolStatsExportJob(factType, startId=E, endId=O, season=patches/100, patches)   -- runId = inc-{fact}-{E}-{O}
         성공(COMPLETED, 또는 JobInstanceAlreadyCompleteException) 이 아니면 → 이 fact 종료 (워터마크 그대로)
 UPDATE stats_export_watermark
-   SET exported_until = O, observed_until = nowMax, last_run_id = …, last_success_at = now(), updated_at = now()
+   SET exported_until = O, observed_until = nowMax, range_patches = NULL,
+       last_run_id = …, last_success_at = now(), updated_at = now()
  WHERE fact_type = :f AND exported_until = :E AND observed_until = :O       -- 낙관적 갱신, 0행이면 경고 로그
 ```
 
@@ -123,7 +139,7 @@ UPDATE stats_export_watermark
 - **전제(불변식)**: ID 가 INSERT 시점에 DB 에서 단조 발급되고, 한 번 발급된 ID 아래로 행이 새로 들어오지 않는다.
   다음은 이 설계를 깨므로 금지한다 — 시퀀스 `CACHE > 1`·Hibernate pooled optimizer 전환, 그리고 **워터마크보다 작은
   ID 로 행을 복사해 넣는 데이터 이전**(`public` → `riot` 를 `INSERT … SELECT` 로 하면서 원래 ID 를 유지하는 경우 등).
-  이 전제를 `module/domain/match/CLAUDE.md` 와 마이그레이션 주석에 적어 둔다. riot 이전 상태는 §17-Q1.
+  이 전제를 `module/domain/match/CLAUDE.md` 와 마이그레이션 주석에 적어 둔다. riot 이전은 끝났다 (§17).
 - **지연 계산**: 주기 2h 일 때 ID 발급 직후 틱 T 가 관측 → T+1(2h) 에 export·적재 → 최악 약 4h + 실행 시간.
   캐시를 적재 직후 비우므로(§10) 6h TTL 이 더해지지 않는다.
 - **runId 가 범위에서 결정**되므로 실패한 틱 다음 틱은 같은 JobParameters 로 실행 → Spring Batch 가 실패한
@@ -137,26 +153,39 @@ UPDATE stats_export_watermark
 | 시간 기반 마진 (`created_at < now()-10m`) | 3개 테이블에 컬럼·인덱스 추가 필요, 마진 근거 약함 |
 | 고정 ID 마진 (`max - K`) | K 근거 없음, 트래픽 변동에 취약 |
 
-## 6. 시즌 · 큐
+## 6. 대상 패치 · 큐 (사용자 결정: 최신 시즌의 최근 N개 패치만)
 
-집계 SQL 은 `:season` 하나로 거르고 `item_meta`·`starting_item_exclusion` 도 시즌 별이다. SQL 은 건드리지 않고
-**범위 안에 실제로 있는 시즌마다 잡을 한 번씩** 돌린다.
+`lol.stats-export.patch-count` = N (기본 1). 대상 패치는 **데이터에서 결정**한다 — `season`·`patch_version` 테이블은
+이 레포에 쓰는 코드가 없어 신뢰할 수 없다.
 
 ```
-seasons = SELECT DISTINCT m.season FROM <fact 테이블> x JOIN match m ...   -- x.<idCol> ∈ [E, O)
-          WHERE m.season >= :minSeason AND m.queue_id IN (:queueIds)
-for s in seasons (오름차순): run lolStatsExportJob(fact, E, O, season=s)   -- runId = inc-{fact}-{E}-{O}-s{s}
-모든 시즌 잡이 성공해야 워터마크 전진
+-- 범위 첫 시도 때만 (range_patches 가 NULL 일 때)
+rangePatches = SELECT DISTINCT <patch_version_int> FROM <fact 테이블> x JOIN match m ...
+               WHERE x.<idCol> ∈ [E, O) AND m.queue_id IN (:queueIds)
+L  = max(stats_export_patch_window.latest_patch, max(rangePatches))
+UPDATE stats_export_patch_window SET latest_patch = GREATEST(latest_patch, L)     -- 즉시 반영 (단조)
+S  = L / 100                                                                        -- 최신 시즌
+patches = { p ∈ rangePatches : p / 100 = S  AND  p % 100 > L % 100 - N }            -- 최신 시즌의 최근 N개
+range_patches ← patches  (빈 집합이면 ""; 잡 없이 워터마크만 전진)
 ```
 
-- `lol.stats-export.min-season` (기본 16 = 배포 시점 시즌) 미만은 건너뛴다 — 갱신(renewal)이 과거 시즌 매치를 가져와도
-  화면은 최신 시즌만 보여 주므로 의도된 동작이다. 같은 시즌의 옛 패치 매치는 그대로 적재된다.
-- `season` 테이블에 의존하지 않는다 (이 레포에 쓰는 코드가 없다). 시즌 전환은 아무 조작 없이 따라가고, 어느 fact 가
-  며칠 밀려 있다가 재개해도 그 사이 시즌 경계를 넘은 행을 잃지 않는다.
-- 평소 범위(2h 분량)는 시즌 1개, 시즌 전환 직후엔 2개다. `DISTINCT` 조회는 PK 범위 스캔이라 싸다.
-- **가드 — 기준 데이터 누락**: `match-participant-build` 는 시즌 `s` 의 `item_meta` `LEGENDARY` 가 0건이면
-  (§17-Q2 결론에 따라 `starting_item_exclusion` 도) 실패 처리 — 워터마크 정지 + ERROR 로그 + 메트릭.
-  그대로 돌면 아이템 빌드가 빈 채로 적재된다 (안티목표: 조용한 누락).
+- 예: N=1, L=1621 → 16.21 만. N=3, L=1621 → 16.19~16.21. 시즌 첫 패치 직후(L=1701, N=3) → 17.01 만 (사용자 결정: 최신 시즌만).
+- **새 패치를 놓치지 않는다**: 새 패치 행이 범위에 처음 나타나면 그 범위의 `rangePatches` 에 들어 있으므로 `L` 이 즉시
+  올라가고 대상에 포함된다. 패치 테이블 갱신을 기다리지 않는다.
+- **지난 패치를 섞지 않는다**: 갱신(renewal)이 옛 매치만 가져온 범위라도 `latest_patch` 가 전역으로 남아 있어 대상에서 빠진다.
+  대상 밖 행은 의도적으로 건너뛰고 워터마크는 지나간다 (필요하면 수동 백필).
+- **재시도 시 고정**: 범위의 대상은 첫 시도 때 `range_patches` 에 저장하고 재시도는 그 값을 쓴다. 그 사이 새 패치가 나와
+  N개 창이 움직여도 같은 범위·같은 파라미터라 Spring Batch 재시작과 BQ jobId 멱등성이 그대로 성립한다 (N≥2 에서 창이 겹쳐
+  같은 패치 행이 두 번 들어가는 일을 막는다). 범위 내용은 1-틱 지연으로 이미 확정돼 있어 고정해도 빠지는 행이 없다.
+- `DISTINCT` 조회는 평소 2h 분량 PK 범위 스캔이라 싸다. fact 마다 따로 계산하지만 같은 `latest_patch` 를 공유한다.
+- **SQL 변경**: 집계 SQL 3종의 범위 조건에 `AND <patch_version_int 식> IN (:patches)` 를 더한다 (participant-build 는
+  `mp_batch` 의 WHERE — 이후 이벤트 조인이 대상 패치 매치로만 줄어든다). 수동 백필은 지금처럼 전 패치를 내보내야 하므로
+  패치 필터를 끌 수 있게 한다 (방식은 빌더 재량 — 빈 목록 `IN ()` 은 문법 오류임에 주의).
+- **시작 아이템 제외 목록**: 집계 SQL 의 `starting_item_exclusion` 참조를 `item_meta WHERE season = :season AND active
+  AND type IN ('TRINKET', 'STARTING_EXCLUSION')` 로 바꾼다 (16시즌은 `TRINKET`, 14·15시즌은 `STARTING_EXCLUSION` 으로 같은 와드 3종이 들어 있다).
+- **가드 — 기준 데이터 누락**: `match-participant-build` 는 시즌 `S` 의 `item_meta` 에 `LEGENDARY`·`BOOTS`·
+  (`TRINKET` ∪ `STARTING_EXCLUSION`) 중 하나라도 0건이면 실패 처리 — 워터마크 정지 + ERROR 로그 + 메트릭.
+  그대로 돌면 아이템/신발 빌드가 빈 채로 적재된다 (안티목표: 조용한 누락). 16시즌 `BOOTS` 는 지금 0건이므로 시드를 추가한다 (§15).
 - 큐: `lol.stats-export.queue-ids` (기본 `420`, 솔로 랭크).
 
 ## 7. 잡 구성 — `lolStatsExportJob`
@@ -170,8 +199,8 @@ for s in seasons (오름차순): run lolStatsExportJob(fact, E, O, season=s)   -
 | `statsExportManifestStep` | 기존 매니페스트 |
 | `statsExportBqLoadStep` (신규) | §9 |
 
-JobParameters (identifying): `factType`, `startId`, `endId`, `season`, `queueIds`, `mode=incremental`.
-`runId` 는 `inc-{factType}-{startId}-{endId}-s{season}` 로 파생(identifying 값만으로 결정).
+JobParameters (identifying): `factType`, `startId`, `endId`, `season`, `patches`, `queueIds`, `mode=incremental`.
+`runId` 는 `inc-{factType}-{startId}-{endId}` 로 파생 — 범위의 `patches`·`season` 은 첫 시도 때 고정되므로(§6) 범위만으로 유일하다.
 
 필요한 기존 코드 수정:
 - `ChunkExportTasklet` / `ManifestTasklet` 이 `season`·`queueIds`·`range` 를 `BackfillProperties` 에서만 읽는다
@@ -204,7 +233,7 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
 - **Load Job 1건당 소스 URI 상한 10,000** → 청크가 그보다 많으면 여러 Load Job 으로 나눈다 (part 번호).
 - **멱등성 — 결정적 jobId + 시도 번호**:
   ```
-  base  = stats_export_{fact}_{startId}_{endId}_s{season}_p{part}
+  base  = stats_export_{fact}_{startId}_{endId}_p{part}
   for a in 0..9:
       job = bigquery.getJob(base + "_a" + a)
       없음            → 이 id 로 제출 후 완료 대기 → 성공이면 끝, 실패면 예외
@@ -252,23 +281,21 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
 
 ## 12. 초기 부트스트랩 (1회)
 
-현재 BigQuery fact 에 무엇이 어디까지 들어 있는지 레포로는 알 수 없다(운영 백필 설정이 자리표시자).
-**전제: 운영 `riot` 스키마에 이번 시즌 매치가 모두 있다** (§17-Q1). `riot` 에 전환 이후 매치만 있다면 아래 2단계가
-BigQuery 의 시즌 데이터 대부분을 지우게 되므로, 그 경우엔 riot 이전을 먼저 끝내거나 재구축 없이 seed 를 경계로 준다.
-기본 절차는 **현재 시즌 재구축**이다:
+사용자 확인: `riot` 이전은 끝났고 데이터는 새로 쌓는 중이며 파이프라인은 켜도 된다. 기존 BigQuery fact 의 출처
+(옛 `public` 기반 수동 적재로 추정)는 알 수 없고, 같은 매치가 옛 적재분과 `riot` 신규 수집분에 모두 있을 수 있다
+(갱신이 최근 전적을 다시 가져오므로). 그래서 **대상 패치만 지우고 `riot` 에서 다시 채운다** (설계자 판단 — 중복이 누락보다 나쁘다):
 
-1. 운영 선행 조건(§14) 완료, 스케줄러 `enabled=false` 로 배포
-2. 3개 fact 테이블에서 `season = {현재 시즌}` 행 삭제 (MV 는 1회 전체 재계산)
-3. 워터마크 seed = 0 → `POST /internal/stats-export/run` 2회 (1회차: 관측, 2회차: 시즌 전체 export·적재)
-   — 한산한 시간대에 실행, 끝날 때까지 페이지 통계가 일부만 보인다
-4. 수치 검증 후 스케줄러 `enabled=true`
+1. 운영 선행 조건(§14) 완료 + 마이그레이션 포함 이미지 배포 (스케줄러 `enabled=false`)
+2. 현재 최신 패치(예: 1621)를 확인하고 3개 fact 테이블에서 `patch_version_int` = 그 값인 행을 삭제 (MV 는 1회 전체 재계산)
+3. 워터마크 seed = 0 → `POST /internal/stats-export/run` 2회 (1회차: 관측, 2회차: `riot` 전체 범위에서 대상 패치 export·적재)
+4. 페이지 수치 확인 후 스케줄러 `enabled=true`
 
-> 기존 적재분의 PG ID 경계를 정확히 알면 2를 건너뛰고 seed 를 그 경계로 줄 수 있다 (재구축 없음).
+> 결과적으로 대상 패치 통계는 `riot` 에 쌓인 매치만으로 다시 계산된다. riot 이전 전 `public` 에만 있던 같은 패치 매치는 빠진다.
 
 ## 13. 관측
 
 - Micrometer: `stats.export.rows{fact}` (counter), `stats.export.runs{fact,outcome=success|failed|skipped}` (counter),
-  `stats.export.lag.ids{fact}` (gauge = MAX(id)+1 − exported_until), `stats.export.last.success{fact}` (gauge, epoch s)
+  `stats.export.lag.ids{fact}` (gauge = MAX(id)+1 − exported_until), `stats.export.last.success{fact}` (gauge, epoch s), `stats.export.latest.patch` (gauge)
 - 로그: 틱 시작/종료, fact 별 범위·행 수·jobId·소요, 가드 위반은 ERROR (운영 JSON 로그 → Loki)
 - `GET /internal/stats-export/status`: 워터마크 3행 + fact 별 최근 실행 상태
 - 알림: lol-repository 는 아직 Prometheus 스크레이프 대상이 아니다(lol-deploy) → "마지막 성공이 6h 이상 전" 알림은
@@ -281,33 +308,37 @@ BigQuery 의 시즌 데이터 대부분을 지우게 되므로, 그 경우엔 ri
 3. **서비스 계정 권한** (`/etc/bigquery/bigquery.json` 의 SA 하나로 통일):
    버킷 `storage.objects.create/get/list`(objectAdmin 또는 creator+viewer), 프로젝트 `roles/bigquery.jobUser`,
    dataset `roles/bigquery.dataEditor`. 코드 측: `GcsClientConfig` 가 ADC 대신 `bigquery.credentials-location` 키를 쓰도록 변경
-4. **riot 이전 완료 + ID 보존** (§17-Q1): 이번 시즌 매치가 `riot.match`·`match_ban`·`match_participant` 에 원래 ID 로
-   있고(`ALTER TABLE … SET SCHEMA` 는 ID·시퀀스를 그대로 둔다), 파이프라인 가동 후에는 워터마크 아래로 행이 들어오지 않는다
-5. **운영 `riot.match.tier_bucket` 확인** (`\d+ riot.match`) — 아래 마이그레이션 식과 같아야 한다. 컬럼이 없으면 마이그레이션이
-   테이블 재작성(ACCESS EXCLUSIVE)을 일으키므로 점검 창에서 실행
-6. **`starting_item_exclusion`** — 운영 존재 여부·내용 확인 후 마이그레이션 승격 (§17-Q2)
-7. **fact 테이블 스키마 진실원천화**: `bq show --schema` 결과를 `docs/data/ddl_*_fact.sql` 로 커밋
+4. **워터마크 아래로 행을 넣지 않는다**: 파이프라인 가동 후 `public` → `riot` 행 복사 같은 작업은 하지 않는다 (§5.2 불변식)
+5. **`riot.match.tier_bucket`**: riot V1 에 없으므로 운영에도 없을 가능성이 높다 → V2 가 `riot.match` 를 재작성(ACCESS EXCLUSIVE)한다.
+   `riot` 은 10월 하순부터 쌓은 데이터라 짧겠지만, 그동안 매치 INSERT 가 막히므로 한산한 시간에 배포한다.
+   이미 있다면(`\d+ riot.match`) 식이 같은지 확인 — 같으면 `IF NOT EXISTS` 로 건너뛴다
+6. **fact 테이블 스키마 진실원천화**: `bq show --schema` 결과를 `docs/data/ddl_*_fact.sql` 로 커밋
 
 ## 15. 변경 목록
 
 ### 마이그레이션 (`module/infra/persistence/src/main/resources/db/migration/riot/` — 번호는 구현 시점 최신+1)
 - `V2__add_match_tier_bucket.sql` — `ALTER TABLE match ADD COLUMN IF NOT EXISTS tier_bucket INTEGER GENERATED ALWAYS AS (CASE WHEN average_tier >= 10000 THEN 10000 ELSE (average_tier / 1000) * 1000 END) STORED;` (`docs/report/2026-04-22-pg-generated-columns.md`)
-- `V3__add_stats_export_watermark.sql` — §5.1
-- (Q2 결론에 따라) `V4__add_starting_item_exclusion.sql` — 테이블 + 시즌별 기준 데이터
+- `V3__add_stats_export_watermark.sql` — §5.1 (워터마크 + 패치 창)
+- `V4__add_item_meta_boots_season16.sql` — 16시즌 `BOOTS` 시드. 목록은 DDragon `item.json` 의 `tags` 에 `Boots` 가 있는 구매 가능 아이템
+  (기본 장화 1001, 2단계·3단계 신발)에서 만든다. `boot_purchases` 가 "마지막 구매 신발"을 고르므로 1단계도 포함한다
 - `RiotSchemaMigrationTest` 가 새 체인을 그대로 검증한다
+
+### 집계 SQL (`module/app/application/src/main/resources/sql/`)
+- 3종 모두 대상 패치 필터 (끌 수 있게)
+- `match-participant-build-aggregation.sql`: `starting_item_exclusion` → `item_meta` `TRINKET`·`STARTING_EXCLUSION`
 
 ### lol-repository
 | 위치 | 변경 |
 |---|---|
 | `app/application` `backfill/BackfillFactType` | 증분 prefix, BQ 테이블명, 워터마크 테이블/ID 컬럼 |
-| `backfill/tasklet/ChunkExportTasklet`, `ManifestTasklet` | season/queueIds/range 를 JobParameters 우선으로 |
+| `backfill/tasklet/ChunkExportTasklet`, `ManifestTasklet` | season·patches·queueIds·range 를 JobParameters 우선으로 |
 | `backfill/gcs/GcsClientConfig` | BigQuery 와 같은 키 파일 사용 (비면 ADC) |
 | `backfill/incremental/StatsExportJobConfig` (신규) | `lolStatsExportJob`, 동기 launcher, BqLoad 스텝 |
 | `backfill/incremental/BqLoadTasklet` (신규) | §9 |
-| `backfill/incremental/StatsExportService` (신규) | 틱 알고리즘(§5.2), 시즌·가드(§6), 고아 정리, 캐시 무효화 호출 |
+| `backfill/incremental/StatsExportService` (신규) | 틱 알고리즘(§5.2), 대상 패치·가드(§6), 고아 정리, 캐시 무효화 호출 |
 | `backfill/incremental/StatsExportWatermarkRepository` (신규) | JdbcTemplate, 조건부 UPDATE |
 | `backfill/incremental/StatsExportScheduler`, `StatsExportController` (신규) | §11 |
-| `application*.yml` | `lol.stats-export.{scheduler.enabled, cron, season, queue-ids, seed-id, chunk.size, chunk.parallelism, cache-evict-patterns}` |
+| `application*.yml` | `lol.stats-export.{scheduler.enabled, cron, patch-count, queue-ids, seed-id, chunk.size, chunk.parallelism, cache-evict-patterns}` |
 | `app/application/build.gradle` | `google-cloud-bigquery` (BOM 동일) 또는 `module:infra:bigquery` 빈 재사용 |
 | `domain/championstats` + `infra/redis` | `EvictChampionStatsCacheUseCase`, 포트 메서드, 어댑터 구현 |
 | `docs/data/ddl_*_fact.sql` | §14-6 |
@@ -326,8 +357,8 @@ BigQuery 의 시즌 데이터 대부분을 지우게 되므로, 그 경우엔 ri
 
 | 구분 | 내용 |
 |---|---|
-| 사용자 결정 | 범위 = 자동 백필 → BQ 적재 파이프라인 / 최대 지연 6시간 허용 / op.gg 챔피언 통계 참고 |
-| 설계자 판단 | 주기 2h(KST :20) · 1-틱 지연 워터마크 · 범위 결정적 runId · 워터마크 갱신은 잡 밖(서비스) · 별도 Job · 동기 launcher · 앱 내 스케줄러 + Redisson 락 · 범위 안 시즌별 실행(`min-season` 하한, `season` 테이블 비의존) + 기준 데이터 가드 · 매니페스트를 JobInstance 전체 실행에서 수집 · 매니페스트 기반 Load + 결정적 jobId/시도 번호 · `maxBadRecords=0` · 적재 후 패턴 기반 캐시 무효화(lol-server 키 포함, 이전 완료 시 제거) · GCS 도 BQ 키 사용 · 부트스트랩 = 현재 시즌 재구축 |
+| 사용자 결정 | 범위 = 자동 백필 → BQ 적재 파이프라인 / 최대 지연 6시간 허용 / op.gg 챔피언 통계 참고 / **최신 시즌의 최근 N개 패치만 적재 (현재 N=1)** / riot 이전 완료·파이프라인 가동 가능 / `starting_item_exclusion` 은 운영에 없음 |
+| 설계자 판단 | 주기 2h(KST :20) · 1-틱 지연 워터마크 · 범위 결정적 runId · 워터마크 갱신은 잡 밖(서비스) · 별도 Job · 동기 launcher · 앱 내 스케줄러 + Redisson 락 · 대상 패치를 데이터에서 결정(전역 `latest_patch` 단조 + 범위별 첫 시도 고정, `season`·`patch_version` 테이블 비의존) · 시작 아이템 제외를 `item_meta` 타입으로 · 16시즌 BOOTS 시드 + 기준 데이터 가드 · 매니페스트를 JobInstance 전체 실행에서 수집 · 매니페스트 기반 Load + 결정적 jobId/시도 번호 · `maxBadRecords=0` · 적재 후 패턴 기반 캐시 무효화(lol-server 키 포함, 이전 완료 시 제거) · GCS 도 BQ 키 사용 · 부트스트랩 = 대상 패치만 BQ 에서 지우고 riot 에서 재적재 |
 | 빌더 재량 | 패키지/클래스 이름, 청크 크기 튜닝, 메트릭 태그 세부, 상태 API 응답 형태, 테스트 구성 |
 
 ### 2026-10-01 초안과 달라진 점
@@ -336,11 +367,12 @@ BigQuery 의 시즌 데이터 대부분을 지우게 되므로, 그 경우엔 ri
 - 워터마크 갱신: 잡 안의 스텝 → **잡 밖 서비스** (`AlreadyComplete` 를 성공으로 처리)
 - BQ jobId: 단일 → **시도 번호 포함** (실패한 jobId 재사용 불가 문제)
 - 마이그레이션 위치: lol-db-schema V37/V38 → **riot 체인 V2~** (`b894f3a` 반영)
-- 추가: 범위 안 시즌별 실행·가드, 매니페스트 재시작 누락 수정, 고아 실행 정리, 캐시 무효화, GCS 자격증명, 10,000 URI 분할, 운영 env 실태
+- 필터: 시즌 전체 → **최신 시즌의 최근 N개 패치** (사용자 결정)
+- 추가: 대상 패치 결정·고정, 기준 데이터 가드(BOOTS 포함), `starting_item_exclusion` 대체, 매니페스트 재시작 누락 수정,
+  고아 실행 정리, 캐시 무효화, GCS 자격증명, 10,000 URI 분할, 운영 env 실태
 
-## 17. 사용자 확인 필요
+## 17. 확인 기록
 
-- **Q1. 운영 riot 이전 상태** — `public` → `riot` 데이터 이전이 끝났는가, 방식은 `SET SCHEMA`(ID 보존)인가 행 복사인가,
-  안 끝났다면 파이프라인 가동 전인가 후인가. → 부트스트랩(§12), ID 불변식(§5.2), `tier_bucket` 마이그레이션 영향(§14-5)이 달라진다.
-- **Q2. `starting_item_exclusion`** — 운영에 수동 생성돼 있는가, 내용은 무엇인가(트링킷 3340·3363·3364 외 포함 여부),
-  시즌마다 누가 채우는가. → 없거나 내용이 다르면 `match-participant-build` export 가 실패하거나 시작 아이템 통계가 조용히 달라진다.
+- **riot 이전** (2026-10-29 사용자): 운영 이전 완료, 데이터는 새로 쌓는 중, 파이프라인 가동 가능 → §12 부트스트랩을 "대상 패치 재적재"로 정함
+- **`starting_item_exclusion`** (2026-10-29 사용자): 운영에 만든 적 없음 → 테이블을 만들지 않고 `item_meta` 의 기존 와드 행을 쓴다 (§6)
+- **패치 범위** (2026-10-29 사용자): 최신 시즌의 최신 패치만, N개 확장 가능 → §6
