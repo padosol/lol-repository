@@ -26,7 +26,11 @@ import java.util.List;
 @Slf4j
 public class BigQueryLoader {
 
-    static final int MAX_ATTEMPTS = 10;
+    /**
+     * 실패한 jobId 는 다시 쓸 수 없어 시도 번호로 넘어간다. 소진되면 그 범위는 영영 적재되지 않으므로 넉넉히 둔다 —
+     * 이미 쓴 시도마다 드는 비용은 getJob 조회 1회뿐이다 (2시간 주기면 1000회 ≈ 83일).
+     */
+    static final int MAX_ATTEMPTS = 1000;
     static final int MAX_URIS_PER_JOB = 10_000;
     private static final int HTTP_CONFLICT = 409;
 

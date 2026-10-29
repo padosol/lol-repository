@@ -10,6 +10,8 @@ import java.util.stream.Collectors;
 
 /**
  * 증분 export 요청. runId 가 범위로 결정되므로 같은 범위의 재실행은 같은 JobInstance 로 멱등하다.
+ * exportEpoch 는 identifying 파라미터라 올리면 같은 범위를 새 JobInstance 로 다시 export 한다 — runId 와
+ * BigQuery jobId 에는 넣지 않으므로 이미 적재된 part 는 결정적 jobId 로 건너뛴다.
  */
 public record StatsExportRequest(
         BackfillFactType factType,
@@ -17,7 +19,8 @@ public record StatsExportRequest(
         long endId,
         int season,
         List<String> patchVersions,
-        List<Integer> queueIds
+        List<Integer> queueIds,
+        int exportEpoch
 ) {
 
     public String runId() {
@@ -35,6 +38,7 @@ public record StatsExportRequest(
                         queueIds.stream().map(String::valueOf).collect(Collectors.joining(",")), true)
                 .addString(ExportJobParameters.KEY_PATCHES, String.join(",", patchVersions), true)
                 .addString(ExportJobParameters.KEY_MODE, "incremental", true)
+                .addLong(ExportJobParameters.KEY_EXPORT_EPOCH, (long) exportEpoch, true)
                 .toJobParameters();
     }
 }

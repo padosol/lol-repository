@@ -192,8 +192,8 @@ public class StatsExportService {
             return new FactReport(f, FactOutcome.FAILED, start, end, 0, "시즌 " + season + " 기준 데이터 불완전");
         }
 
-        JobRunOutcome outcome = runner.run(new StatsExportRequest(
-                f, start, end, season, patches.stream().map(PatchVersion::value).toList(), props.queueIds()));
+        JobRunOutcome outcome = runner.run(new StatsExportRequest(f, start, end, season,
+                patches.stream().map(PatchVersion::value).toList(), props.queueIds(), w.exportEpoch()));
         if (outcome.status() == Status.FAILED) {
             log.error("stats export 잡 실패: fact={}, runId={}", f.code(), outcome.runId());
             return new FactReport(f, FactOutcome.FAILED, start, end, 0, "잡 실패: " + outcome.runId());

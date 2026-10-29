@@ -11,11 +11,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobInstance;
 import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.repository.JobExecutionAlreadyRunningException;
 import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteException;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,15 +33,17 @@ class StatsExportJobRunnerTest {
     private JobLauncher launcher;
     @Mock
     private Job job;
+    @Mock
+    private JobExplorer jobExplorer;
 
     private final StatsExportRequest request =
-            new StatsExportRequest(BackfillFactType.MATCH, 100, 200, 16, List.of("16.21"), List.of(420));
+            new StatsExportRequest(BackfillFactType.MATCH, 100, 200, 16, List.of("16.21"), List.of(420), 2);
 
     private StatsExportJobRunner runner() {
-        return new StatsExportJobRunner(launcher, job);
+        return new StatsExportJobRunner(launcher, job, jobExplorer);
     }
 
-    @DisplayName("COMPLETED 면 LOADED 와 적재 행 수를 돌려주고, 파라미터는 범위로 결정된다")
+    @DisplayName("COMPLETED 면 LOADED 와 적재 행 수를 돌려주고, 파라미터는 범위·epoch 로 결정된다")
     @Test
     void run_completed_returnsLoadedWithRows() throws Exception {
         // given
@@ -63,20 +68,53 @@ class StatsExportJobRunnerTest {
         assertThat(params.getString("factType")).isEqualTo("match");
         assertThat(params.getLong("startId")).isEqualTo(100L);
         assertThat(params.getLong("endId")).isEqualTo(200L);
+        assertThat(params.getLong("exportEpoch")).isEqualTo(2L);
+        assertThat(params.getParameters().get("exportEpoch").isIdentifying()).isTrue();
     }
 
-    @DisplayName("이미 완료된 인스턴스면 ALREADY_COMPLETE")
+    @DisplayName("이미 완료 예외이고 인스턴스에 COMPLETED 실행이 있으면 ALREADY_COMPLETE")
     @Test
-    void run_alreadyComplete_returnsAlreadyComplete() throws Exception {
+    void run_alreadyCompleteWithCompletedExecution_returnsAlreadyComplete() throws Exception {
         // given
         when(launcher.run(any(Job.class), any(JobParameters.class)))
                 .thenThrow(new JobInstanceAlreadyCompleteException("done"));
+        givenInstanceExecutions(BatchStatus.FAILED, BatchStatus.COMPLETED);
 
         // when
         JobRunOutcome outcome = runner().run(request);
 
         // then
         assertThat(outcome).isEqualTo(new JobRunOutcome(Status.ALREADY_COMPLETE, 0, "inc-match-100-200"));
+    }
+
+    @DisplayName("이미 완료 예외여도 COMPLETED 실행 없이 ABANDONED 뿐이면 FAILED (적재 없이 전진하지 않는다)")
+    @Test
+    void run_alreadyCompleteButOnlyAbandoned_returnsFailed() throws Exception {
+        // given
+        when(launcher.run(any(Job.class), any(JobParameters.class)))
+                .thenThrow(new JobInstanceAlreadyCompleteException("abandoned"));
+        givenInstanceExecutions(BatchStatus.FAILED, BatchStatus.ABANDONED);
+
+        // when
+        JobRunOutcome outcome = runner().run(request);
+
+        // then
+        assertThat(outcome).isEqualTo(new JobRunOutcome(Status.FAILED, 0, "inc-match-100-200"));
+    }
+
+    @DisplayName("이미 완료 예외인데 인스턴스를 찾을 수 없으면 FAILED")
+    @Test
+    void run_alreadyCompleteButInstanceMissing_returnsFailed() throws Exception {
+        // given
+        when(launcher.run(any(Job.class), any(JobParameters.class)))
+                .thenThrow(new JobInstanceAlreadyCompleteException("done"));
+        when(jobExplorer.getJobInstance(StatsExportJobConfig.JOB_NAME, request.toJobParameters())).thenReturn(null);
+
+        // when
+        JobRunOutcome outcome = runner().run(request);
+
+        // then
+        assertThat(outcome.status()).isEqualTo(Status.FAILED);
     }
 
     @DisplayName("실행이 FAILED 면 FAILED")
@@ -106,5 +144,18 @@ class StatsExportJobRunnerTest {
 
         // then
         assertThat(outcome).isEqualTo(new JobRunOutcome(Status.FAILED, 0, "inc-match-100-200"));
+    }
+
+    private void givenInstanceExecutions(BatchStatus... statuses) {
+        JobInstance instance = new JobInstance(7L, StatsExportJobConfig.JOB_NAME);
+        when(jobExplorer.getJobInstance(StatsExportJobConfig.JOB_NAME, request.toJobParameters())).thenReturn(instance);
+        List<JobExecution> executions = new ArrayList<>();
+        long id = 1;
+        for (BatchStatus status : statuses) {
+            JobExecution execution = new JobExecution(instance, id++, request.toJobParameters());
+            execution.setStatus(status);
+            executions.add(execution);
+        }
+        when(jobExplorer.getJobExecutions(instance)).thenReturn(executions);
     }
 }

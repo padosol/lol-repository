@@ -26,6 +26,8 @@ public record ExportJobParameters(
     public static final String KEY_QUEUE_IDS = "queueIds";
     public static final String KEY_PATCHES = "patches";
     public static final String KEY_MODE = "mode";
+    /** 증분 전용. 같은 범위를 새 JobInstance 로 다시 export 하게 하는 운영 카운터 (stats_export_watermark.export_epoch). */
+    public static final String KEY_EXPORT_EPOCH = "exportEpoch";
 
     public static ExportJobParameters resolve(JobParameters params, BackfillProperties props) {
         Long season = params.getLong(KEY_SEASON);

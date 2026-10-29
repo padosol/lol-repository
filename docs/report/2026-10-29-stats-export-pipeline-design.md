@@ -128,8 +128,8 @@ if O > E:
     if now - observed_at < min-observe-age: DEFERRED → 이 fact 종료 (워터마크·보류 카운터 그대로)
     patches = range_patches ?: 대상 패치 결정 후 range_patches 에 저장 (§6)   -- 보류면 이 fact 종료 (워터마크 그대로)
     if patches 비어 있지 않음:
-        run lolStatsExportJob(factType, startId=E, endId=O, season=patches/100, patches)   -- runId = inc-{fact}-{E}-{O}
-        성공(COMPLETED, 또는 JobInstanceAlreadyCompleteException) 이 아니면 → 이 fact 종료 (워터마크 그대로)
+        run lolStatsExportJob(factType, startId=E, endId=O, season=patches/100, patches, exportEpoch)   -- runId = inc-{fact}-{E}-{O}
+        성공(COMPLETED, 또는 COMPLETED 실행이 있는 JobInstanceAlreadyCompleteException) 이 아니면 → 이 fact 종료 (워터마크 그대로)
 UPDATE stats_export_watermark
    SET exported_until = O, observed_until = nowMax, observed_at = now(), range_patches = NULL,
        last_run_id = …, last_success_at = now(), updated_at = now()
@@ -151,7 +151,8 @@ UPDATE stats_export_watermark
 - **runId 가 범위에서 결정**되므로 실패한 틱 다음 틱은 같은 JobParameters 로 실행 → Spring Batch 가 실패한
   JobInstance 를 **재시작**(실패 파티션만 재실행)한다. "실패면 restart, 아니면 새 run" 판단 코드가 필요 없다.
 - 잡이 COMPLETED 됐는데 워터마크 UPDATE 전에 죽으면, 다음 틱이 같은 파라미터로 실행 →
-  `JobInstanceAlreadyCompleteException` → 성공으로 간주하고 워터마크만 전진.
+  `JobInstanceAlreadyCompleteException` → 인스턴스에 **COMPLETED 실행이 있을 때만** 성공으로 간주하고 워터마크만 전진.
+  Spring Batch 는 ABANDONED 실행만 있어도 같은 예외를 던지므로, 그 경우는 실패 + ERROR 로 두고 `export_epoch` 로 복구한다 (§11).
 
 | 대안 | 판단 |
 |---|---|
@@ -210,8 +211,10 @@ range_patches ← targets
 | `statsExportManifestStep` | 기존 매니페스트 |
 | `statsExportBqLoadStep` (신규) | §9 |
 
-JobParameters (identifying): `factType`, `startId`, `endId`, `season`, `patches`, `queueIds`, `mode=incremental`.
+JobParameters (identifying): `factType`, `startId`, `endId`, `season`, `patches`, `queueIds`, `mode=incremental`, `exportEpoch`.
 `runId` 는 `inc-{factType}-{startId}-{endId}` 로 파생 — 범위의 `patches`·`season` 은 첫 시도 때 고정되므로(§6) 범위만으로 유일하다.
+`exportEpoch`(워터마크의 `export_epoch`, 기본 0)는 같은 범위를 새 JobInstance 로 다시 export 하기 위한 운영 카운터다 (§11).
+`runId`·BigQuery jobId(§9)에는 넣지 않는다 — 새 인스턴스가 다시 export 해도 이미 적재된 part 는 jobId 로 건너뛴다.
 
 필요한 기존 코드 수정:
 - `ChunkExportTasklet` / `ManifestTasklet` 이 `season`·`queueIds`·`range` 를 `BackfillProperties` 에서만 읽는다
@@ -245,7 +248,7 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
 - **멱등성 — 결정적 jobId + 시도 번호**:
   ```
   base  = stats_export_{fact}_{startId}_{endId}_p{part}
-  for a in 0..9:
+  for a in 0..999:                                      -- 상한 1000 (BigQueryLoader.MAX_ATTEMPTS)
       job = bigquery.getJob(base + "_a" + a)
       없음            → 이 id 로 제출 후 완료 대기 → 성공이면 끝, 실패면 예외
       DONE & 성공     → 이미 적재됨, 끝 (재시작/재배포 시 중복 방지 핵심)
@@ -253,6 +256,8 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
       실행 중         → 완료 대기 후 위 판정
   ```
   실패한 jobId 는 재사용할 수 없으므로 시도 번호로 넘어가고, 성공한 시도가 하나라도 있으면 다시 넣지 않는다.
+  상한이 작으면 결정적 실패(첫 배포의 스키마 불일치 등)가 시도를 소진해 스키마를 고친 뒤에도 영영 적재되지 않으므로
+  1000 으로 둔다 — 이미 쓴 시도마다 드는 비용은 `getJob` 조회 1회뿐이다 (2시간 주기면 약 83일).
   같은 jobId 의 중복 거절이 유지되는 기간(문서 확인 필요)은 재시작이 같은 날 안에 일어나는 운영 전제와 충분히 겹친다.
 - 클라이언트는 `module/infra/bigquery` 의 `BigQuery` 빈을 재사용한다.
 - 로케이션: Load Job 은 dataset 로케이션에서 실행되며 버킷이 같은(또는 포함하는) 로케이션이어야 한다 (§14).
@@ -285,11 +290,16 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
 |---|---|
 | export 중 장애/재배포 | 워터마크 그대로 → 다음 틱이 같은 runId 로 재시작, 끝난 파티션은 건너뜀 |
 | Load 제출 후 완료 대기 중 장애 | BQ 쪽 Load 는 계속 진행 → 재시작 시 같은 jobId 조회로 성공 확인, 재적재 없음 |
-| 잡 완료 후 워터마크 UPDATE 전 장애 | 다음 틱 `JobInstanceAlreadyCompleteException` → 워터마크만 전진 |
+| 잡 완료 후 워터마크 UPDATE 전 장애 | 다음 틱 `JobInstanceAlreadyCompleteException` + COMPLETED 실행 확인 → 워터마크만 전진 |
+| 인스턴스가 ABANDONED 등으로 재시작 불가 | 해당 fact 실패 + ERROR → 아래 "막힌 범위 복구" |
 | 같은 시각 중복 트리거 | 락에서 skip |
 | 앱 다운으로 틱 누락 | 다음 틱이 누적 범위를 한 번에 처리 (청크 분할) |
 | 패치 테이블이 실제 데이터보다 늦음 | 해당 fact 보류(워터마크 정지) + WARN(2틱 이상이면 ERROR) → 테이블 갱신 후 자동 재개 |
 | 기준 데이터(item_meta 등) 누락 / 깨진 행 | 해당 fact 정지 + ERROR 로그 + 메트릭 → 사람이 고치면 자동 재개 |
+
+**막힌 범위 복구 (런북)**: 같은 범위를 처음부터 다시 export 해야 할 때(인스턴스 ABANDONED, 잘못 export 된 파일 재생성 등)
+`UPDATE stats_export_watermark SET export_epoch = export_epoch + 1 WHERE fact_type = '<code>'` → 다음 틱이 새 JobInstance 로
+다시 export 하고, 이미 적재된 part 는 BQ jobId 로 건너뛴다. (`<code>` = `match` / `match-ban` / `match-participant-build`)
 
 ## 12. 초기 부트스트랩 (1회)
 

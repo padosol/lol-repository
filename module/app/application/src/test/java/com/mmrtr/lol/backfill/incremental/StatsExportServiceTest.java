@@ -129,7 +129,7 @@ class StatsExportServiceTest {
 
         // then
         verify(repo).saveRangePatches(MATCH, 100, 200, "16.21");
-        verify(runner).run(new StatsExportRequest(MATCH, 100, 200, 16, List.of("16.21"), QUEUES));
+        verify(runner).run(new StatsExportRequest(MATCH, 100, 200, 16, List.of("16.21"), QUEUES, 0));
         verify(repo).advance(MATCH, 100, 200, 300, "inc-match-100-200");
         verify(evictUseCase).evictAll();
         assertThat(report.cacheEvicted()).isTrue();
@@ -149,9 +149,24 @@ class StatsExportServiceTest {
         service.runTick();
 
         // then
-        verify(runner).run(new StatsExportRequest(MATCH, 100, 200, 16, List.of("16.20"), QUEUES));
+        verify(runner).run(new StatsExportRequest(MATCH, 100, 200, 16, List.of("16.20"), QUEUES, 0));
         verify(sourceQueries, never()).maxPatchInRange(eq(MATCH), anyLong(), anyLong(), any());
         verify(repo, never()).saveRangePatches(eq(MATCH), anyLong(), anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("워터마크의 export_epoch 를 잡 요청에 그대로 넘긴다")
+    void runTick_passesWatermarkExportEpoch() {
+        // given
+        given(repo.findOrCreate(MATCH, 0L)).willReturn(new Watermark(MATCH, 100, 200, "16.21", OBSERVED_LONG_AGO, 3));
+        given(sourceQueries.nextId(MATCH)).willReturn(300L);
+        given(runner.run(any())).willReturn(new JobRunOutcome(Status.LOADED, 5, "inc-match-100-200"));
+
+        // when
+        service.runTick();
+
+        // then
+        verify(runner).run(new StatsExportRequest(MATCH, 100, 200, 16, List.of("16.21"), QUEUES, 3));
     }
 
     @Test

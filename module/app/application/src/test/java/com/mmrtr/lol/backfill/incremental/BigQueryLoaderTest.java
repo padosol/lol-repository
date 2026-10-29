@@ -132,7 +132,7 @@ class BigQueryLoaderTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
-    @DisplayName("10개 시도가 모두 실패면 예외")
+    @DisplayName("1000개 시도(a0..a999)가 모두 실패면 각 시도를 한 번씩 조회한 뒤 예외")
     @Test
     void load_allAttemptsFailed_throws() throws Exception {
         // given
@@ -143,6 +143,10 @@ class BigQueryLoaderTest {
         assertThatThrownBy(() -> loader.load(TABLE, ONE_URI, "base"))
                 .isInstanceOf(IllegalStateException.class);
         verify(bigQuery, never()).create(any(JobInfo.class));
+        verify(bigQuery, times(1000)).getJob(any(JobId.class));
+        verify(bigQuery, times(BigQueryLoader.MAX_ATTEMPTS)).getJob(any(JobId.class));
+        verify(bigQuery).getJob(argThat((JobId j) -> j != null && "base_p0_a999".equals(j.getJob())));
+        verify(bigQuery, never()).getJob(argThat((JobId j) -> j != null && "base_p0_a1000".equals(j.getJob())));
     }
 
     @DisplayName("URI 가 10,000 개를 넘으면 part 를 나눠 각각 제출한다")
