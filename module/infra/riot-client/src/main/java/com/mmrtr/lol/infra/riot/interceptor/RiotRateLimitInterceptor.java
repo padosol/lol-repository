@@ -17,6 +17,7 @@ import org.springframework.http.client.ClientHttpResponse;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.function.LongSupplier;
 
 /**
@@ -124,7 +125,9 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
         safely("learn", routing, method, () -> limiter.learnLimits(routing, method, appLimit, methodLimit));
         safely("near-limit", routing, method, () -> pauseIfNearLimit(routing, method, headers, appLimit, methodLimit));
         if (HttpStatus.TOO_MANY_REQUESTS.equals(response.getStatusCode())) {
-            safely("429-pause", routing, method, () -> pauseOn429(routing, method, headers));
+            String type = headers.getFirst("X-Rate-Limit-Type");
+            meterRegistry.counter("riot.api.rate_limited", "routing", routing, "type", typeTag(type)).increment();
+            safely("429-pause", routing, method, () -> pauseOn429(routing, method, type, headers));
         }
     }
 
@@ -140,24 +143,27 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
                                   String appLimit, String methodLimit) {
         double ratio = props.getCountPauseRatio();
         if (nearLimit(appLimit, headers.getFirst("X-App-Rate-Limit-Count"), ratio)) {
-            throttled(routing, "app");
+            meterRegistry.counter("riot.ratelimit.near_limit", "routing", routing, "scope", "app").increment();
             limiter.pause(routing, null, NEAR_LIMIT_PAUSE);
         }
         if (nearLimit(methodLimit, headers.getFirst("X-Method-Rate-Limit-Count"), ratio)) {
-            throttled(routing, "method");
+            meterRegistry.counter("riot.ratelimit.near_limit", "routing", routing, "scope", "method").increment();
             limiter.pause(routing, method, NEAR_LIMIT_PAUSE);
         }
     }
 
-    private void pauseOn429(String routing, String method, HttpHeaders headers) {
+    private void pauseOn429(String routing, String method, String type, HttpHeaders headers) {
         Duration pause = retryAfter(headers.getFirst("Retry-After"));
-        if ("application".equalsIgnoreCase(headers.getFirst("X-Rate-Limit-Type"))) {
-            throttled(routing, "application");
+        if ("application".equalsIgnoreCase(type)) {
             limiter.pause(routing, null, pause);
         } else {
-            throttled(routing, "method");
             limiter.pause(routing, method, pause);
         }
+    }
+
+    /** 429 의 X-Rate-Limit-Type 을 소문자 그대로, 없으면 none. */
+    private static String typeTag(String type) {
+        return type == null || type.isBlank() ? "none" : type.trim().toLowerCase(Locale.ROOT);
     }
 
     private boolean nearLimit(String limitHeader, String countHeader, double ratio) {
@@ -180,10 +186,6 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
             }
         }
         return props.getDefaultPause();
-    }
-
-    private void throttled(String routing, String type) {
-        meterRegistry.counter("riot.ratelimit.throttled", "routing", routing, "type", type).increment();
     }
 
     private String routingOf(HttpRequest request) {

@@ -159,6 +159,9 @@ class RiotRateLimitInterceptorTest {
         assertThatThrownBy(this::call).isInstanceOf(RuntimeException.class);
 
         assertThat(limiter.pauses).containsExactly("localhost|null|PT3S");
+        assertThat(rateLimited("application")).isEqualTo(1.0);
+        assertThat(meterRegistry.find("riot.ratelimit.near_limit").counter()).isNull();
+        assertThat(meterRegistry.find("riot.ratelimit.throttled").counter()).isNull();
     }
 
     @Test
@@ -171,6 +174,18 @@ class RiotRateLimitInterceptorTest {
         assertThatThrownBy(this::call).isInstanceOf(RuntimeException.class);
 
         assertThat(limiter.pauses).containsExactly("localhost|" + METHOD + "|PT1S");
+        assertThat(rateLimited("service")).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("X-Rate-Limit-Type 이 없는 429 는 type=none 으로 센다")
+    void untyped429_countedAsNone() {
+        wm.stubFor(get(urlEqualTo("/x")).willReturn(aResponse().withStatus(429)));
+        limiter.results.add(0L);
+
+        assertThatThrownBy(this::call).isInstanceOf(RuntimeException.class);
+
+        assertThat(rateLimited("none")).isEqualTo(1.0);
     }
 
     @Test
@@ -184,6 +199,22 @@ class RiotRateLimitInterceptorTest {
         call();
 
         assertThat(limiter.pauses).containsExactly("localhost|null|PT1S");
+        assertThat(nearLimit("app")).isEqualTo(1.0);
+        assertThat(meterRegistry.find("riot.api.rate_limited").counter()).isNull();
+    }
+
+    @Test
+    @DisplayName("method 카운트가 한도의 95% 이상이면 그 method 만 1초 정지하고 scope=method 로 센다")
+    void methodCountNearLimit_pausesMethod() {
+        wm.stubFor(get(urlEqualTo("/x")).willReturn(aResponse().withStatus(200)
+                .withHeader("X-Method-Rate-Limit", "2000:10")
+                .withHeader("X-Method-Rate-Limit-Count", "1900:10")));
+        limiter.results.add(0L);
+
+        call();
+
+        assertThat(limiter.pauses).containsExactly("localhost|" + METHOD + "|PT1S");
+        assertThat(nearLimit("method")).isEqualTo(1.0);
     }
 
     @Test
@@ -237,6 +268,14 @@ class RiotRateLimitInterceptorTest {
                 .isInstanceOf(org.springframework.web.client.HttpClientErrorException.TooManyRequests.class);
 
         assertThat(limiter.pauses).containsExactly("localhost|null|PT3S");
+    }
+
+    private double rateLimited(String type) {
+        return meterRegistry.counter("riot.api.rate_limited", "routing", "localhost", "type", type).count();
+    }
+
+    private double nearLimit(String scope) {
+        return meterRegistry.counter("riot.ratelimit.near_limit", "routing", "localhost", "scope", scope).count();
     }
 
     static class FakeLimiter implements RiotRateLimiter {
