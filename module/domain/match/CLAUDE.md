@@ -33,6 +33,7 @@ lol-server match 모듈의 조회를 옮긴다 (공개 API 재설계 3.2절).
 
 ## 규칙
 
+- match·match_ban·match_participant 의 ID 는 INSERT 시 DB IDENTITY 로 단조 발급되어야 한다 — 시퀀스 CACHE > 1, pooled optimizer, 워터마크 아래 ID 로의 행 복사 금지 (통계 적재 워터마크 전제).
 - 도메인은 인프라 타입(@Entity·RestClient·RedisTemplate·AMQP)을 import 하지 않는다.
 - 타 컨텍스트 참조는 그 컨텍스트의 `application`(port·usecase)·도메인 모델만 사용한다.
 - 검증: `./gradlew :module:domain:match:test` (ArchUnit) / `./gradlew :module:domain:match:compileJava`.

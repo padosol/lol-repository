@@ -30,6 +30,11 @@ management:
       probes:
         enabled: true
 
+# 챔피언 통계 캐시. legacy-evict-patterns 는 lol-server 가 챔피언 통계를 서빙하는 동안만 쓴다 — MP-179 Ingress 전환 후 비운다.
+championstats:
+  cache:
+    legacy-evict-patterns: "champion-stats:v[0-9]*"
+
 lol:
   vt:
     executors:
