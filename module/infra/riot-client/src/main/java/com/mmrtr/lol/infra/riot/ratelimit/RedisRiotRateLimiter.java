@@ -100,24 +100,38 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
                 RateLimitWindow.parse(learned != null ? learned : appDefault), config.getSafetyRatio());
     }
 
-    /** 마지막에 쓴 값과 다르거나 쓴 지 {@link #LIMIT_REFRESH_MILLIS} 가 지났으면 HSET 한다. 필드별 확인·갱신은 원자적이다. */
+    /**
+     * 마지막에 쓴 값과 다르거나 쓴 지 {@link #LIMIT_REFRESH_MILLIS} 가 지났으면 HSET 한다. 필드별 판단은 원자적이다.
+     *
+     * <p>compute 안에서는 판단만 하고 Redis 쓰기는 밖에서 한다. 빈 락을 쥔 채 I/O 하면 가상 스레드가 캐리어에 고정된다.
+     * 쓰기가 실패하면 기록을 지워 다음 응답이 다시 쓰게 한다.
+     */
     private void learn(String field, String header) {
         String limits = normalize(header);
         if (limits == null) {
             return;
         }
-        lastWrittenLimits.compute(field, (key, written) -> {
-            long now = localNowMillis();
-            boolean changed = written == null || !written.limits().equals(limits);
-            if (!changed && now - written.writtenAtMillis() <= LIMIT_REFRESH_MILLIS) {
+        WrittenLimit fresh = new WrittenLimit(limits, localNowMillis());
+        boolean[] changed = new boolean[1];
+        WrittenLimit current = lastWrittenLimits.compute(field, (key, written) -> {
+            changed[0] = written == null || !written.limits().equals(limits);
+            if (!changed[0] && fresh.writtenAtMillis() - written.writtenAtMillis() <= LIMIT_REFRESH_MILLIS) {
                 return written;
             }
-            limits().fastPut(field, limits);
-            if (changed) {
-                log.info("Riot 한도 갱신 [{}] {}", field, limits);
-            }
-            return new WrittenLimit(limits, now);
+            return fresh;
         });
+        if (current != fresh) {
+            return;
+        }
+        try {
+            limits().fastPut(field, limits);
+        } catch (RuntimeException e) {
+            lastWrittenLimits.remove(field, fresh);
+            throw e;
+        }
+        if (changed[0]) {
+            log.info("Riot 한도 갱신 [{}] {}", field, limits);
+        }
     }
 
     private RMap<String, String> limits() {
