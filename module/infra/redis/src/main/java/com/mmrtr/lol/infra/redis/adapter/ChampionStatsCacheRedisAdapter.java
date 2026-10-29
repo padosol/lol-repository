@@ -22,6 +22,10 @@ import java.util.concurrent.TimeUnit;
  * 챔피언 통계 캐시와 single-flight 락 (championstats 컨텍스트). TTL·락 시간은 lol-server 와 같다.
  * lol-server 의 {@code champion-stats:*} 와 키를 공유하지 않는다 — 값 형식이 다르고, 락을 공유하면
  * 서로 다른 캐시가 채워지길 기다리다 fallback 으로 빠진다.
+ * <p>
+ * 예외: {@link #evictAll()} 은 과도기 동안(lol-server 가 챔피언 통계를 서빙하는 동안, MP-179 Ingress 전환 전)
+ * {@code championstats.cache.legacy-evict-patterns} 에 맞는 lol-server 캐시 키({@code champion-stats:v*})도 함께 비운다.
+ * 적재 직후 두 서비스의 캐시가 모두 새 데이터를 보게 하려는 것이며, 락 키({@code champion-stats:lock:*})는 건드리지 않는다.
  */
 @Slf4j
 @Component

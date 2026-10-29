@@ -14,7 +14,7 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * 통계 export 파이프라인 설정. 활성화(@EnableConfigurationProperties)는 스케줄러 구성에서 한다.
+ * 통계 export 파이프라인 설정. 활성화(@EnableConfigurationProperties)는 {@link StatsExportJobConfig} 에서 한다.
  * 잘못된 값은 기동 시점에 막는다 — 예를 들어 빈 queueIds 는 모든 범위를 "대상 행 없음" 으로 건너뛰게 한다.
  *
  * @param minObserveAge 범위 상한(observed_until)을 관측한 뒤 export 까지 기다릴 최소 시간. 그 아래 ID 의 트랜잭션이

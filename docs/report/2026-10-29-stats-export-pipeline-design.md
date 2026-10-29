@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS stats_export_watermark (
     fact_type        VARCHAR(64)  PRIMARY KEY,      -- match / match-ban / match-participant-build
     exported_until   BIGINT       NOT NULL,         -- [.., exported_until) BQ 적재 완료
     observed_until   BIGINT       NOT NULL,         -- 직전 틱에서 관측한 MAX(id)+1 = 이번 틱 export 상한
-    range_patches    VARCHAR(100),                  -- 진행 중 범위 [exported_until, observed_until) 의 대상 패치 (예: "1621"), 첫 시도 때 고정·성공 시 NULL
+    range_patches    VARCHAR(100),                  -- 진행 중 범위 [exported_until, observed_until) 의 대상 패치 (예: "16.21", 여러 개면 최신순 쉼표 구분 "16.21,16.20"), 첫 시도 때 고정·성공 시 NULL
     last_run_id      VARCHAR(128),
     last_success_at  TIMESTAMP,
     updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -326,9 +326,10 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
 
 ## 13. 관측
 
-- Micrometer: `stats.export.rows{fact}` (counter), `stats.export.runs{fact,outcome=success|failed|skipped}` (counter),
+- Micrometer: `stats.export.rows{fact}` (counter),
+  `stats.export.runs{fact,outcome=deferred|advanced_empty|no_target_rows|loaded|already_complete|held|failed}` (counter),
   `stats.export.lag.ids{fact}` (gauge = MAX(id)+1 − exported_until), `stats.export.last.success{fact}` (gauge, epoch s), `stats.export.target.patch` (gauge, 대상 최신 patch_version_int),
-  `stats.export.runs{outcome=held}` 로 보류 횟수
+  `stats.export.runs{outcome=held}` 로 보류 횟수, `outcome=deferred` 로 관측 경과 가드(§5.2) 연기 횟수
 - 로그: 틱 시작/종료, fact 별 범위·행 수·jobId·소요, 가드 위반은 ERROR (운영 JSON 로그 → Loki)
 - `GET /internal/stats-export/status`: 워터마크 3행 + fact 별 최근 실행 상태
 - 알림: lol-repository 는 아직 Prometheus 스크레이프 대상이 아니다(lol-deploy) → "마지막 성공이 6h 이상 전" 알림은
