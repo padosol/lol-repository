@@ -2,6 +2,8 @@ package com.mmrtr.lol.backfill.incremental;
 
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryException;
+import com.google.cloud.bigquery.Dataset;
+import com.google.cloud.bigquery.DatasetId;
 import com.google.cloud.bigquery.FormatOptions;
 import com.google.cloud.bigquery.Job;
 import com.google.cloud.bigquery.JobId;
@@ -30,6 +32,7 @@ public class BigQueryLoader {
 
     private final BigQuery bigQuery;
     private final StatsExportProperties props;
+    private volatile String resolvedLocation;
 
     public static String jobId(String baseJobId, int part, int attempt) {
         return baseJobId + "_p" + part + "_a" + attempt;
@@ -45,7 +48,7 @@ public class BigQueryLoader {
 
     private void loadPart(TableId table, List<String> uris, String baseJobId, int part) {
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            JobId jobId = jobIdOf(jobId(baseJobId, part, attempt));
+            JobId jobId = jobIdOf(table, jobId(baseJobId, part, attempt));
             Job existing = bigQuery.getJob(jobId);
             if (existing != null) {
                 if (succeeded(await(existing))) {
@@ -58,8 +61,13 @@ public class BigQueryLoader {
             Job submitted = submit(table, uris, jobId);
             if (submitted == null) {
                 // 409: 같은 id 를 이미 제출한 쪽이 있다 — 다시 조회해 판정한다
+                // 409 는 이 id 의 job 이 존재한다는 증거 — 보이지 않으면 다음 시도로 넘기지 않고 실패시킨다(중복 방지)
                 Job raced = bigQuery.getJob(jobId);
-                if (raced != null && succeeded(await(raced))) {
+                Job racedDone = raced == null ? null : await(raced);
+                if (racedDone == null) {
+                    throw new IllegalStateException("BigQuery Load 409 이후 job 을 조회할 수 없음: " + jobId.getJob());
+                }
+                if (succeeded(racedDone)) {
                     return;
                 }
                 continue;
@@ -82,6 +90,7 @@ public class BigQueryLoader {
                 .setWriteDisposition(JobInfo.WriteDisposition.WRITE_APPEND)
                 .setCreateDisposition(JobInfo.CreateDisposition.CREATE_NEVER)
                 .setMaxBadRecords(0)
+                .setIgnoreUnknownValues(false)
                 .build();
         try {
             return bigQuery.create(JobInfo.newBuilder(cfg).setJobId(jobId).build());
@@ -106,11 +115,27 @@ public class BigQueryLoader {
         return job != null && job.getStatus() != null && job.getStatus().getError() == null;
     }
 
-    private JobId jobIdOf(String id) {
-        JobId.Builder builder = JobId.newBuilder().setJob(id);
+    private JobId jobIdOf(TableId table, String id) {
+        return JobId.newBuilder().setJob(id).setLocation(location(table)).build();
+    }
+
+    /** 설정값이 없으면 데이터셋 메타데이터의 location 을 한 번 조회해 쓴다. location 없이는 리전 데이터셋의 getJob 이 404 라 멱등 판정이 불가능하다. */
+    private String location(TableId table) {
         if (StringUtils.hasText(props.bqLocation())) {
-            builder.setLocation(props.bqLocation());
+            return props.bqLocation();
         }
-        return builder.build();
+        String cached = resolvedLocation;
+        if (cached == null) {
+            DatasetId datasetId = table.getProject() == null
+                    ? DatasetId.of(table.getDataset())
+                    : DatasetId.of(table.getProject(), table.getDataset());
+            Dataset dataset = bigQuery.getDataset(datasetId);
+            if (dataset == null) {
+                throw new IllegalStateException("BigQuery 데이터셋을 찾을 수 없음: " + datasetId);
+            }
+            cached = dataset.getLocation();
+            resolvedLocation = cached;
+        }
+        return cached;
     }
 }

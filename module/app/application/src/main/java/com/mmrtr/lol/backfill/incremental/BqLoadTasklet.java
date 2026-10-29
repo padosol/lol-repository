@@ -2,6 +2,8 @@ package com.mmrtr.lol.backfill.incremental;
 
 import com.google.cloud.bigquery.TableId;
 import com.mmrtr.lol.backfill.BackfillFactType;
+import com.mmrtr.lol.backfill.BackfillProperties;
+import com.mmrtr.lol.backfill.ExportJobParameters;
 import com.mmrtr.lol.backfill.tasklet.ManifestTasklet;
 import com.mmrtr.lol.infra.bigquery.config.BigQueryProperties;
 import org.springframework.batch.core.JobExecution;
@@ -29,21 +31,18 @@ public class BqLoadTasklet implements Tasklet {
     private final BigQueryLoader loader;
     private final BigQueryProperties bigQueryProperties;
     private final String factTypeCode;
-    private final Long startId;
-    private final Long endId;
+    private final BackfillProperties backfillProperties;
     private final JobExecution jobExecution;
 
     public BqLoadTasklet(BigQueryLoader loader,
                          BigQueryProperties bigQueryProperties,
                          @Value("#{jobParameters['factType']}") String factTypeCode,
-                         @Value("#{jobParameters['startId']}") Long startId,
-                         @Value("#{jobParameters['endId']}") Long endId,
+                         BackfillProperties backfillProperties,
                          @Value("#{stepExecution.jobExecution}") JobExecution jobExecution) {
         this.loader = loader;
         this.bigQueryProperties = bigQueryProperties;
         this.factTypeCode = factTypeCode;
-        this.startId = startId;
-        this.endId = endId;
+        this.backfillProperties = backfillProperties;
         this.jobExecution = jobExecution;
     }
 
@@ -55,13 +54,17 @@ public class BqLoadTasklet implements Tasklet {
             jobCtx.putLong(CTX_ROWS_LOADED, 0L);
             return RepeatStatus.FINISHED;
         }
+        ExportJobParameters params = ExportJobParameters.resolve(jobExecution.getJobParameters(), backfillProperties);
+        if (params.startId() == null || params.endId() == null) {
+            throw new IllegalStateException("startId/endId 가 없으면 결정적 jobId 를 만들 수 없다");
+        }
         BackfillFactType factType = BackfillFactType.fromCode(factTypeCode);
         @SuppressWarnings("unchecked")
         List<String> uris = (List<String>) jobCtx.get(ManifestTasklet.CTX_SOURCE_URIS);
         TableId table = StringUtils.hasText(bigQueryProperties.projectId())
                 ? TableId.of(bigQueryProperties.projectId(), bigQueryProperties.dataset(), factType.bqTable())
                 : TableId.of(bigQueryProperties.dataset(), factType.bqTable());
-        String baseJobId = "stats_export_" + factType.code() + "_" + startId + "_" + endId;
+        String baseJobId = "stats_export_" + factType.code() + "_" + params.startId() + "_" + params.endId();
         loader.load(table, uris, baseJobId);
         jobCtx.putLong(CTX_ROWS_LOADED, totalRows);
         return RepeatStatus.FINISHED;

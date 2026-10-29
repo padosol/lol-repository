@@ -2,6 +2,9 @@ package com.mmrtr.lol.backfill.incremental;
 
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryError;
+import com.google.cloud.bigquery.BigQueryException;
+import com.google.cloud.bigquery.Dataset;
+import com.google.cloud.bigquery.DatasetId;
 import com.google.cloud.bigquery.Job;
 import com.google.cloud.bigquery.JobId;
 import com.google.cloud.bigquery.JobInfo;
@@ -38,7 +41,11 @@ class BigQueryLoaderTest {
     @BeforeEach
     void setUp() {
         bigQuery = mock(BigQuery.class);
-        loader = new BigQueryLoader(bigQuery, new StatsExportProperties(null, null, 0, List.of(), 0L, null, null));
+        loader = new BigQueryLoader(bigQuery, propsWithLocation("asia-northeast3"));
+    }
+
+    private static StatsExportProperties propsWithLocation(String location) {
+        return new StatsExportProperties(null, null, 0, List.of(), 0L, null, location);
     }
 
     private Job doneJob(boolean failed) throws Exception {
@@ -74,6 +81,7 @@ class BigQueryLoaderTest {
         assertThat(cfg.getWriteDisposition()).isEqualTo(JobInfo.WriteDisposition.WRITE_APPEND);
         assertThat(cfg.getCreateDisposition()).isEqualTo(JobInfo.CreateDisposition.CREATE_NEVER);
         assertThat(cfg.getMaxBadRecords()).isZero();
+        assertThat(cfg.ignoreUnknownValues()).isFalse();
         assertThat(cfg.getFormat()).isEqualTo("NEWLINE_DELIMITED_JSON");
         assertThat(cfg.getSourceUris()).containsExactly("gs://b/x.ndjson.gz");
     }
@@ -161,5 +169,89 @@ class BigQueryLoaderTest {
         assertThat(((LoadJobConfiguration) p0.getConfiguration()).getSourceUris()).hasSize(10_000);
         assertThat(p1.getJobId().getJob()).isEqualTo("base_p1_a0");
         assertThat(((LoadJobConfiguration) p1.getConfiguration()).getSourceUris()).hasSize(1);
+    }
+
+    @DisplayName("409 후 재조회에서 성공 job 이 보이면 다시 제출하지 않는다")
+    @Test
+    void load_conflictThenDoneSuccess_doesNotResubmit() throws Exception {
+        // given
+        Job done = doneJob(false);
+        when(bigQuery.getJob(any(JobId.class))).thenReturn(null, done);
+        when(bigQuery.create(any(JobInfo.class))).thenThrow(new BigQueryException(409, "already exists"));
+
+        // when
+        loader.load(TABLE, ONE_URI, "base");
+
+        // then
+        verify(bigQuery, times(1)).create(any(JobInfo.class));
+    }
+
+    @DisplayName("409 후 재조회에서 job 이 안 보이면 다음 시도로 넘기지 않고 예외")
+    @Test
+    void load_conflictThenJobInvisible_throwsWithoutFurtherCreate() {
+        // given
+        when(bigQuery.getJob(any(JobId.class))).thenReturn(null);
+        when(bigQuery.create(any(JobInfo.class))).thenThrow(new BigQueryException(409, "already exists"));
+
+        // when / then
+        assertThatThrownBy(() -> loader.load(TABLE, ONE_URI, "base"))
+                .isInstanceOf(IllegalStateException.class);
+        verify(bigQuery, times(1)).create(any(JobInfo.class));
+    }
+
+    @DisplayName("location 설정이 비면 데이터셋 location 을 한 번 조회해 JobId 에 쓴다")
+    @Test
+    void load_blankLocation_usesDatasetLocation() throws Exception {
+        // given
+        BigQueryLoader blank = new BigQueryLoader(bigQuery, propsWithLocation(" "));
+        Dataset dataset = mock(Dataset.class);
+        when(dataset.getLocation()).thenReturn("US");
+        when(bigQuery.getDataset(any(DatasetId.class))).thenReturn(dataset);
+        when(bigQuery.getJob(any(JobId.class))).thenReturn(null);
+        Job job = doneJob(false);
+        when(bigQuery.create(any(JobInfo.class))).thenReturn(job);
+        List<String> uris = new ArrayList<>();
+        for (int i = 0; i < 10_001; i++) {
+            uris.add("gs://b/" + i + ".ndjson.gz");
+        }
+
+        // when
+        blank.load(TABLE, uris, "base");
+
+        // then
+        ArgumentCaptor<JobInfo> captured = ArgumentCaptor.forClass(JobInfo.class);
+        verify(bigQuery, times(2)).create(captured.capture());
+        assertThat(captured.getAllValues()).allSatisfy(i -> assertThat(i.getJobId().getLocation()).isEqualTo("US"));
+        verify(bigQuery, times(1)).getDataset(any(DatasetId.class));
+    }
+
+    @DisplayName("location 설정이 있으면 데이터셋을 조회하지 않는다")
+    @Test
+    void load_configuredLocation_doesNotQueryDataset() throws Exception {
+        // given
+        when(bigQuery.getJob(any(JobId.class))).thenReturn(null);
+        Job job = doneJob(false);
+        when(bigQuery.create(any(JobInfo.class))).thenReturn(job);
+
+        // when
+        loader.load(TABLE, ONE_URI, "base");
+
+        // then
+        verify(bigQuery, never()).getDataset(any(DatasetId.class));
+        ArgumentCaptor<JobInfo> captured = ArgumentCaptor.forClass(JobInfo.class);
+        verify(bigQuery).create(captured.capture());
+        assertThat(captured.getValue().getJobId().getLocation()).isEqualTo("asia-northeast3");
+    }
+
+    @DisplayName("location 설정이 비고 데이터셋이 없으면 예외")
+    @Test
+    void load_blankLocationAndDatasetMissing_throws() {
+        // given
+        BigQueryLoader blank = new BigQueryLoader(bigQuery, propsWithLocation(null));
+        when(bigQuery.getDataset(any(DatasetId.class))).thenReturn(null);
+
+        // when / then
+        assertThatThrownBy(() -> blank.load(TABLE, ONE_URI, "base"))
+                .isInstanceOf(IllegalStateException.class);
     }
 }
