@@ -65,12 +65,7 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
         awaitPermit(routing, method, priority);
 
         ClientHttpResponse response = execution.execute(request, body);
-        try {
-            afterResponse(routing, method, response);
-        } catch (RuntimeException e) {
-            // 응답은 이미 받았으므로 Redis 오류로 호출을 실패시키지 않는다.
-            log.warn("Riot rate limit 후처리 실패 (응답은 반환) routing={}, method={}", routing, method, e);
-        }
+        afterResponse(routing, method, response);
         return response;
     }
 
@@ -125,8 +120,24 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
         HttpHeaders headers = response.getHeaders();
         String appLimit = headers.getFirst("X-App-Rate-Limit");
         String methodLimit = headers.getFirst("X-Method-Rate-Limit");
-        limiter.learnLimits(routing, method, appLimit, methodLimit);
+        // 응답은 이미 받았으므로 각 단계의 실패가 호출을 실패시키거나 다음 단계를 건너뛰게 하지 않는다.
+        safely("learn", routing, method, () -> limiter.learnLimits(routing, method, appLimit, methodLimit));
+        safely("near-limit", routing, method, () -> pauseIfNearLimit(routing, method, headers, appLimit, methodLimit));
+        if (HttpStatus.TOO_MANY_REQUESTS.equals(response.getStatusCode())) {
+            safely("429-pause", routing, method, () -> pauseOn429(routing, method, headers));
+        }
+    }
 
+    private void safely(String step, String routing, String method, Runnable action) {
+        try {
+            action.run();
+        } catch (RuntimeException e) {
+            log.warn("Riot rate limit 후처리 실패 step={}, routing={}, method={}", step, routing, method, e);
+        }
+    }
+
+    private void pauseIfNearLimit(String routing, String method, HttpHeaders headers,
+                                  String appLimit, String methodLimit) {
         double ratio = props.getCountPauseRatio();
         if (nearLimit(appLimit, headers.getFirst("X-App-Rate-Limit-Count"), ratio)) {
             throttled(routing, "app");
@@ -136,16 +147,16 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
             throttled(routing, "method");
             limiter.pause(routing, method, NEAR_LIMIT_PAUSE);
         }
+    }
 
-        if (HttpStatus.TOO_MANY_REQUESTS.equals(response.getStatusCode())) {
-            Duration pause = retryAfter(headers.getFirst("Retry-After"));
-            if ("application".equalsIgnoreCase(headers.getFirst("X-Rate-Limit-Type"))) {
-                throttled(routing, "application");
-                limiter.pause(routing, null, pause);
-            } else {
-                throttled(routing, "method");
-                limiter.pause(routing, method, pause);
-            }
+    private void pauseOn429(String routing, String method, HttpHeaders headers) {
+        Duration pause = retryAfter(headers.getFirst("Retry-After"));
+        if ("application".equalsIgnoreCase(headers.getFirst("X-Rate-Limit-Type"))) {
+            throttled(routing, "application");
+            limiter.pause(routing, null, pause);
+        } else {
+            throttled(routing, "method");
+            limiter.pause(routing, method, pause);
         }
     }
 

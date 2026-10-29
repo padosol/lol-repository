@@ -224,6 +224,21 @@ class RiotRateLimitInterceptorTest {
         assertThat(call()).isEqualTo("ok");
     }
 
+    @Test
+    @DisplayName("learnLimits 가 실패해도 429 정지는 수행하고 429 는 호출자에게 전달")
+    void learnFailure_on429_stillPauses() {
+        wm.stubFor(get(urlEqualTo("/x")).willReturn(aResponse().withStatus(429)
+                .withHeader("Retry-After", "3")
+                .withHeader("X-Rate-Limit-Type", "application")));
+        limiter.results.add(0L);
+        limiter.learnFailure = new RuntimeException("redis down");
+
+        assertThatThrownBy(this::call)
+                .isInstanceOf(org.springframework.web.client.HttpClientErrorException.TooManyRequests.class);
+
+        assertThat(limiter.pauses).containsExactly("localhost|null|PT3S");
+    }
+
     static class FakeLimiter implements RiotRateLimiter {
         final Deque<Long> results = new ArrayDeque<>();
         final List<String> learned = new ArrayList<>();
