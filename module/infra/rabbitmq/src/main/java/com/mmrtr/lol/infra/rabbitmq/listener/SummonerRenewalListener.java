@@ -6,6 +6,8 @@ import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRenewalService;
 import com.mmrtr.lol.infra.redis.service.RedisLockHandler;
 import com.mmrtr.lol.support.aop.TraceLogging;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotCallScope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -42,7 +44,9 @@ public class SummonerRenewalListener {
         }
 
         try {
-            summonerRenewalService.renewSummoner(puuid, platform);
+            // 이 큐는 티어 수집·lol-server 발행용이라 사용자 요청이 아니다
+            RiotCallScope.run(RiotCallPriority.BACKGROUND,
+                    () -> summonerRenewalService.renewSummoner(puuid, platform));
         } catch (Exception e) {
             log.error(e.getMessage());
         } finally {

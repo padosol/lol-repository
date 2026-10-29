@@ -139,8 +139,8 @@ domain/
 
 Riot API Rate Limit 은 **3-단계 디펜스** 로 보호합니다:
 
-1. **소비 속도 제한 (글로벌)** — `ListenerRateLimiterConfig` 가 Redisson `RRateLimiter`
-   `global:api:call:limiter` 를 **20 req/s** 로 설정. 모든 Riot 호출 직전에 토큰 획득.
+1. **백그라운드 호출 우선순위** — 백필·티어 수집·비사용자 갱신은 `RiotCallScope` 의
+   `BACKGROUND` 로 호출한다. 전역 `RRateLimiter`(`ListenerRateLimiterConfig`)는 제거됨.
 2. **호스트별 Rate Limiter** — `RateLimitInterceptor` 가 요청 호스트를
    `HostRateLimitResolver` 로 분류해 각각 분산 RateLimiter 적용.
 

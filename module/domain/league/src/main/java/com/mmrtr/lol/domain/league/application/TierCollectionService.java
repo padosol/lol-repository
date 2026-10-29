@@ -4,6 +4,8 @@ import com.mmrtr.lol.common.type.Division;
 import com.mmrtr.lol.domain.league.application.port.LeagueApiPort;
 import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPort;
 import com.mmrtr.lol.domain.league.application.usecase.CollectTierDataUseCase;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotCallScope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -23,6 +25,10 @@ public class TierCollectionService implements CollectTierDataUseCase {
     @Async("requestExecutor")
     @Override
     public void execute(String platformName) {
+        RiotCallScope.run(RiotCallPriority.BACKGROUND, () -> collect(platformName));
+    }
+
+    private void collect(String platformName) {
         String queue = "RANKED_SOLO_5x5";
         String tier = "EMERALD";
         int totalCollected = 0;

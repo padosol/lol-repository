@@ -2,6 +2,8 @@ package com.mmrtr.lol.infra.rabbitmq.service;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotCallScope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,10 @@ public class MatchFindService {
     private final Executor matchFindExecutor;
 
     public void process(SummonerRenewalMessage summonerRenewalMessage) {
+        RiotCallScope.run(RiotCallPriority.BACKGROUND, () -> doProcess(summonerRenewalMessage));
+    }
+
+    private void doProcess(SummonerRenewalMessage summonerRenewalMessage) {
         String puuid = summonerRenewalMessage.puuid();
         Platform platform = Platform.valueOfName(summonerRenewalMessage.platform());
         long revisionDate = Math.max(summonerRenewalMessage.revisionDate(), 1767225600L);
