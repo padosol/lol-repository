@@ -3,6 +3,7 @@ package com.mmrtr.lol.backfill.tasklet;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mmrtr.lol.backfill.BackfillFactType;
 import com.mmrtr.lol.backfill.BackfillProperties;
+import com.mmrtr.lol.backfill.ExportJobParameters;
 import com.mmrtr.lol.backfill.gcs.GcsUploader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +21,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +35,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class ManifestTasklet implements Tasklet {
+
+    public static final String CTX_SOURCE_URIS = "manifestSourceUris";
+    public static final String CTX_TOTAL_ROWS = "manifestTotalRows";
 
     private static final String SCHEMA_VERSION = "v1";
 
@@ -55,56 +58,50 @@ public class ManifestTasklet implements Tasklet {
     @Override
     public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
         BackfillFactType factType = BackfillFactType.fromCode(factTypeCode);
-        List<Map<String, Object>> chunks = collectChunkEntries(jobExecution);
-        long totalRows = chunks.stream()
-                .mapToLong(c -> ((Number) c.get("rows")).longValue())
-                .sum();
+        ExportJobParameters exportParams = ExportJobParameters.resolve(jobExecution.getJobParameters(), properties);
+        List<StepExecution> allSteps = new ArrayList<>();
+        for (JobExecution execution : jobExplorer.getJobExecutions(jobExecution.getJobInstance())) {
+            allSteps.addAll(execution.getStepExecutions());
+        }
+        List<ManifestChunkCollector.ChunkEntry> chunks = ManifestChunkCollector.collect(allSteps);
+        long totalRows = chunks.stream().mapToLong(ManifestChunkCollector.ChunkEntry::rows).sum();
+        List<Map<String, Object>> chunkMaps = chunks.stream()
+                .map(c -> Map.<String, Object>of("step", c.step(), "gcsObject", c.gcsObject(), "rows", c.rows()))
+                .toList();
 
-        Map<String, Object> manifest = Map.of(
-                "runId", runId,
-                "factType", factType.code(),
-                "schemaVersion", SCHEMA_VERSION,
-                "writtenAt", Instant.now().toString(),
-                "filter", Map.of(
-                        "season", properties.filter().season(),
-                        "queueIds", properties.filter().queueIds()
-                ),
-                "range", Map.of(
-                        "startId", properties.range().startId(),
-                        "endId", properties.range().endId()
-                ),
-                "chunkCount", chunks.size(),
-                "totalRows", totalRows,
-                "chunks", chunks
-        );
+        Map<String, Object> manifest = new LinkedHashMap<>();
+        manifest.put("runId", runId);
+        manifest.put("factType", factType.code());
+        manifest.put("schemaVersion", SCHEMA_VERSION);
+        manifest.put("mode", exportParams.mode().name());
+        manifest.put("writtenAt", Instant.now().toString());
+        manifest.put("filter", Map.of(
+                "season", exportParams.season(),
+                "queueIds", exportParams.queueIds()));
+        manifest.put("patches", exportParams.patchVersions());
+        manifest.put("range", Map.of(
+                "startId", exportParams.startId(),
+                "endId", exportParams.endId()));
+        manifest.put("chunkCount", chunks.size());
+        manifest.put("totalRows", totalRows);
+        manifest.put("chunks", chunkMaps);
 
         byte[] content = objectMapper.writerWithDefaultPrettyPrinter()
                 .writeValueAsBytes(manifest);
+        String bucket = properties.gcs().bucket();
         String objectName = String.format("%s/%s/_manifest.json",
-                factType.gcsPrefix(), runId);
-        gcsUploader.uploadBytes(
-                properties.gcs().bucket(), objectName, content, "application/json");
+                factType.gcsPrefixFor(exportParams.mode()), runId);
+        gcsUploader.uploadBytes(bucket, objectName, content, "application/json");
 
-        log.info("Manifest uploaded: gs://{}/{} chunks={} totalRows={}",
-                properties.gcs().bucket(), objectName, chunks.size(), totalRows);
-        return RepeatStatus.FINISHED;
-    }
-
-    private List<Map<String, Object>> collectChunkEntries(JobExecution execution) {
-        Collection<StepExecution> steps = execution.getStepExecutions();
-        List<Map<String, Object>> entries = new ArrayList<>();
-        for (StepExecution step : steps) {
-            ExecutionContext ctx = step.getExecutionContext();
-            if (!ctx.containsKey(ChunkExportTasklet.CTX_GCS_OBJECT)) {
-                continue;
-            }
-            entries.add(Map.of(
-                    "step", step.getStepName(),
-                    "gcsObject", ctx.getString(ChunkExportTasklet.CTX_GCS_OBJECT),
-                    "rows", ctx.getLong(ChunkExportTasklet.CTX_ROWS_WRITTEN, 0L)
-            ));
+        ArrayList<String> sourceUris = new ArrayList<>();
+        for (ManifestChunkCollector.ChunkEntry c : chunks) {
+            sourceUris.add("gs://" + bucket + "/" + c.gcsObject());
         }
-        entries.sort(Comparator.comparing(m -> (String) m.get("step")));
-        return entries;
+        ExecutionContext jobCtx = jobExecution.getExecutionContext();
+        jobCtx.put(CTX_SOURCE_URIS, sourceUris);
+        jobCtx.putLong(CTX_TOTAL_ROWS, totalRows);
+
+        log.info("Manifest uploaded: gs://{}/{} chunks={} totalRows={}", bucket, objectName, chunks.size(), totalRows);
+        return RepeatStatus.FINISHED;
     }
 }
