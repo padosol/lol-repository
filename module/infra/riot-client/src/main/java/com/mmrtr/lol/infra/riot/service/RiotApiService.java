@@ -31,11 +31,6 @@ public class RiotApiService {
 
     private final RestClient riotRestClient;
 
-    /** 한도 인터셉터가 읽는 우선순위·method 를 단다. */
-    private RestClient.RequestHeadersUriSpec<?> riotGet(RiotCallPriority priority, String method) {
-        return riotRestClient.get();
-    }
-
     public CompletableFuture<AccountDto> getAccountByRiotId(
             String gameName, String tagLine, Platform platform, Executor executor) {
         log.debug("getAccountByRiotId gameName {} tagLine {}", gameName, tagLine);
