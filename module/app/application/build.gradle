@@ -42,4 +42,6 @@ dependencies {
 
     testImplementation 'org.testcontainers:postgresql'
     testImplementation 'org.testcontainers:junit-jupiter'
+    // lolStatsExportJob 잡 단위 통합 테스트 (@SpringBatchTest)
+    testImplementation 'org.springframework.batch:spring-batch-test'
 }
