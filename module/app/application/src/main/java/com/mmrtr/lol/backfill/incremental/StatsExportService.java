@@ -117,8 +117,13 @@ public class StatsExportService {
         long nowMax = sourceQueries.nextId(f);
         metrics.recordLag(f, nowMax - start);
 
-        if (end <= start) {
-            repo.advance(f, start, end, nowMax, null);
+        if (end < start) {
+            log.error("워터마크 상태 이상(observed_until < exported_until): fact={}, exported={}, observed={}",
+                    f.code(), start, end);
+            return new FactReport(f, FactOutcome.FAILED, start, end, 0, "워터마크 역전");
+        }
+        if (end == start) {
+            advanceOrWarn(f, start, end, nowMax, null);
             consecutiveHolds.remove(f);
             return new FactReport(f, FactOutcome.ADVANCED_EMPTY, start, end, 0, "observed_until=" + nowMax);
         }
@@ -139,12 +144,15 @@ public class StatsExportService {
                 return new FactReport(f, FactOutcome.HELD, start, end, 0, hold.reason());
             }
             patches = ((Proceed) decision).patches();
-            repo.saveRangePatches(f, start, end, PatchVersion.join(patches));
+            if (!repo.saveRangePatches(f, start, end, PatchVersion.join(patches))) {
+                log.warn("범위 대상 패치 고정 실패(워터마크가 이미 변경됨): fact={}, range=[{}, {})", f.code(), start, end);
+                return new FactReport(f, FactOutcome.FAILED, start, end, 0, "대상 패치 고정 실패");
+            }
         }
         consecutiveHolds.remove(f);
 
         if (patches.isEmpty()) {
-            repo.advance(f, start, end, nowMax, null);
+            advanceOrWarn(f, start, end, nowMax, null);
             return new FactReport(f, FactOutcome.NO_TARGET_ROWS, start, end, 0, "대상 패치 행 없음");
         }
 
@@ -162,14 +170,18 @@ public class StatsExportService {
             return new FactReport(f, FactOutcome.FAILED, start, end, 0, "잡 실패: " + outcome.runId());
         }
 
-        if (!repo.advance(f, start, end, nowMax, outcome.runId())) {
-            log.warn("워터마크 전진 실패(낙관적 락 불일치): fact={}, range=[{}, {})", f.code(), start, end);
-        }
+        advanceOrWarn(f, start, end, nowMax, outcome.runId());
         metrics.recordLastSuccess(f, Instant.now().getEpochSecond());
         if (outcome.status() == Status.LOADED) {
             metrics.recordRows(f, outcome.rowsLoaded());
             return new FactReport(f, FactOutcome.LOADED, start, end, outcome.rowsLoaded(), outcome.runId());
         }
         return new FactReport(f, FactOutcome.ALREADY_COMPLETE, start, end, 0, outcome.runId());
+    }
+
+    private void advanceOrWarn(BackfillFactType f, long start, long end, long nowMax, String runId) {
+        if (!repo.advance(f, start, end, nowMax, runId)) {
+            log.warn("워터마크 전진 실패(낙관적 락 불일치): fact={}, range=[{}, {})", f.code(), start, end);
+        }
     }
 }

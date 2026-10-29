@@ -66,6 +66,7 @@ class StatsExportServiceTest {
         for (BackfillFactType f : BackfillFactType.values()) {
             given(repo.findOrCreate(f, 0L)).willReturn(new Watermark(f, 0, 0, null));
             given(sourceQueries.nextId(f)).willReturn(0L);
+            given(repo.saveRangePatches(eq(f), anyLong(), anyLong(), any())).willReturn(true);
         }
     }
 
@@ -246,5 +247,37 @@ class StatsExportServiceTest {
 
         // then
         verify(lock, org.mockito.Mockito.times(2)).unlock();
+    }
+
+    @Test
+    @DisplayName("범위 패치 고정에 실패하면 잡도 전진도 없이 실패한다")
+    void runTick_saveRangePatchesFails_noJobNoAdvance() {
+        // given
+        watermark(MATCH, 100, 200, null, 300);
+        given(sourceQueries.maxPatchInRange(MATCH, 100, 200, QUEUES)).willReturn(Optional.of(new PatchVersion(16, 21)));
+        given(repo.saveRangePatches(MATCH, 100, 200, "16.21")).willReturn(false);
+
+        // when
+        TickReport report = service.runTick();
+
+        // then
+        verify(runner, never()).run(any());
+        verify(repo, never()).advance(eq(MATCH), anyLong(), anyLong(), anyLong(), any());
+        assertThat(report.facts().get(0).outcome()).isEqualTo(FactOutcome.FAILED);
+    }
+
+    @Test
+    @DisplayName("observed 가 exported 보다 작으면 전진하지 않고 실패한다")
+    void runTick_observedBehindExported_failsWithoutAdvance() {
+        // given
+        watermark(MATCH, 200, 100, null, 300);
+
+        // when
+        TickReport report = service.runTick();
+
+        // then
+        verify(repo, never()).advance(eq(MATCH), anyLong(), anyLong(), anyLong(), any());
+        verify(runner, never()).run(any());
+        assertThat(report.facts().get(0).outcome()).isEqualTo(FactOutcome.FAILED);
     }
 }
