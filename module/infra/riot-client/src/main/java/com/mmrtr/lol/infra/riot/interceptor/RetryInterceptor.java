@@ -30,12 +30,8 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
     private final MeterRegistry meterRegistry;
     private final Sleeper sleeper;
 
-    /** 시도마다 새로 타는 안쪽 인터셉터 (한도 → 로그 → 동시성 순) */
+    /** 시도마다 새로 타는 안쪽 인터셉터 (한도 → 로그 순) */
     private final List<ClientHttpRequestInterceptor> inner;
-
-    public RetryInterceptor(MeterRegistry meterRegistry) {
-        this(meterRegistry, Thread::sleep, List.of());
-    }
 
     public RetryInterceptor(MeterRegistry meterRegistry, List<ClientHttpRequestInterceptor> inner) {
         this(meterRegistry, Thread::sleep, inner);

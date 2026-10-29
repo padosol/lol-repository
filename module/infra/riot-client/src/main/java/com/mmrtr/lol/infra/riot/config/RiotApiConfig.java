@@ -3,7 +3,6 @@ package com.mmrtr.lol.infra.riot.config;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
-import com.mmrtr.lol.infra.riot.interceptor.ConcurrencyInterceptor;
 import com.mmrtr.lol.infra.riot.interceptor.RetryInterceptor;
 import com.mmrtr.lol.infra.riot.interceptor.RiotRateLimitInterceptor;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
@@ -32,8 +31,6 @@ import java.util.List;
 @EnableConfigurationProperties(RiotAPIProperties.class)
 public class RiotApiConfig {
 
-    private static final int CONCURRENCY_LIMIT = 20;
-
     private final RiotAPIProperties riotAPIProperties;
     private final RiotRateLimiter riotRateLimiter;
     private final MeterRegistry meterRegistry;
@@ -49,15 +46,14 @@ public class RiotApiConfig {
 
         RiotRateLimitInterceptor rateLimitInterceptor = new RiotRateLimitInterceptor(
                 riotRateLimiter, riotAPIProperties, meterRegistry);
-        ConcurrencyInterceptor concurrencyInterceptor = new ConcurrencyInterceptor(CONCURRENCY_LIMIT);
         RetryInterceptor retryInterceptor = new RetryInterceptor(meterRegistry,
-                List.of(rateLimitInterceptor, logRequest(), concurrencyInterceptor));
+                List.of(rateLimitInterceptor, logRequest()));
 
         // RestClient 에는 retryInterceptor 하나만 등록한다. 안쪽 인터셉터는 재시도(시도)마다 다시 탄다:
         // 1. retryInterceptor (가장 바깥 - 429/5xx/IOException 재시도)
         // 2. rateLimitInterceptor (Redis 기반 한도 관리 — 우선순위·헤더 학습·429 정지)
         // 3. logRequest (로깅)
-        // 4. concurrencyInterceptor (동시 요청 수 제한 - 가장 안쪽)
+        // 허가 뒤에 대기 단계를 두지 않는다. 허가받은 초를 넘겨 보내면 Riot 창에서 몰려 한도를 넘을 수 있다.
         return RestClient.builder()
                 .requestFactory(requestFactory)
                 .defaultHeader("X-Riot-Token", riotAPIProperties.getApiKey())

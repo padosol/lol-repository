@@ -9,7 +9,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
 import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
-import com.mmrtr.lol.infra.riot.interceptor.ConcurrencyInterceptor;
 import com.mmrtr.lol.infra.riot.interceptor.RetryInterceptor;
 import com.mmrtr.lol.infra.riot.interceptor.RiotRateLimitInterceptor;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -105,8 +104,7 @@ class RiotRateLimitAcceptanceTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         RiotRateLimiter limiter = new RedisRiotRateLimiter(redisson, props);
         RiotRateLimitInterceptor rateLimit = new RiotRateLimitInterceptor(limiter, props, registry);
-        RetryInterceptor retry = new RetryInterceptor(registry,
-                List.of(rateLimit, new ConcurrencyInterceptor(20)));
+        RetryInterceptor retry = new RetryInterceptor(registry, List.of(rateLimit));
 
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(HttpClient.newHttpClient());
         factory.setReadTimeout(Duration.ofSeconds(5));
@@ -151,8 +149,6 @@ class RiotRateLimitAcceptanceTest {
             }
             max = Math.max(max, count);
         }
-        System.out.println("ACCEPTANCE max-per-2s=" + max + " span="
-                + (times.get(times.size() - 1) - times.get(0)) + "ms");
         assertThat(max).isLessThanOrEqualTo(LIMIT);
     }
 }
