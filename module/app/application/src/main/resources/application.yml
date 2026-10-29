@@ -46,6 +46,8 @@ lol:
     patch-count: 1
     queue-ids: [420]
     seed-id: 0
+    # observed_until 을 관측한 뒤 이만큼 지나야 그 범위를 export 한다 (수동 /run 포함, 설계 5.2)
+    min-observe-age: 15m
     chunk:
       size: 50000
       parallelism: 2

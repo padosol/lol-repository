@@ -17,6 +17,10 @@ import org.mockito.quality.Strictness;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,6 +42,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class StatsExportServiceTest {
 
     private static final List<Integer> QUEUES = List.of(420);
+    private static final Instant NOW = Instant.parse("2026-10-30T03:20:00Z");
+    private static final Duration MIN_OBSERVE_AGE = Duration.ofMinutes(15);
+    private static final Instant OBSERVED_LONG_AGO = NOW.minus(Duration.ofHours(2));
 
     @Mock RedissonClient redisson;
     @Mock RLock lock;
@@ -55,23 +62,28 @@ class StatsExportServiceTest {
     void setUp() {
         registry = new SimpleMeterRegistry();
         service = new StatsExportService(redisson, props, staleCleaner, sourceQueries, repo, runner,
-                evictUseCase, new StatsExportMetrics(registry));
+                evictUseCase, new StatsExportMetrics(registry), Clock.fixed(NOW, ZoneOffset.UTC));
         given(redisson.getLock("stats-export:lock")).willReturn(lock);
         given(lock.tryLock()).willReturn(true);
         given(lock.isHeldByCurrentThread()).willReturn(true);
         given(props.patchCount()).willReturn(3);
         given(props.queueIds()).willReturn(QUEUES);
         given(props.seedId()).willReturn(0L);
+        given(props.minObserveAge()).willReturn(MIN_OBSERVE_AGE);
         given(sourceQueries.latestSeasonPatches(3)).willReturn(List.of(new PatchVersion(16, 21)));
         for (BackfillFactType f : BackfillFactType.values()) {
-            given(repo.findOrCreate(f, 0L)).willReturn(new Watermark(f, 0, 0, null));
+            given(repo.findOrCreate(f, 0L)).willReturn(new Watermark(f, 0, 0, null, OBSERVED_LONG_AGO, 0));
             given(sourceQueries.nextId(f)).willReturn(0L);
             given(repo.saveRangePatches(eq(f), anyLong(), anyLong(), any())).willReturn(true);
         }
     }
 
     private void watermark(BackfillFactType f, long start, long end, String patches, long nowMax) {
-        given(repo.findOrCreate(f, 0L)).willReturn(new Watermark(f, start, end, patches));
+        watermark(f, start, end, patches, nowMax, OBSERVED_LONG_AGO);
+    }
+
+    private void watermark(BackfillFactType f, long start, long end, String patches, long nowMax, Instant observedAt) {
+        given(repo.findOrCreate(f, 0L)).willReturn(new Watermark(f, start, end, patches, observedAt, 0));
         given(sourceQueries.nextId(f)).willReturn(nowMax);
     }
 
@@ -279,5 +291,71 @@ class StatsExportServiceTest {
         verify(repo, never()).advance(eq(MATCH), anyLong(), anyLong(), anyLong(), any());
         verify(runner, never()).run(any());
         assertThat(report.facts().get(0).outcome()).isEqualTo(FactOutcome.FAILED);
+    }
+
+    @Test
+    @DisplayName("관측한 지 min-observe-age 가 안 된 범위는 패치 고정·잡·전진 없이 연기한다")
+    void runTick_rangeYoungerThanMinObserveAge_defersWithoutTouchingRange() {
+        // given
+        watermark(MATCH, 100, 200, null, 300, NOW.minus(Duration.ofMinutes(14)));
+
+        // when
+        TickReport report = service.runTick();
+
+        // then
+        verify(sourceQueries, never()).maxPatchInRange(eq(MATCH), anyLong(), anyLong(), any());
+        verify(repo, never()).saveRangePatches(eq(MATCH), anyLong(), anyLong(), any());
+        verify(repo, never()).advance(eq(MATCH), anyLong(), anyLong(), anyLong(), any());
+        verify(runner, never()).run(any());
+        verify(evictUseCase, never()).evictAll();
+        assertThat(report.facts().get(0).outcome()).isEqualTo(FactOutcome.DEFERRED);
+        assertThat(registry.counter("stats.export.runs", "fact", "match", "outcome", "deferred").count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("고정된 range_patches 가 있어도 관측이 너무 최근이면 연기한다")
+    void runTick_frozenPatchesButYoungRange_defers() {
+        // given
+        watermark(MATCH, 100, 200, "16.21", 300, NOW.minusSeconds(1));
+
+        // when
+        TickReport report = service.runTick();
+
+        // then
+        verify(runner, never()).run(any());
+        verify(repo, never()).advance(eq(MATCH), anyLong(), anyLong(), anyLong(), any());
+        assertThat(report.facts().get(0).outcome()).isEqualTo(FactOutcome.DEFERRED);
+    }
+
+    @Test
+    @DisplayName("관측한 지 정확히 min-observe-age 가 지났으면 진행한다")
+    void runTick_rangeExactlyMinObserveAge_proceeds() {
+        // given
+        watermark(MATCH, 100, 200, null, 300, NOW.minus(MIN_OBSERVE_AGE));
+        given(sourceQueries.maxPatchInRange(MATCH, 100, 200, QUEUES)).willReturn(Optional.of(new PatchVersion(16, 21)));
+        given(runner.run(any())).willReturn(new JobRunOutcome(Status.LOADED, 10, "inc-match-100-200"));
+
+        // when
+        TickReport report = service.runTick();
+
+        // then
+        verify(repo).saveRangePatches(MATCH, 100, 200, "16.21");
+        verify(runner).run(any());
+        verify(repo).advance(MATCH, 100, 200, 300, "inc-match-100-200");
+        assertThat(report.facts().get(0).outcome()).isEqualTo(FactOutcome.LOADED);
+    }
+
+    @Test
+    @DisplayName("빈 범위는 관측이 최근이어도 observed_until 을 전진한다")
+    void runTick_emptyRangeRecentlyObserved_stillAdvances() {
+        // given
+        watermark(MATCH, 200, 200, null, 500, NOW.minusSeconds(1));
+
+        // when
+        TickReport report = service.runTick();
+
+        // then
+        verify(repo).advance(MATCH, 200, 200, 500, null);
+        assertThat(report.facts().get(0).outcome()).isEqualTo(FactOutcome.ADVANCED_EMPTY);
     }
 }

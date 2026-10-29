@@ -96,7 +96,7 @@ class RiotSchemaMigrationTest {
         assertThat(bucketOfT2).isEqualTo(10000);
     }
 
-    @DisplayName("stats_export_watermark 는 설계 5.1 컬럼을 가진다")
+    @DisplayName("stats_export_watermark 는 설계 5.1 컬럼과 V5 가드 컬럼(observed_at·export_epoch)을 가진다")
     @Test
     void migration_createsStatsExportWatermark() {
         // when
@@ -104,10 +104,16 @@ class RiotSchemaMigrationTest {
                 SELECT column_name FROM information_schema.columns
                 WHERE table_schema = 'riot' AND table_name = 'stats_export_watermark'
                 """);
+        Object rangePatchesComment = single("""
+                SELECT col_description('riot.stats_export_watermark'::regclass, ordinal_position::int)
+                FROM information_schema.columns
+                WHERE table_schema = 'riot' AND table_name = 'stats_export_watermark' AND column_name = 'range_patches'
+                """);
 
         // then
         assertThat(columns).containsExactlyInAnyOrder("fact_type", "exported_until", "observed_until",
-                "range_patches", "last_run_id", "last_success_at", "updated_at");
+                "range_patches", "last_run_id", "last_success_at", "updated_at", "observed_at", "export_epoch");
+        assertThat((String) rangePatchesComment).contains("16.21");
     }
 
     @DisplayName("16시즌 BOOTS 는 소환사의 협곡 구매 가능 신발 14종이다")

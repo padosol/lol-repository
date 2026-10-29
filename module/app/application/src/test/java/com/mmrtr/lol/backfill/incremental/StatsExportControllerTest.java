@@ -74,7 +74,8 @@ class StatsExportControllerTest {
     @DisplayName("GET /status 는 워터마크와 마지막 보고서를 준다")
     void status_returnsWatermarksAndLastReport() throws Exception {
         // given
-        when(watermarks.findAll()).thenReturn(List.of(new Watermark(BackfillFactType.MATCH, 10L, 20L, null)));
+        when(watermarks.findAll()).thenReturn(List.of(new Watermark(BackfillFactType.MATCH, 10L, 20L, null,
+                Instant.parse("2026-10-30T00:00:00Z"), 0)));
         when(service.lastReport()).thenReturn(Optional.of(new TickReport(
                 false,
                 List.of(new TickReport.FactReport(

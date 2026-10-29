@@ -25,6 +25,8 @@ public record TickReport(boolean skipped, List<FactReport> facts, boolean cacheE
     }
 
     public enum FactOutcome {
+        /** 범위 상한을 관측한 지 min-observe-age 가 안 됐다 — 워터마크·보류 카운터를 건드리지 않고 다음 틱에 다시 본다. */
+        DEFERRED,
         ADVANCED_EMPTY,
         NO_TARGET_ROWS,
         LOADED,

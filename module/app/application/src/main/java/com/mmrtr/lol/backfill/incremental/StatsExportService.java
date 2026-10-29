@@ -11,8 +11,11 @@ import com.mmrtr.lol.domain.championstats.application.usecase.ChampionStatsCache
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +24,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 틱 1회: 락 - 고아 정리 - fact 별(워터마크 - 대상 패치 - 잡 - 전진) - 캐시 무효화.
+ * 틱 1회: 락 - 고아 정리 - fact 별(워터마크 - 관측 경과 가드 - 대상 패치 - 잡 - 전진) - 캐시 무효화.
  * 적재 성공(또는 적재할 것이 없음)이 확인되기 전에는 워터마크를 움직이지 않는다.
  */
 @Slf4j
@@ -40,10 +43,12 @@ public class StatsExportService {
     private final StatsExportJobRunner runner;
     private final ChampionStatsCacheEvictUseCase evictUseCase;
     private final StatsExportMetrics metrics;
+    private final Clock clock;
 
     private final Map<BackfillFactType, Integer> consecutiveHolds = new ConcurrentHashMap<>();
     private volatile TickReport lastReport;
 
+    @Autowired
     public StatsExportService(
             RedissonClient redisson,
             StatsExportProperties props,
@@ -54,6 +59,20 @@ public class StatsExportService {
             ChampionStatsCacheEvictUseCase evictUseCase,
             StatsExportMetrics metrics
     ) {
+        this(redisson, props, staleCleaner, sourceQueries, repo, runner, evictUseCase, metrics, Clock.systemUTC());
+    }
+
+    StatsExportService(
+            RedissonClient redisson,
+            StatsExportProperties props,
+            StaleExecutionCleaner staleCleaner,
+            StatsExportSourceQueries sourceQueries,
+            StatsExportWatermarkRepository repo,
+            StatsExportJobRunner runner,
+            ChampionStatsCacheEvictUseCase evictUseCase,
+            StatsExportMetrics metrics,
+            Clock clock
+    ) {
         this.redisson = redisson;
         this.props = props;
         this.staleCleaner = staleCleaner;
@@ -62,6 +81,7 @@ public class StatsExportService {
         this.runner = runner;
         this.evictUseCase = evictUseCase;
         this.metrics = metrics;
+        this.clock = clock;
     }
 
     public Optional<TickReport> lastReport() {
@@ -126,6 +146,15 @@ public class StatsExportService {
             advanceOrWarn(f, start, end, nowMax, null);
             consecutiveHolds.remove(f);
             return new FactReport(f, FactOutcome.ADVANCED_EMPTY, start, end, 0, "observed_until=" + nowMax);
+        }
+
+        // 상한 O 아래 ID 를 받은 트랜잭션이 커밋될 시간을 보장한다 — 틱 직후 수동 실행이 미커밋 행을 건너뛰지 않게 (설계 5.2)
+        Duration observedAge = Duration.between(w.observedAt(), clock.instant());
+        if (observedAge.compareTo(props.minObserveAge()) < 0) {
+            log.info("stats export 연기: 범위 상한 관측 후 {} 경과 (최소 {}): fact={}, range=[{}, {})",
+                    observedAge, props.minObserveAge(), f.code(), start, end);
+            return new FactReport(f, FactOutcome.DEFERRED, start, end, 0,
+                    "관측 후 " + observedAge + " < min-observe-age " + props.minObserveAge());
         }
 
         List<PatchVersion> patches;

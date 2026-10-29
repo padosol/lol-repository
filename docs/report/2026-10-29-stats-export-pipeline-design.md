@@ -111,6 +111,10 @@ CREATE TABLE IF NOT EXISTS stats_export_watermark (
     last_success_at  TIMESTAMP,
     updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- V5 (가드): observed_until 을 기록한 시각과 재-export 카운터
+ALTER TABLE stats_export_watermark
+    ADD COLUMN observed_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,   -- §5.2 관측 경과 가드
+    ADD COLUMN export_epoch INTEGER     NOT NULL DEFAULT 0;                   -- §11 막힌 범위 복구
 ```
 
 행이 없으면 서비스가 `exported_until = observed_until = lol.stats-export.seed-id`(기본 0)로 만든다 (§12).
@@ -121,12 +125,13 @@ CREATE TABLE IF NOT EXISTS stats_export_watermark (
 E, O  = 워터마크 (exported_until, observed_until)
 nowMax = SELECT COALESCE(MAX(<idCol>), 0) + 1 FROM <table>      -- 잡 실행 '전'에 잰다
 if O > E:
+    if now - observed_at < min-observe-age: DEFERRED → 이 fact 종료 (워터마크·보류 카운터 그대로)
     patches = range_patches ?: 대상 패치 결정 후 range_patches 에 저장 (§6)   -- 보류면 이 fact 종료 (워터마크 그대로)
     if patches 비어 있지 않음:
         run lolStatsExportJob(factType, startId=E, endId=O, season=patches/100, patches)   -- runId = inc-{fact}-{E}-{O}
         성공(COMPLETED, 또는 JobInstanceAlreadyCompleteException) 이 아니면 → 이 fact 종료 (워터마크 그대로)
 UPDATE stats_export_watermark
-   SET exported_until = O, observed_until = nowMax, range_patches = NULL,
+   SET exported_until = O, observed_until = nowMax, observed_at = now(), range_patches = NULL,
        last_run_id = …, last_success_at = now(), updated_at = now()
  WHERE fact_type = :f AND exported_until = :E AND observed_until = :O       -- 낙관적 갱신, 0행이면 경고 로그
 ```
@@ -135,6 +140,8 @@ UPDATE stats_export_watermark
   `saveAll` 한 호출 안에서 수 초~수 분 내 커밋되므로, 2시간 뒤엔 커밋됐거나 롤백(=ID 공백)됐다.
   match 와 participant/타임라인이 서로 다른 트랜잭션이라 생기는 "ID 순서 ≠ 커밋 순서" 문제
   (participant 는 보이는데 타임라인이 아직 → INNER JOIN 으로 영구 누락)를 스키마 변경 없이 없앤다.
+- **관측 경과 가드**: 위 논리는 `O` 를 잰 지 충분히 지났을 때만 성립하므로, 트리거와 무관하게(수동 `/run` 포함)
+  `observed_at` 부터 `lol.stats-export.min-observe-age`(기본 15분)가 지나지 않은 범위는 `DEFERRED` 로 다음 틱에 미룬다.
 - **전제(불변식)**: ID 가 INSERT 시점에 DB 에서 단조 발급되고, 한 번 발급된 ID 아래로 행이 새로 들어오지 않는다.
   다음은 이 설계를 깨므로 금지한다 — 시퀀스 `CACHE > 1`·Hibernate pooled optimizer 전환, 그리고 **워터마크보다 작은
   ID 로 행을 복사해 넣는 데이터 이전**(`public` → `riot` 를 `INSERT … SELECT` 로 하면서 원래 ID 를 유지하는 경우 등).
@@ -293,7 +300,9 @@ gs://{bucket}/match/incremental/{runId}/_manifest.json
 1. 운영 선행 조건(§14) 완료 + 마이그레이션 포함 이미지 배포 (스케줄러 `enabled=false`)
 2. 3개 fact 테이블(`match_fact`, `match_ban_fact`, `match_participant_fact`)을 **전부 비운다** (`TRUNCATE TABLE`).
    테이블 정의·파티셔닝은 그대로 두므로 MV 는 다시 만들 필요 없이 다음 갱신에 비워진다
-3. 워터마크 seed = 0 → `POST /internal/stats-export/run` 2회 (1회차: 관측, 2회차: `riot` 전체 범위에서 대상 패치 export·적재)
+3. 워터마크 seed = 0 → `POST /internal/stats-export/run` 2회 (1회차: 관측, 2회차: `riot` 전체 범위에서 대상 패치 export·적재).
+   2회차는 1회차로부터 **`min-observe-age`(기본 15분) 이상 지난 뒤** 부른다 — 관측 경과 가드(§5.2)가 강제하며,
+   일찍 부른 2회차는 그 fact 를 `DEFERRED` 로 돌려준다(`GET /status` 의 `lastReport` 로 확인)
 4. 페이지 수치 확인 후 스케줄러 `enabled=true`
 
 > 결과적으로 BigQuery 에는 `riot` 에 쌓인 매치 중 대상 패치(최신 N개)만 있다. 이후 패치가 바뀌면 지난 패치 데이터는 그대로 남고

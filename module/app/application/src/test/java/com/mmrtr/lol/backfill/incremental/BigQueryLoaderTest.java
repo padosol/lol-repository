@@ -45,7 +45,7 @@ class BigQueryLoaderTest {
     }
 
     private static StatsExportProperties propsWithLocation(String location) {
-        return new StatsExportProperties(null, null, 0, List.of(), 0L, null, location);
+        return new StatsExportProperties(null, null, 0, List.of(), 0L, null, location, null);
     }
 
     private Job doneJob(boolean failed) throws Exception {
