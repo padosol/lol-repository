@@ -6,7 +6,6 @@ import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRequestAttributes;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -33,10 +32,6 @@ class InterceptorChainTest {
             .options(wireMockConfig().dynamicPort())
             .build();
 
-    // Spring InterceptingRequestExecution 의 iterator 는 단방향이라 retry 의 두 번째 execute 는
-    // 뒤따르는 인터셉터(한도)를 건너뛰고 바로 전송한다 — 재시도는 한도를 다시 받지 않는다 (acquire 1회).
-    // 설계 결정이 필요해 비활성화: retry 와 한도를 한 인터셉터로 합치거나 재시도마다 체인을 새로 타야 한다.
-    @Disabled("Spring 인터셉터 체인이 단방향이라 재시도가 한도 인터셉터를 다시 거치지 않음")
     @Test
     @DisplayName("재시도된 요청은 한도를 다시 받는다")
     void retriedRequest_acquiresAgain() {
@@ -51,15 +46,14 @@ class InterceptorChainTest {
         List<Long> sleeps = new ArrayList<>();
         RiotRateLimitInterceptorTest.FakeLimiter limiter = new RiotRateLimitInterceptorTest.FakeLimiter();
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
-        RetryInterceptor retry = new RetryInterceptor(registry, sleeps::add);
         RiotRateLimitInterceptor rateLimit =
                 new RiotRateLimitInterceptor(limiter, new RiotAPIProperties(), registry);
+        RetryInterceptor retry = new RetryInterceptor(registry, sleeps::add, List.of(rateLimit));
         RestClient client = RestClient.builder()
                 .requestFactory(new JdkClientHttpRequestFactory(
                         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()))
                 .baseUrl(wm.baseUrl())
                 .requestInterceptor(retry)
-                .requestInterceptor(rateLimit)
                 .defaultStatusHandler(HttpStatusCode::is5xxServerError, (req, res) -> {
                     throw new RiotServerException(res.getStatusCode(), res.getStatusText());
                 })

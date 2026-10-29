@@ -14,6 +14,8 @@ import org.springframework.http.client.ClientHttpResponse;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
@@ -28,13 +30,45 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
     private final MeterRegistry meterRegistry;
     private final Sleeper sleeper;
 
+    /** 시도마다 새로 타는 안쪽 인터셉터 (한도 → 로그 → 동시성 순) */
+    private final List<ClientHttpRequestInterceptor> inner;
+
     public RetryInterceptor(MeterRegistry meterRegistry) {
-        this(meterRegistry, Thread::sleep);
+        this(meterRegistry, Thread::sleep, List.of());
+    }
+
+    public RetryInterceptor(MeterRegistry meterRegistry, List<ClientHttpRequestInterceptor> inner) {
+        this(meterRegistry, Thread::sleep, inner);
     }
 
     RetryInterceptor(MeterRegistry meterRegistry, Sleeper sleeper) {
+        this(meterRegistry, sleeper, List.of());
+    }
+
+    RetryInterceptor(MeterRegistry meterRegistry, Sleeper sleeper, List<ClientHttpRequestInterceptor> inner) {
         this.meterRegistry = meterRegistry;
         this.sleeper = sleeper;
+        this.inner = List.copyOf(inner);
+    }
+
+    /**
+     * Spring 의 체인 iterator 는 단방향이라 재시도 시 뒤 인터셉터를 건너뛴다.
+     * 시도마다 안쪽 인터셉터를 새 sub-chain 으로 실행하고, 끝에서 원래 execution 을 호출한다.
+     */
+    private ClientHttpResponse executeAttempt(
+            HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
+        return new SubChain(inner.iterator(), execution).execute(request, body);
+    }
+
+    private record SubChain(Iterator<ClientHttpRequestInterceptor> iterator, ClientHttpRequestExecution last)
+            implements ClientHttpRequestExecution {
+        @Override
+        public ClientHttpResponse execute(HttpRequest request, byte[] body) throws IOException {
+            if (iterator.hasNext()) {
+                return iterator.next().intercept(request, body, this);
+            }
+            return last.execute(request, body);
+        }
     }
 
     @FunctionalInterface
@@ -49,7 +83,7 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
 
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                ClientHttpResponse response = execution.execute(request, body);
+                ClientHttpResponse response = executeAttempt(request, body, execution);
                 HttpStatusCode status = response.getStatusCode();
 
                 recordResponse(status, host);
