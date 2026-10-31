@@ -6,6 +6,8 @@ import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRenewalService;
 import com.mmrtr.lol.infra.redis.service.RedisLockHandler;
 import com.mmrtr.lol.support.aop.TraceLogging;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotCallScope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -42,7 +44,10 @@ public class SummonerRenewalListener {
         }
 
         try {
-            summonerRenewalService.renewSummoner(puuid, platform);
+            // 같은 큐에 사용자 갱신과 티어 수집이 함께 온다. 티어 수집만 background 로 표시된다
+            RiotCallPriority priority = summonerMessage.isBackground()
+                    ? RiotCallPriority.BACKGROUND : RiotCallPriority.USER;
+            RiotCallScope.run(priority, () -> summonerRenewalService.renewSummoner(puuid, platform));
         } catch (Exception e) {
             log.error(e.getMessage());
         } finally {

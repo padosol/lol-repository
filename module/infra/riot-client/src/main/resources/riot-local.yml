@@ -1,2 +1,5 @@
 riot:
   api-key: ${RIOT_API_KEY:}
+  rate-limit:
+    # 개인·개발 키 한도
+    app-default: "20:1,100:120"

@@ -19,14 +19,23 @@ public class SummonerCollectionPublishAdapter implements SummonerCollectionPubli
 
     @Override
     public void publishForRenewal(List<String> puuids, String platformName) {
+        publish(puuids, platformName, false);
+    }
+
+    @Override
+    public void publishForCollection(List<String> puuids, String platformName) {
+        publish(puuids, platformName, true);
+    }
+
+    private void publish(List<String> puuids, String platformName, boolean background) {
         for (String puuid : puuids) {
-            SummonerMessage message = new SummonerMessage(platformName, puuid, 0L);
+            SummonerMessage message = new SummonerMessage(platformName, puuid, 0L, background);
             rabbitTemplate.convertAndSend(
                     RabbitMqBinding.SUMMONER.getExchange(),
                     RabbitMqBinding.SUMMONER.getRoutingKey(),
                     message
             );
         }
-        log.debug("[MQ 발행] {}명 발행 완료, platform={}", puuids.size(), platformName);
+        log.debug("[MQ 발행] {}명 발행 완료, platform={}, background={}", puuids.size(), platformName, background);
     }
 }

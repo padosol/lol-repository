@@ -11,6 +11,8 @@ import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotCallScope;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -106,6 +110,32 @@ class SummonerRankingCalculationServiceTest {
         // then
         verify(summonerRankingRepositoryPort).replaceAllRankings(eq(QUEUE), anyList());
         verifyNoInteractions(tierCutoffRepositoryPort);
+    }
+
+    @Test
+    @DisplayName("Riot 호출(최상위 리그·미등록 소환사 조회)은 BACKGROUND 스코프에서 한다")
+    void processQueueRanking_riotCallsUnderBackground() {
+        // given
+        List<RiotCallPriority> seen = new ArrayList<>();
+        when(leagueApiPort.getApexEntries(QUEUE, "KR")).thenAnswer(inv -> {
+            seen.add(RiotCallScope.current());
+            return Map.of(
+                    Tier.CHALLENGER, List.of(entry(CHALLENGER_PUUID, 1500)),
+                    Tier.GRANDMASTER, List.of(entry(GRANDMASTER_PUUID, 700)));
+        });
+        when(summonerRepositoryPort.findAllByPuuidIn(anyCollection())).thenReturn(
+                new HashMap<>(Map.of(CHALLENGER_PUUID, summoner(CHALLENGER_PUUID, "챌린저"))));
+        when(summonerService.getSummonerByPuuid("KR", GRANDMASTER_PUUID)).thenAnswer(inv -> {
+            seen.add(RiotCallScope.current());
+            return summoner(GRANDMASTER_PUUID, "그랜드마스터");
+        });
+
+        // when
+        summonerRankingCalculationService.processQueueRanking(QUEUE, false);
+
+        // then
+        assertThat(seen).containsExactly(RiotCallPriority.BACKGROUND, RiotCallPriority.BACKGROUND);
+        assertThat(RiotCallScope.current()).isEqualTo(RiotCallPriority.USER);
     }
 
     private static LeagueEntry entry(String puuid, int leaguePoints) {

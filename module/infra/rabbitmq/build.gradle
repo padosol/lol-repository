@@ -3,6 +3,7 @@ dependencies {
     implementation project(':module:domain:match')
     implementation project(':module:domain:league')
     implementation project(':module:shared')
+    implementation project(':module:common')  // RiotCallScope
     implementation project(':module:infra:redis')
     implementation project(':module:infra:riot-client')  // 비매치 API (account, summoner, league)
     implementation project(':module:support:logging')
@@ -12,4 +13,6 @@ dependencies {
 
     // Redisson
     implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+
+    testImplementation 'org.springframework:spring-web'  // 테스트에서 RiotServerException 의 HttpStatus
 }

@@ -137,20 +137,29 @@ domain/
 
 ## Rate Limiting & 배치 삽입
 
-Riot API Rate Limit 은 **3-단계 디펜스** 로 보호합니다:
+Riot API 호출 한도는 `RiotRateLimitInterceptor` 가 `RedisRiotRateLimiter`(Redis Lua, 키 `riot:rl:*`)로 지킨다.
+카운터가 Redis 에 있어 모든 인스턴스가 같은 예산을 나눠 쓰고, 재시작해도 이어서 센다.
 
-1. **소비 속도 제한 (글로벌)** — `ListenerRateLimiterConfig` 가 Redisson `RRateLimiter`
-   `global:api:call:limiter` 를 **20 req/s** 로 설정. 모든 Riot 호출 직전에 토큰 획득.
-2. **호스트별 Rate Limiter** — `RateLimitInterceptor` 가 요청 호스트를
-   `HostRateLimitResolver` 로 분류해 각각 분산 RateLimiter 적용.
+1. **호출 우선순위** — 호출 스레드의 `RiotCallScope` 로 정하고 RestClient attribute 로 실어 보낸다 (스코프 밖이면 `USER`).
 
-   | 종류 | 호스트 예시 | 제한 |
-   |------|-------------|------|
-   | `REGION_RATE_LIMITER` | `asia.api.riotgames.com`, `europe.api.riotgames.com` 등 | 460 req / 10 s |
-   | `PLATFORM_RATE_LIMITER` | `kr.api.riotgames.com` 등 플랫폼 | 450 req / 10 s |
+   | 우선순위 | 호출 | 한도가 찼을 때 |
+   |---|---|---|
+   | `USER` | 사용자 갱신(`mmrtr.summoner` 의 `background=false` 메시지), 공개 API 동기 조회 | 다음 빈 초를 예약(최대 `lookahead-seconds`)하고 그만큼 기다렸다 보낸다 |
+   | `DEFERRED` | (예약) 갱신 뒤 나머지 timeline | 이번 초에 자리가 있을 때만 가져가고, 아니면 양보하며 최대 60초 기다린다 |
+   | `BACKGROUND` | 매치 상세·백필, 티어 수집 갱신(`background=true`), 최상위 랭킹 계산 | `DEFERRED` 와 같되 최대 30초. 위 우선순위가 쓰는 중이면 양보한다 |
 
-3. **동시성 제한** — `RiotApiConfig` 의 `Semaphore(20)` 인터셉터로 동시 요청 수를
-   상한 20 으로 고정.
+   `DEFERRED`·`BACKGROUND` 는 USER 몫(`reserve-ratio`)을 남기고 가져간다. 대기 상한을 넘으면
+   `RiotBudgetExceededException` 으로 보내지 않고 끝나며, 매치 수집은 이 경우와 fetch 시간 초과를 requeue 한다.
+2. **routing 별 app·method 버킷** — 한 호출은 그 routing(`asia`, `kr` …)의 app 버킷과 method 버킷을 모두 통과해야 나간다.
+   한도는 응답 헤더(`X-App-Rate-Limit`·`X-Method-Rate-Limit`)에서 배워 Redis 에 두고, 아직 못 본 app 한도는
+   `riot.rate-limit.app-default` 를 쓴다. 초당 허용치 = `floor(한도 × 0.9 ÷ 창 길이)` 로 10% 여유를 둬
+   Riot 창이 1초 칸 경계에 걸쳐도 한도를 넘지 않는다.
+3. **429·근접 정지** — 429 를 받으면 `Retry-After` 동안 해당 버킷(`application` 이면 app, 그 밖은 method)을
+   Redis 키로 정지시켜 모든 인스턴스가 함께 멈춘다. 응답 Count 헤더가 한도의 95% 이상이면 1초 정지한다.
+   메트릭: `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별), `riot.ratelimit.near_limit{routing,scope}`,
+   `riot.ratelimit.wait`, `riot.ratelimit.rejected`.
+4. **재시도도 한도를 다시 받는다** — `RetryInterceptor`(429/5xx/IOException backoff)가 가장 바깥에서 시도마다
+   한도 → 로그 인터셉터를 새로 태운다. 허가 뒤에는 대기 단계를 두지 않는다 (허가받은 초를 넘겨 보내지 않게).
 
 PostgreSQL 적재는 두 단계로 흡수:
 - **인-메모리 큐 + 1 초 flush** — `MatchBatchProcessor` 가 매치를 모아 `@Scheduled(fixedRate=1000)` 로 일괄 flush.

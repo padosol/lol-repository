@@ -12,6 +12,8 @@ import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.infra.persistence.league.repository.MostChampionProjection;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotCallScope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -48,6 +50,11 @@ public class SummonerRankingCalculationService {
      *                         false 면 랭킹만 교체하고 기존 커트라인은 그대로 유지한다.
      */
     public void processQueueRanking(String queue, boolean updateTierCutoff) {
+        // 스케줄 작업이라 Riot 호출을 사용자 요청보다 뒤로 미룬다
+        RiotCallScope.run(RiotCallPriority.BACKGROUND, () -> calculateQueueRanking(queue, updateTierCutoff));
+    }
+
+    private void calculateQueueRanking(String queue, boolean updateTierCutoff) {
         try {
             // 잔존 백업 데이터 방어적 정리
             summonerRankingRepositoryPort.clearBackup(queue);
