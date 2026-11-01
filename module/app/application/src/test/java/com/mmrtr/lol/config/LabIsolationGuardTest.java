@@ -1,0 +1,103 @@
+package com.mmrtr.lol.config;
+
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
+
+class LabIsolationGuardTest {
+
+    private MockEnvironment labEnv() {
+        return new MockEnvironment()
+                .withProperty("spring.datasource.url",
+                        "jdbc:postgresql://localhost:5432/lol_lab?currentSchema=riot&tcpKeepAlive=true")
+                .withProperty("spring.data.redis.database", "1")
+                .withProperty("spring.rabbitmq.virtual-host", "lab")
+                .withProperty("riot.api-key", "lab-key")
+                .withProperty("riot.mock.base-url", "http://localhost:8099");
+    }
+
+    @Test
+    @DisplayName("생성_모두맞으면_통과")
+    void 생성_모두맞으면_통과() {
+        assertThatCode(() -> new LabIsolationGuard(labEnv())).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("생성_datasource가_lol_lab이_아니면_실패하고_값은_메시지에_없다")
+    void 생성_datasource가_lol_lab이_아니면_실패() {
+        MockEnvironment env = labEnv().withProperty("spring.datasource.url",
+                "jdbc:postgresql://secrethost:5432/postgres?currentSchema=riot");
+
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("spring.datasource.url")
+                .hasMessageNotContaining("secrethost");
+    }
+
+    @Test
+    @DisplayName("생성_datasource가_lol_lab으로_끝나도_통과")
+    void 생성_datasource가_lol_lab으로_끝나도_통과() {
+        MockEnvironment env = labEnv().withProperty("spring.datasource.url", "jdbc:postgresql://localhost:5432/lol_lab");
+
+        assertThatCode(() -> new LabIsolationGuard(env)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("생성_lol_lab_snapshot_같은_접두사_DB는_실패")
+    void 생성_lol_lab_snapshot_같은_접두사_DB는_실패() {
+        MockEnvironment env = labEnv().withProperty("spring.datasource.url",
+                "jdbc:postgresql://localhost:5432/lol_lab_snapshot?currentSchema=riot");
+
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .hasMessageContaining("spring.datasource.url");
+    }
+
+    @Test
+    @DisplayName("생성_redis_database가_1이_아니면_실패")
+    void 생성_redis_database가_1이_아니면_실패() {
+        MockEnvironment env = labEnv().withProperty("spring.data.redis.database", "0");
+
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .hasMessageContaining("spring.data.redis.database");
+    }
+
+    @Test
+    @DisplayName("생성_속성이_하나도_없으면_실패")
+    void 생성_속성이_하나도_없으면_실패() {
+        assertThatThrownBy(() -> new LabIsolationGuard(new MockEnvironment()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("spring.datasource.url")
+                .hasMessageContaining("riot.mock.base-url");
+    }
+
+    @Test
+    @DisplayName("생성_vhost가_lab이_아니면_실패")
+    void 생성_vhost가_lab이_아니면_실패() {
+        MockEnvironment env = labEnv().withProperty("spring.rabbitmq.virtual-host", "/");
+
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .hasMessageContaining("spring.rabbitmq.virtual-host");
+    }
+
+    @Test
+    @DisplayName("생성_api키가_다르면_실패하고_값은_메시지에_없다")
+    void 생성_api키가_다르면_실패하고_값은_메시지에_없다() {
+        MockEnvironment env = labEnv().withProperty("riot.api-key", "RGAPI-test");
+
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .hasMessageContaining("riot.api-key")
+                .hasMessageNotContaining("RGAPI");
+    }
+
+    @Test
+    @DisplayName("생성_mock_base_url이_비어있으면_실패")
+    void 생성_mock_base_url이_비어있으면_실패() {
+        MockEnvironment env = labEnv().withProperty("riot.mock.base-url", "");
+
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .hasMessageContaining("riot.mock.base-url");
+    }
+}

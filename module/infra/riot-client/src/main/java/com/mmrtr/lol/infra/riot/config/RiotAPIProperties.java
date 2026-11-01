@@ -16,6 +16,15 @@ public class RiotAPIProperties {
     private int retryAttempts = 2;
     private int retryDelay = 2;
     private RateLimit rateLimit = new RateLimit();
+    private Mock mock = new Mock();
+
+    /** 가짜 Riot 서버 ({@code riot.mock.*}). lab 프로파일 전용. */
+    @Getter
+    @Setter
+    public static class Mock {
+        /** 비어 있으면 실제 Riot 으로 보낸다. */
+        private String baseUrl;
+    }
 
     /** Riot 호출 한도 관리 설정 ({@code riot.rate-limit.*}). */
     @Getter

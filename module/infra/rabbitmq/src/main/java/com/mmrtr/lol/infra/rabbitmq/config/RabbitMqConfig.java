@@ -37,6 +37,9 @@ public class RabbitMqConfig {
     @Value("${spring.rabbitmq.password}")
     private String rabbitmqPassword;
 
+    @Value("${spring.rabbitmq.virtual-host:/}")
+    private String rabbitmqVirtualHost;
+
     @Bean
     public Queue summonerQueue() {
         return QueueBuilder.durable(RabbitMqBinding.SUMMONER.getQueue())
@@ -139,6 +142,7 @@ public class RabbitMqConfig {
         connectionFactory.setPort(rabbitmqPort);
         connectionFactory.setUsername(rabbitmqUsername);
         connectionFactory.setPassword(rabbitmqPassword);
+        connectionFactory.setVirtualHost(rabbitmqVirtualHost);
         connectionFactory.setRequestedHeartBeat(60);
 
         return connectionFactory;

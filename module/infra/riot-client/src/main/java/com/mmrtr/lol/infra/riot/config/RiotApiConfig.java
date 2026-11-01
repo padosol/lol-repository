@@ -13,14 +13,17 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
@@ -34,6 +37,7 @@ public class RiotApiConfig {
     private final RiotAPIProperties riotAPIProperties;
     private final RiotRateLimiter riotRateLimiter;
     private final MeterRegistry meterRegistry;
+    private final Environment environment;
 
     @Bean
     public RestClient riotRestClient() {
@@ -43,6 +47,14 @@ public class RiotApiConfig {
 
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(riotAPIProperties.getReadTimeout()));
+
+        ClientHttpRequestFactory effectiveFactory = requestFactory;
+        String mockBaseUrl = riotAPIProperties.getMock().getBaseUrl();
+        RiotMockGuard.assertAllowed(mockBaseUrl, environment.getActiveProfiles());
+        if (mockBaseUrl != null && !mockBaseUrl.isBlank()) {
+            effectiveFactory = new RiotMockRedirectRequestFactory(requestFactory, URI.create(mockBaseUrl));
+            log.warn("Riot 요청을 가짜 서버({})로 보냅니다", mockBaseUrl);
+        }
 
         RiotRateLimitInterceptor rateLimitInterceptor = new RiotRateLimitInterceptor(
                 riotRateLimiter, riotAPIProperties, meterRegistry);
@@ -55,7 +67,7 @@ public class RiotApiConfig {
         // 3. logRequest (로깅)
         // 허가 뒤에 대기 단계를 두지 않는다. 허가받은 초를 넘겨 보내면 Riot 창에서 몰려 한도를 넘을 수 있다.
         return RestClient.builder()
-                .requestFactory(requestFactory)
+                .requestFactory(effectiveFactory)
                 .defaultHeader("X-Riot-Token", riotAPIProperties.getApiKey())
                 .defaultHeader("User-Agent", "MMRTR")
                 .defaultHeader("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
