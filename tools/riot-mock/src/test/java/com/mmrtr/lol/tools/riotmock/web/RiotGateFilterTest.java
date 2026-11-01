@@ -8,11 +8,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mmrtr.lol.tools.riotmock.world.LabIds;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 
 class RiotGateFilterTest extends LabWebTestSupport {
+
+    @Autowired
+    private MeterRegistry registry;
 
     private static final String MATCH_PATH = "/asia/lol/match/v5/matches/" + LabIds.sharedMatchId(0, 0);
 
@@ -58,16 +64,39 @@ class RiotGateFilterTest extends LabWebTestSupport {
     }
 
     @Test
-    @DisplayName("모르는 경로는 404이고 unknown 지표가 오른다")
-    void doFilter_모르는경로_404와_unknown지표() throws Exception {
-        // given // when
+    @DisplayName("모르는 경로는 404이고 그 routing의 app 한도로 세며 method 헤더는 없다")
+    void doFilter_모르는경로_404와_그routing_app버킷() throws Exception {
+        // given
+        double before = unknownCount("asia");
+
+        // when
         mvc.perform(get("/asia/lol/nope/v1/x").header("X-Riot-Token", "lab-key"))
                 .andExpect(status().isNotFound())
-                .andExpect(header().string("X-App-Rate-Limit-Count", "1:10"));
+                .andExpect(header().string("X-App-Rate-Limit-Count", "1:10"))
+                .andExpect(header().doesNotExist("X-Method-Rate-Limit"))
+                .andExpect(header().doesNotExist("X-Method-Rate-Limit-Count"));
         metrics.refresh();
 
         // then
-        assertThat(scrape()).contains("riot_mock_unknown_total{routing=\"unknown\"} 1.0");
+        assertThat(unknownCount("asia") - before).isEqualTo(1.0);
+        assertThat(engine.usage()).extracting("bucket").containsExactly("asia|app");
+        assertThat(tracker.peak("asia", 10)).isEqualTo(1);
+        assertThat(scrape()).contains("riot_mock_window_count{bucket=\"asia|app\",window=\"10\"} 1.0");
+    }
+
+    @Test
+    @DisplayName("모르는 경로가 한도를 넘어 429여도 unknown 지표가 오르고 type은 application이다")
+    void doFilter_모르는경로_429도_unknown지표() throws Exception {
+        // given
+        mvc.perform(put("/admin/limits").contentType(MediaType.APPLICATION_JSON).content("{\"app\":\"1:10\"}"));
+        mvc.perform(get("/asia/nope").header("X-Riot-Token", "lab-key")).andExpect(status().isNotFound());
+        double before = unknownCount("asia");
+
+        // when // then
+        mvc.perform(get("/asia/nope").header("X-Riot-Token", "lab-key"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("X-Rate-Limit-Type", "application"));
+        assertThat(unknownCount("asia") - before).isEqualTo(1.0);
     }
 
     @Test
@@ -99,6 +128,11 @@ class RiotGateFilterTest extends LabWebTestSupport {
 
         // then
         assertThat(scrape()).contains("riot_mock_window_count{bucket=\"asia|app\",window=\"10\"} 0.0");
+    }
+
+    private double unknownCount(String routing) {
+        Counter c = registry.find("riot_mock_unknown_total").tag("routing", routing).counter();
+        return c == null ? 0.0 : c.count();
     }
 
     private String scrape() throws Exception {

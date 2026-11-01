@@ -63,6 +63,23 @@ public class RateLimitEngine {
                 appLimit, appCount, methodLimit, methodCount);
     }
 
+    /** 구현하지 않은 경로용: 그 routing 의 application 버킷만 센다. method 헤더는 null 이다. */
+    public synchronized Verdict acquireAppOnly(String routing) {
+        long now = clockMillis.getAsLong();
+        String appBucket = routing + "|app";
+        List<LimitSpec> appSpecs = LimitSpec.parseAll(appLimit);
+        long[] appFull = fullness(appBucket, appSpecs, now);
+        boolean allowed = appFull[0] == 0;
+        if (allowed || countRejected) {
+            increment(appBucket, appSpecs);
+        }
+        String appCount = counts(appBucket, appSpecs);
+        if (allowed) {
+            return new Verdict(true, null, 0, appLimit, appCount, null, null);
+        }
+        return new Verdict(false, APPLICATION, Math.max(1, (appFull[1] + 999) / 1000), appLimit, appCount, null, null);
+    }
+
     /** 창을 열거나 갱신하고, {가득 찬 창이 있으면 1, 찬 창들의 남은 ms 최댓값} 을 돌려준다. */
     private long[] fullness(String bucket, List<LimitSpec> specs, long now) {
         Map<Integer, long[]> byWindow = windows.computeIfAbsent(bucket, k -> new HashMap<>());

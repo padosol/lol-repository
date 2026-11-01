@@ -12,6 +12,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -26,6 +28,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class RiotGateFilter extends OncePerRequestFilter {
 
     private static final String UNKNOWN_ROUTING = "unknown";
+    private static final Pattern ROUTING_SEGMENT = Pattern.compile("^/([a-z0-9]+)(?:/|$)");
     private static final String UNAUTHORIZED_BODY = "{\"status\":{\"message\":\"Unauthorized\",\"status_code\":401}}";
     private static final String RATE_LIMITED_BODY = "{\"status\":{\"message\":\"Rate limit exceeded\",\"status_code\":429}}";
 
@@ -61,21 +64,27 @@ public class RiotGateFilter extends OncePerRequestFilter {
 
         String path = rawPath(request);
         Optional<RiotEndpoint.Match> match = RiotEndpoint.match(path);
-        String routing = match.map(RiotEndpoint.Match::routing).orElse(UNKNOWN_ROUTING);
+        String routing = match.map(RiotEndpoint.Match::routing).orElseGet(() -> firstSegment(path));
         String endpointKey = match.map(m -> m.endpoint().key()).orElse(RiotEndpoint.UNKNOWN_KEY);
 
-        Verdict verdict = engine.acquire(routing, endpointKey);
+        // 구현하지 않은 경로도 Riot 처럼 그 routing 의 application 한도에 센다. method 버킷은 만들지 않는다.
+        Verdict verdict = match.isPresent() ? engine.acquire(routing, endpointKey) : engine.acquireAppOnly(routing);
         tracker.record(routing);
         response.setHeader("X-App-Rate-Limit", verdict.appLimit());
         response.setHeader("X-App-Rate-Limit-Count", verdict.appCount());
-        response.setHeader("X-Method-Rate-Limit", verdict.methodLimit());
-        response.setHeader("X-Method-Rate-Limit-Count", verdict.methodCount());
+        if (verdict.methodLimit() != null) {
+            response.setHeader("X-Method-Rate-Limit", verdict.methodLimit());
+            response.setHeader("X-Method-Rate-Limit-Count", verdict.methodCount());
+        }
 
         if (!verdict.allowed()) {
             response.setHeader("Retry-After", String.valueOf(verdict.retryAfterSeconds()));
             response.setHeader("X-Rate-Limit-Type", verdict.limitType());
             write(response, 429, RATE_LIMITED_BODY);
             metrics.recordRateLimited(routing, verdict.limitType());
+            if (match.isEmpty()) {
+                metrics.recordUnknown(routing);
+            }
             metrics.recordRequest(routing, endpointKey, 429);
             return;
         }
@@ -100,6 +109,12 @@ public class RiotGateFilter extends OncePerRequestFilter {
         } finally {
             metrics.recordRequest(routing, endpointKey, response.getStatus());
         }
+    }
+
+    /** 첫 경로 조각이 routing 형식이면 그 값, 아니면 unknown. 태그 값이 무한히 늘지 않게 형식을 제한한다. */
+    private static String firstSegment(String path) {
+        Matcher m = ROUTING_SEGMENT.matcher(path);
+        return m.find() ? m.group(1) : UNKNOWN_ROUTING;
     }
 
     private static String rawPath(HttpServletRequest request) {
