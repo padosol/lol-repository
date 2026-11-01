@@ -184,6 +184,10 @@ method 한도 기본값은 임의값이다. 운영 키의 실제 값이 아니�
     - 재방문 풀 소환사 n 은 epoch e 에서 새 게임 K(n, e)개를 더 가진다. K 는 (n, e)에서 결정적으로 뽑는다.
     - K 기본 분포는 0개 30%, 1개 40%, 2개 20%, 3개 10% 다. 운영 측정값이 아니라 임의값이다. 운영 로그(`[갱신-API] fetchNewMatchIds count=`)로 분포를 재면 그 값으로 바꾼다.
     - 같은 실행 안에서는 몇 번을 불러도 같은 목록이 나온다. 그래서 실행마다 부하가 같고, Plan 2 전후를 같은 조건으로 비교할 수 있다.
+    - epoch 0 에서는 모든 소환사의 K 가 0 이다. seed 는 epoch 0 에서 돈다.
+  - summoner-v4 의 `revisionDate` 는 그 소환사의 가장 최근 게임 끝 시각이다.
+    - 앱은 revisionDate 가 그대로면 첫 호출에서 갱신을 끝낸다.
+    - 그래서 새 게임이 0개인 재갱신은 Riot 을 1번만 부른다.
 - **매치·타임라인 JSON**
   - 앱의 readmodel DTO 를 그대로 직렬화해 만든다. 그래서 앱이 반드시 읽을 수 있다.
   - 값은 그럴듯해야 한다: 큐 420/440, 현재 패치의 `gameVersion`, 실제 챔피언 ID 범위 등. 저장·통계 경로에서 거부되면 안 된다.
@@ -216,6 +220,16 @@ method 한도 기본값은 임의값이다. 운영 키의 실제 값이 아니�
 **격리 — 안티목표 3**
 
 - 실험실은 따로 쓴다: Postgres DB `lol_lab` (Flyway 가 `riot` 스키마를 만든다), Redis DB 1, RabbitMQ vhost `lab`.
+- 지금은 Redis DB 번호와 vhost 를 설정으로 바꿀 수 없다.
+  - `RedissonConfig` 와 `RabbitMqConfig.connectionFactory()` 가 연결을 직접 만들면서 `spring.data.redis.database`·`spring.rabbitmq.virtual-host` 를 읽지 않는다.
+  - 두 키를 읽게 고친다. 기본값은 지금과 같은 0 과 `/` 다.
+- **격리 확인:** lab 프로파일로 뜰 때 다음을 확인하고, 하나라도 다르면 기동에 실패한다.
+  - datasource URL 이 `lol_lab` 을 가리킨다.
+  - Redis DB 가 1 이다.
+  - vhost 가 `lab` 이다.
+  - Riot API 키가 `lab-key` 다.
+  - 이렇게 확인하는 이유: 루트 `.env` 의 환경변수(예: `SPRING_DATASOURCE_URL`)는 프로파일 yml 보다 우선한다. 그래서 설정 파일만 믿으면 평소 local DB 로 실험이 돌 수 있다.
+- **lab 표시:** `/actuator/info` 에 `lab: true` 를 노출한다. `lab.sh` 는 이걸 확인한 뒤에만 부하를 준다.
 - `lab.sh reset` 으로 통째로 지운다.
 
 **한도 설정과 지표**
@@ -261,7 +275,6 @@ method 한도 기본값은 임의값이다. 운영 키의 실제 값이 아니�
 - `compose.yml`
 - `prometheus/prometheus.yml`
 - `grafana/provisioning/…`, `grafana/dashboards/*.json`
-- `rabbitmq/definitions.json` (vhost `lab`)
 - `k6/*.js`
 - `lab.sh`
 
@@ -282,7 +295,7 @@ method 한도 기본값은 임의값이다. 운영 키의 실제 값이 아니�
 - 데이터소스와 대시보드는 파일로 프로비저닝한다. 운영 lol-deploy 처럼 대시보드는 git 이 소유한다. 그래야 나중에 lol-deploy 로 옮기기 쉽다.
 - 기본 홈 화면은 실험실 대시보드다.
 
-**RabbitMQ:** 3.13 이미지의 prometheus 플러그인을 쓴다. 꺼져 있으면 `enabled_plugins` 로 켠다.
+**RabbitMQ:** 3.13 이미지의 prometheus 플러그인을 쓴다. `lab.sh up` 이 `rabbitmqctl` 로 vhost `lab` 과 권한을 만들고, 플러그인이 꺼져 있으면 켠다.
 
 **포트**
 
@@ -364,9 +377,9 @@ method 한도 기본값은 임의값이다. 운영 키의 실제 값이 아니�
   2. 두 풀의 Riot ID 를 모두 앱의 Riot ID 조회 API 로 조회해 소환사를 만든다. 실제 경로를 탄다.
   3. 재방문 풀은 한 번씩 갱신하고, 백필까지 끝날 때(큐가 빌 때)를 기다린다.
   4. 가짜 서버 한도를 `500:10` 으로 되돌린다.
-  5. `lol_lab` DB 를 스냅숏으로 뜬다 (`pg_dump`).
+  5. `lol_lab` DB 를 템플릿 DB(`lol_lab_snapshot`)로 복사해 둔다. `pg_dump` 보다 빠르다.
 - **실행할 때마다: `lab.sh run <시나리오>`**
-  1. DB 를 스냅숏으로 되돌린다.
+  1. 앱 연결을 끊고 `lol_lab` 을 지운 뒤 `lol_lab_snapshot` 에서 다시 만든다. 앱의 커넥션 풀은 다시 연결한다.
   2. Redis DB 1 을 비운다. 앱이 seed 동안 배운 큰 한도 값도 이때 지워진다.
   3. 실험실 vhost 의 큐를 모두 비운다.
   4. 가짜 서버를 reset 해 epoch 를 올린다.
@@ -426,7 +439,7 @@ method 한도 기본값은 임의값이다. 운영 키의 실제 값이 아니�
 | `load <시나리오>` | 부하만 |
 | `verify <시나리오>` | 판정만 |
 | `run <시나리오>` | 스냅숏 복원 → Redis DB 1·큐 비우기 → 가짜 서버 reset → 부하 → 판정 |
-| `limit <routing> <한도>` | 가짜 서버 application 한도 변경 |
+| `limit <한도>` | 가짜 서버 application 한도 변경 (모든 routing 에 같이 적용) |
 | `chaos <프리셋>` | 장애 프리셋 적용 |
 | `reset` | 실험실 DB·vhost·Redis DB 1·가짜 서버 초기화 |
 | `urls` | 화면 주소 출력 |
@@ -450,7 +463,7 @@ method 한도 기본값은 임의값이다. 운영 키의 실제 값이 아니�
    - **실험실 구현은 두 PR 이 머지된 뒤 develop 에서 시작한다. 그 브랜치 위에 쌓지 않는다.**
      - 실험실은 #135 의 Redis 키 구조(`riot:rl:limits`, `riot:rl:c:{bucket}:{W}:{idx}`, `riot:rl:pause:*`), 지표 이름(`riot.ratelimit.*`, `riot.api.rate_limited`), `RateLimitWindow.parse` 에 직접 기댄다.
      - 리뷰에서 이것들이 바뀌면 gauge 와 계약 테스트를 다시 해야 한다.
-     - 머지 전에 꼭 시작해야 하면 #135 위에 쌓고, #135 가 바뀔 때마다 rebase 한다.
+     - 머지 전에 꼭 시작해야 하면 #135 브랜치 위에 쌓는다. #135 가 바뀌면 rebase 하지 않고 merge 로 따라간다 (force-push 금지).
 1. **1단계 "실험실 기반"** → G1·G2 확인
    - riot-mock 과 테스트
    - lab 프로파일: 목적지 바꾸기, 안전장치, 격리
