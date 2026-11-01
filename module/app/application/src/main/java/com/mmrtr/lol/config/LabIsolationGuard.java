@@ -4,9 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
-import org.springframework.stereotype.Component;
 
 /**
  * lab 프로파일이 실험실 격리(DB lol_lab, Redis DB 1, vhost lab, 키 lab-key, 가짜 서버 주소) 위에서만 돈다는 걸 기동 때 강제한다.
@@ -14,10 +12,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>BeanFactoryPostProcessor 로 만든 이유: BFPP 는 일반 싱글톤보다 먼저 생성된다. 그래서 DataSource·Flyway(어느 DB든 마이그레이션해 버린다)·
  * Redisson·Rabbit 리스너가 만들어지기 전에 실패해, 격리가 깨진 실행이 평소 인프라를 건드리지 못한다.
+ * 생성자 주입은 BFPP 단계에서 동작하지 않으므로 {@link LabIsolationConfig} 가 static 빈으로 등록한다.
  * 메시지에는 속성 이름과 기대값만 쓰고 실제 값은 쓰지 않는다.
  */
-@Component
-@Profile("lab")
 public class LabIsolationGuard implements BeanFactoryPostProcessor {
 
     public LabIsolationGuard(Environment env) {

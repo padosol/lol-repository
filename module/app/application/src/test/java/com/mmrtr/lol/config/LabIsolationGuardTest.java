@@ -22,15 +22,21 @@ class LabIsolationGuardTest {
     @Test
     @DisplayName("생성_모두맞으면_통과")
     void 생성_모두맞으면_통과() {
-        assertThatCode(() -> new LabIsolationGuard(labEnv())).doesNotThrowAnyException();
+        // given
+        MockEnvironment env = labEnv();
+
+        // when // then
+        assertThatCode(() -> new LabIsolationGuard(env)).doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("생성_datasource가_lol_lab이_아니면_실패하고_값은_메시지에_없다")
-    void 생성_datasource가_lol_lab이_아니면_실패() {
+    void 생성_datasource가_lol_lab이_아니면_실패하고_값은_메시지에_없다() {
+        // given
         MockEnvironment env = labEnv().withProperty("spring.datasource.url",
                 "jdbc:postgresql://secrethost:5432/postgres?currentSchema=riot");
 
+        // when // then
         assertThatThrownBy(() -> new LabIsolationGuard(env))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("spring.datasource.url")
@@ -40,17 +46,21 @@ class LabIsolationGuardTest {
     @Test
     @DisplayName("생성_datasource가_lol_lab으로_끝나도_통과")
     void 생성_datasource가_lol_lab으로_끝나도_통과() {
+        // given
         MockEnvironment env = labEnv().withProperty("spring.datasource.url", "jdbc:postgresql://localhost:5432/lol_lab");
 
+        // when // then
         assertThatCode(() -> new LabIsolationGuard(env)).doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("생성_lol_lab_snapshot_같은_접두사_DB는_실패")
     void 생성_lol_lab_snapshot_같은_접두사_DB는_실패() {
+        // given
         MockEnvironment env = labEnv().withProperty("spring.datasource.url",
                 "jdbc:postgresql://localhost:5432/lol_lab_snapshot?currentSchema=riot");
 
+        // when // then
         assertThatThrownBy(() -> new LabIsolationGuard(env))
                 .hasMessageContaining("spring.datasource.url");
     }
@@ -58,8 +68,10 @@ class LabIsolationGuardTest {
     @Test
     @DisplayName("생성_redis_database가_1이_아니면_실패")
     void 생성_redis_database가_1이_아니면_실패() {
+        // given
         MockEnvironment env = labEnv().withProperty("spring.data.redis.database", "0");
 
+        // when // then
         assertThatThrownBy(() -> new LabIsolationGuard(env))
                 .hasMessageContaining("spring.data.redis.database");
     }
@@ -67,7 +79,11 @@ class LabIsolationGuardTest {
     @Test
     @DisplayName("생성_속성이_하나도_없으면_실패")
     void 생성_속성이_하나도_없으면_실패() {
-        assertThatThrownBy(() -> new LabIsolationGuard(new MockEnvironment()))
+        // given
+        MockEnvironment env = new MockEnvironment();
+
+        // when // then
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("spring.datasource.url")
                 .hasMessageContaining("riot.mock.base-url");
@@ -76,8 +92,10 @@ class LabIsolationGuardTest {
     @Test
     @DisplayName("생성_vhost가_lab이_아니면_실패")
     void 생성_vhost가_lab이_아니면_실패() {
+        // given
         MockEnvironment env = labEnv().withProperty("spring.rabbitmq.virtual-host", "/");
 
+        // when // then
         assertThatThrownBy(() -> new LabIsolationGuard(env))
                 .hasMessageContaining("spring.rabbitmq.virtual-host");
     }
@@ -85,8 +103,10 @@ class LabIsolationGuardTest {
     @Test
     @DisplayName("생성_api키가_다르면_실패하고_값은_메시지에_없다")
     void 생성_api키가_다르면_실패하고_값은_메시지에_없다() {
+        // given
         MockEnvironment env = labEnv().withProperty("riot.api-key", "RGAPI-test");
 
+        // when // then
         assertThatThrownBy(() -> new LabIsolationGuard(env))
                 .hasMessageContaining("riot.api-key")
                 .hasMessageNotContaining("RGAPI");
@@ -95,8 +115,10 @@ class LabIsolationGuardTest {
     @Test
     @DisplayName("생성_mock_base_url이_비어있으면_실패")
     void 생성_mock_base_url이_비어있으면_실패() {
+        // given
         MockEnvironment env = labEnv().withProperty("riot.mock.base-url", "");
 
+        // when // then
         assertThatThrownBy(() -> new LabIsolationGuard(env))
                 .hasMessageContaining("riot.mock.base-url");
     }

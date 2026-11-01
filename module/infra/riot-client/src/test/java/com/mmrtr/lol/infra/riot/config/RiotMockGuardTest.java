@@ -27,6 +27,30 @@ class RiotMockGuardTest {
     }
 
     @Test
+    @DisplayName("assertAllowed_dev_lab이어도_실패")
+    void assertAllowed_dev_lab이어도_실패() {
+        assertThatThrownBy(() -> RiotMockGuard.assertAllowed(MOCK, new String[] {"dev", "lab"}))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("riot.mock.base-url");
+    }
+
+    @Test
+    @DisplayName("assertAllowed_local만이면_실패")
+    void assertAllowed_local만이면_실패() {
+        assertThatThrownBy(() -> RiotMockGuard.assertAllowed(MOCK, new String[] {"local"}))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("riot.mock.base-url");
+    }
+
+    @Test
+    @DisplayName("assertAllowed_프로파일이_없으면_실패")
+    void assertAllowed_프로파일이_없으면_실패() {
+        assertThatThrownBy(() -> RiotMockGuard.assertAllowed(MOCK, new String[] {}))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("riot.mock.base-url");
+    }
+
+    @Test
     @DisplayName("assertAllowed_local_lab이면_통과")
     void assertAllowed_local_lab이면_통과() {
         assertThatCode(() -> RiotMockGuard.assertAllowed(MOCK, new String[] {"local", "lab"}))
