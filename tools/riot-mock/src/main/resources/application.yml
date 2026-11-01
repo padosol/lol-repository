@@ -43,3 +43,5 @@ riot-mock:
     first-visit-max: 2500
     base-history: 60
     new-game-weights: [30, 40, 20, 10]
+    # 앱이 시즌·패치로 해석하는 값: season 16, patch_version 16.11 (T0=2026-06-01 무렵)
+    game-version: "16.11.712.4021"
