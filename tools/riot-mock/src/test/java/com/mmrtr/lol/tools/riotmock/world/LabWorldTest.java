@@ -122,7 +122,7 @@ class LabWorldTest {
     }
 
     @Test
-    @DisplayName("같은 epoch 에서는 같은 목록, epoch 가 오르면 새 게임만 앞에 붙는다")
+    @DisplayName("같은 epoch 에서는 같은 목록이고 기본 기록 60개 + 그 epoch 새 게임이다")
     void matchIds_같은epoch는_같은목록() {
         // given
         String puuid = LabIds.puuidOf(2600);
@@ -131,14 +131,55 @@ class LabWorldTest {
         // when
         List<String> first = world.matchIds(puuid, null, 0, 100).orElseThrow();
         List<String> second = world.matchIds(puuid, null, 0, 100).orElseThrow();
-        world.setEpoch(2);
-        List<String> next = world.matchIds(puuid, null, 0, 100).orElseThrow();
 
         // then
         assertThat(second).isEqualTo(first);
         assertThat(first).hasSize(60 + world.newGames(2600, 1));
-        assertThat(next).hasSize(first.size() + world.newGames(2600, 2));
-        assertThat(next).endsWith(first.toArray(String[]::new));
+    }
+
+    @Test
+    @DisplayName("이전 epoch 의 게임은 목록에도 매치 조회에도 없다")
+    void matchIds_이전epoch게임은_없다() {
+        // given
+        int n = firstN(1);
+        String epoch1Id = LabIds.epochMatchId(1, n, 0);
+        world.setEpoch(1);
+        assertThat(world.match(epoch1Id)).isPresent();
+
+        // when
+        world.setEpoch(2);
+        List<String> ids = world.matchIds(LabIds.puuidOf(n), null, 0, 100).orElseThrow();
+
+        // then
+        assertThat(ids).doesNotContain(epoch1Id);
+        assertThat(ids).hasSize(60 + world.newGames(n, 2));
+        assertThat(world.match(epoch1Id)).isEmpty();
+        assertThat(world.timeline(epoch1Id)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("이전 epoch 에 새 게임이 있었어도 K=0 인 epoch 의 revisionDate 는 기본 기록 최신 게임의 끝")
+    void summoner_이전epoch가_있어도_K0이면_기본기록() {
+        // given
+        int n = 0;
+        int e = 0;
+        for (int cand = 2501; cand <= 4000 && n == 0; cand++) {
+            for (int ep = 2; ep <= 40; ep++) {
+                if (world.newGames(cand, 1) > 0 && world.newGames(cand, ep) == 0) {
+                    n = cand;
+                    e = ep;
+                    break;
+                }
+            }
+        }
+        assertThat(n).isPositive();
+        world.setEpoch(e);
+
+        // when
+        long revision = world.summonerByPuuid(LabIds.puuidOf(n)).orElseThrow().revisionDate();
+
+        // then
+        assertThat(revision).isEqualTo(LabIds.sharedRef((n - 1) / 10, 0).endMillis());
     }
 
     @Test

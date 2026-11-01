@@ -134,13 +134,11 @@ public class LabWorld {
         return n.isPresent() && isPlayer(n.getAsInt()) ? n : OptionalInt.empty();
     }
 
-    /** 소환사 n 의 기록을 최신순으로. epoch 게임(epoch 내림차순, j 내림차순) 뒤에 기본 기록 i=0..base-1 이 온다. */
+    /** 소환사 n 의 기록을 최신순으로. 그 epoch 의 새 게임(j 내림차순) 뒤에 기본 기록 i=0..base-1 이 온다. 다른 epoch 의 게임은 없다. */
     private List<MatchRef> history(int n, int atEpoch) {
         List<MatchRef> refs = new ArrayList<>();
-        for (int e = atEpoch; e >= 1; e--) {
-            for (int j = newGames(n, e) - 1; j >= 0; j--) {
-                refs.add(LabIds.epochRef(e, n, j));
-            }
+        for (int j = newGames(n, atEpoch) - 1; j >= 0; j--) {
+            refs.add(LabIds.epochRef(atEpoch, n, j));
         }
         for (int i = 0; i < cfg.baseHistory(); i++) {
             refs.add(i % 2 == 0 ? LabIds.sharedRef((n - 1) / 10, i / 2) : LabIds.personalRef(n, i / 2));
@@ -152,7 +150,7 @@ public class LabWorld {
         return switch (ref.kind()) {
             case SHARED -> ref.owner() >= 0 && ref.owner() * 10 + 1 <= cfg.players() && 2 * ref.index() < cfg.baseHistory();
             case PERSONAL -> isPlayer(ref.owner()) && 2 * ref.index() + 1 < cfg.baseHistory();
-            case EPOCH -> ref.epoch() >= 1 && ref.epoch() <= epoch && isPlayer(ref.owner())
+            case EPOCH -> ref.epoch() >= 1 && ref.epoch() == epoch && isPlayer(ref.owner())
                     && ref.index() < newGames(ref.owner(), ref.epoch());
         };
     }
