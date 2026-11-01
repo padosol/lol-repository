@@ -15,7 +15,7 @@ public class RateLimitEngine {
     private static final String METHOD = "method";
 
     private final Map<String, String> methodLimits = new LinkedHashMap<>();
-    private final String defaultMethodLimit;
+    private String defaultMethodLimit;
     private final boolean countRejected;
     private final LongSupplier clockMillis;
     // bucket 이름 -> (창 초 -> {시작ms, 수})
@@ -120,18 +120,25 @@ public class RateLimitEngine {
         return Map.copyOf(methodLimits);
     }
 
-    public String defaultMethodLimit() {
+    public synchronized String defaultMethodLimit() {
         return defaultMethodLimit;
     }
 
+    public synchronized void setDefaultMethodLimit(String limit) {
+        LimitSpec.parseAll(limit);
+        this.defaultMethodLimit = limit;
+    }
+
     public synchronized List<BucketUsage> usage() {
+        long now = clockMillis.getAsLong();
         List<BucketUsage> result = new ArrayList<>();
         for (Map.Entry<String, Map<Integer, long[]>> entry : windows.entrySet()) {
             String bucket = entry.getKey();
             for (LimitSpec spec : LimitSpec.parseAll(limitOfBucket(bucket))) {
                 long[] w = entry.getValue().get(spec.windowSeconds());
                 if (w != null) {
-                    result.add(new BucketUsage(bucket, spec.windowSeconds(), (int) w[1], spec.limit()));
+                    boolean expired = now >= w[0] + spec.windowSeconds() * 1000L;
+                    result.add(new BucketUsage(bucket, spec.windowSeconds(), expired ? 0 : (int) w[1], spec.limit()));
                 }
             }
         }
