@@ -42,6 +42,10 @@ flowchart TB
       bq["module:infra:bigquery<br/>BigQuery 집계 조회"]
     end
 
+    subgraph tools["🧪 tools (운영 jar 밖)"]
+      riotmock["tools:riot-mock<br/>실험실 가짜 Riot 서버 (별도 bootJar)"]
+    end
+
     application --> api & pg & redis & rabbit & riot & bq
     application --> league & gamedata & champion & spectator & match & summoner & championstats
 
@@ -62,20 +66,32 @@ flowchart TB
 
     rabbit --> redis & riot
 
+    riotmock --> match
+
     classDef d fill:#dff5e1,stroke:#2d8f4f,color:#000
     classDef i fill:#e1eeff,stroke:#2d6cbf,color:#000
     classDef a fill:#fff4d6,stroke:#bf922d,color:#000
     classDef s fill:#fff9c4,stroke:#bfa52d,color:#000
+    classDef t fill:#eeeeee,stroke:#777777,color:#000
     class league,gamedata,champion,spectator,match,summoner,championstats d
     class api,pg,redis,rabbit,riot,bq i
     class application a
     class sharedM,common,logging s
+    class riotmock t
 ```
 
 **읽는 법**:
 - 화살표 = 컴파일 타임 의존 (`build.gradle` `implementation project(...)`).
 - `infra → domain` 단방향. 도메인 모듈 사이에는 `match → league`, `summoner → league` 만 허용(league 는 sink).
 - `app:application` 은 전 어댑터/도메인을 빈으로 등록하는 컴포지션 루트.
+- `tools:riot-mock` 은 앱 모듈이 아닌 독립 도구 프로젝트다 (아래 "도구 프로젝트").
+
+## 도구 프로젝트 (`tools/`)
+
+- **`tools:riot-mock`** — Riot API 실험실(`docker/lab/`)이 쓰는 가짜 Riot 서버. 한도 판정·429·심판 지표(`riot_mock_*`)를 낸다. 자체 Spring Boot 앱이고 `riot-mock.jar` 로 따로 빌드돼 실험실 컨테이너(`tools/riot-mock/Dockerfile`)로만 뜬다.
+- 의존: `module:domain:match` 의 readmodel(MatchDto·TimelineDto)만 쓴다. 테스트는 헤더 계약 확인용으로 `module:infra:riot-client` 의 `RateLimitWindow` 파서를 전이 의존 없이 쓴다.
+- `module:app:application` 은 이 프로젝트에 의존하지 않는다. 운영 jar·이미지에 들어가지 않는다.
+- 단 `settings.gradle` 이 include 하므로 Gradle 빌드에는 `tools/` 디렉터리가 있어야 한다 (운영 `docker/Dockerfile` 도 빌드 단계에 복사한다. 없으면 설정 단계에서 실패).
 
 ## 알려진 잔여 결합 (후속 개선 대상)
 
@@ -97,6 +113,8 @@ flowchart TB
 | `league` 도메인 모델/포트 | `match`·`summoner` (교차 의존) + 위 인프라 |
 | Flyway 마이그레이션(`infra:persistence` 의 `db/migration/riot`, `riot` 스키마) | `infra:persistence` (`RiotSchemaMigrationTest` 가 전 엔티티 validate) |
 | Riot API DTO | `infra:riot-client` (도메인은 모름) |
+| `module:domain:match` readmodel(MatchDto·TimelineDto) | 이를 쓰는 `infra:*` 어댑터와 `tools:riot-mock`(가짜 응답 생성) |
+| `tools:riot-mock` | 실험실(`docker/lab/`)만. 운영 jar·배포에는 영향 없음 (빌드에는 디렉터리가 필요) |
 
 ## See Also
 
