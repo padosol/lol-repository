@@ -49,13 +49,16 @@ services:
     depends_on:
       - prometheus
 
-  # 부하 생성. `docker compose run --rm k6 ...` 로만 돈다 (up 대상 아님).
+  # 부하 생성. lab.sh 가 `docker compose run --rm k6 run ...` 로만 돌린다 (up 대상 아님).
+  # remote write 는 부하 스크립트에만 `-o experimental-prometheus-rw` 로 켠다 (판정 verify.js 는 보내지 않는다).
   k6:
     image: grafana/k6:2.3.0
     profiles: ["k6"]
     environment:
       K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
       K6_PROMETHEUS_RW_TREND_STATS: p(95),p(99),avg
+      # 기본 5초면 대시보드의 rate(...[5s]) 창에 표본이 하나뿐이라 값이 비어 보인다
+      K6_PROMETHEUS_RW_PUSH_INTERVAL: 1s
     volumes:
       - ./lab/k6:/scripts
     extra_hosts:
