@@ -10,13 +10,15 @@ import org.springframework.mock.env.MockEnvironment;
 class LabIsolationGuardTest {
 
     private MockEnvironment labEnv() {
-        return new MockEnvironment()
+        MockEnvironment env = new MockEnvironment()
                 .withProperty("spring.datasource.url",
                         "jdbc:postgresql://localhost:5432/lol_lab?currentSchema=riot&tcpKeepAlive=true")
                 .withProperty("spring.data.redis.database", "1")
                 .withProperty("spring.rabbitmq.virtual-host", "lab")
                 .withProperty("riot.api-key", "lab-key")
                 .withProperty("riot.mock.base-url", "http://localhost:8099");
+        env.setActiveProfiles("lab");
+        return env;
     }
 
     @Test
@@ -120,6 +122,33 @@ class LabIsolationGuardTest {
 
         // when // then
         assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .hasMessageContaining("riot.mock.base-url");
+    }
+
+    @Test
+    @DisplayName("생성_dev와_lab을_같이_켜면_실패")
+    void 생성_dev와_lab을_같이_켜면_실패() {
+        // given
+        MockEnvironment env = labEnv();
+        env.setActiveProfiles("dev", "lab");
+
+        // when // then
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("riot.mock.base-url")
+                .hasMessageNotContaining("localhost:8099");
+    }
+
+    @Test
+    @DisplayName("생성_prod와_lab을_같이_켜면_실패")
+    void 생성_prod와_lab을_같이_켜면_실패() {
+        // given
+        MockEnvironment env = labEnv();
+        env.setActiveProfiles("prod", "lab");
+
+        // when // then
+        assertThatThrownBy(() -> new LabIsolationGuard(env))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("riot.mock.base-url");
     }
 }

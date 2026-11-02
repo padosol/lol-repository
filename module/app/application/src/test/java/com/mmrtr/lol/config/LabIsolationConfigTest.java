@@ -70,4 +70,19 @@ class LabIsolationConfigTest {
             assertThat(context).doesNotHaveBean("labIsolationGuard");
         });
     }
+
+    @Test
+    @DisplayName("컨텍스트_dev와_lab을_같이_켜면_가드에서_기동실패한다")
+    void 컨텍스트_dev와_lab을_같이_켜면_가드에서_기동실패한다() {
+        // given
+        ApplicationContextRunner runner = labRunner(LAB_URL)
+                .withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles("dev", "lab"));
+
+        // when // then
+        runner.run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(context.getStartupFailure()).hasStackTraceContaining("labIsolationGuard")
+                    .hasStackTraceContaining("riot.mock.base-url");
+        });
+    }
 }

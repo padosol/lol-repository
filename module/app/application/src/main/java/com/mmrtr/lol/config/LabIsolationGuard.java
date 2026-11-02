@@ -2,6 +2,7 @@ package com.mmrtr.lol.config;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.mmrtr.lol.infra.riot.config.RiotMockGuard;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.core.env.Environment;
@@ -34,6 +35,8 @@ public class LabIsolationGuard implements BeanFactoryPostProcessor {
             throw new IllegalStateException("lab 격리가 적용되지 않았습니다. 다음 설정을 확인하세요(환경변수가 yml 을 덮었을 수 있습니다): "
                     + String.join(", ", violations));
         }
+        // dev·prod 와 lab 을 같이 켜면 위 5개 값은 lab yml 이 덮어 통과한다. RiotApiConfig 까지 기다리면 DataSource·Redisson 이 먼저 연결되므로 여기서 막는다.
+        RiotMockGuard.assertAllowed(mock, env.getActiveProfiles());
     }
 
     private static void expect(Environment env, String name, String expected, List<String> violations) {

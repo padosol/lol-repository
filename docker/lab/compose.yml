@@ -7,14 +7,14 @@ services:
       context: ../tools/riot-mock
     container_name: lol-lab-riot-mock
     ports:
-      - "8099:8099"
+      - "127.0.0.1:8099:8099"
 
   redis-exporter:
     image: oliver006/redis_exporter:v1.96.0
     container_name: lol-lab-redis-exporter
     command: ["--redis.addr=redis://redis:6379"]
     ports:
-      - "9121:9121"
+      - "127.0.0.1:9121:9121"
     depends_on:
       - redis
 
@@ -28,7 +28,7 @@ services:
     volumes:
       - ./lab/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -45,7 +45,7 @@ services:
       - ./lab/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./lab/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - prometheus
 
