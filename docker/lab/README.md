@@ -38,6 +38,14 @@
 
 기본 서비스(postgres·rabbitmq·redis)의 설정을 `docker/lab/compose.yml` 에서 바꾸면 compose 가 기존 컨테이너를 재생성해 데이터가 사라질 수 있다. 그래서 15692 를 공개하지 않는다.
 
+## 확인된 동작
+
+- 앱이 뜨면 Prometheus `lol-app`·`riot-mock`·`rabbitmq`·`redis` 4개 job 이 모두 `up` 이다.
+- 대시보드는 Grafana 홈이다 (`/api/dashboards/home` 이 실험실 대시보드로 보낸다).
+- 요청이 한 번도 없으면 패널 2·3 은 비어 있다. 패널 1 은 0 이다.
+- `RIOT_API_KEY` 가 환경에 있으면 `LabIsolationGuard` 가 `riot.api-key` 를 이름만 대고 기동을 막는다. 값은 로그에 나오지 않는다.
+- `dev,lab` 로 띄우면 lab 값이 dev 값을 덮지만, dev 의 Redis 호스트(`lol-redis`)는 lab 에 없어 그대로 남는다. 도커 밖에서는 해석되지 않아 기동이 실패한다.
+
 ## 이미지 버전
 
 | 이미지 | 버전 |
