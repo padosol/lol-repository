@@ -35,6 +35,56 @@ class RiotClientWiringTest {
         });
     }
 
+    @Test
+    @DisplayName("mock주소와_prod프로파일이면_기동실패")
+    void mock주소와_prod프로파일이면_기동실패() {
+        // given
+        ApplicationContextRunner prodRunner = runner
+                .withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles("prod"))
+                .withPropertyValues("riot.mock.base-url=http://localhost:1");
+
+        // when // then
+        prodRunner.run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(rootCause(context.getStartupFailure())).hasMessageContaining("riot.mock.base-url");
+        });
+    }
+
+    @Test
+    @DisplayName("mock주소와_lab프로파일이면_기동된다")
+    void mock주소와_lab프로파일이면_기동된다() {
+        // given
+        ApplicationContextRunner labRunner = runner
+                .withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles("local", "lab"))
+                .withPropertyValues("riot.mock.base-url=http://localhost:1");
+
+        // when // then
+        labRunner.run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    @DisplayName("mock주소와_lab없는_local프로파일이면_기동실패")
+    void mock주소와_lab없는_local프로파일이면_기동실패() {
+        // given
+        ApplicationContextRunner localRunner = runner
+                .withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles("local"))
+                .withPropertyValues("riot.mock.base-url=http://localhost:1");
+
+        // when // then
+        localRunner.run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(rootCause(context.getStartupFailure())).hasMessageContaining("riot.mock.base-url");
+        });
+    }
+
+    private static Throwable rootCause(Throwable t) {
+        Throwable cause = t;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
     /** @Configuration 이 없어 스캔에 다시 잡히지 않는다. */
     @ComponentScan("com.mmrtr.lol.infra.riot")
     static class RiotClientScan {

@@ -14,5 +14,7 @@ dependencies {
     // Redisson
     implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
 
-    testImplementation 'org.springframework:spring-web'  // 테스트에서 RiotServerException 의 HttpStatus
+    implementation 'io.micrometer:micrometer-core'  // lol.renewal.completed
+
+    implementation 'org.springframework:spring-web'  // RiotClientException.getStatus() 의 HttpStatusCode
 }

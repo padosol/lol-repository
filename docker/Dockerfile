@@ -12,6 +12,8 @@ RUN chmod +x gradlew
 COPY build.gradle settings.gradle ./
 COPY buildSrc buildSrc
 COPY module module
+# settings.gradle 이 include 하는 프로젝트 디렉터리는 모두 있어야 한다 (없으면 Gradle 이 설정 단계에서 실패). 런타임 이미지에는 앱 jar 만 들어간다
+COPY tools tools
 
 # 빌드 실행
 RUN ./gradlew :module:app:application:bootJar -x test --no-daemon

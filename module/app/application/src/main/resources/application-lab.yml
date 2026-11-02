@@ -1,0 +1,32 @@
+# 로컬 Riot API 실험실: --spring.profiles.active=local,lab. 가짜 Riot 서버(tools/riot-mock)와 격리된 DB·Redis·MQ 를 쓴다.
+# LabIsolationGuard 가 아래 값이 실제로 적용됐는지 기동 때 검사한다.
+spring:
+  datasource:
+    # DB 이름만 lol_lab 으로 고정(.env 의 DB_NAME 무시). 호스트·포트·쿼리는 persistence-local.yml 과 같다.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/lol_lab?currentSchema=riot&reWriteBatchedInserts=true&tcpKeepAlive=true
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:1234}
+  data:
+    redis:
+      database: 1
+  rabbitmq:
+    virtual-host: lab
+
+riot:
+  api-key: lab-key
+  mock:
+    base-url: ${RIOT_MOCK_BASE_URL:http://localhost:8099}
+  rate-limit:
+    app-default: "500:10"
+
+management:
+  info:
+    env:
+      enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        riot.ratelimit.wait: true
+
+info:
+  lab: true

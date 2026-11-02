@@ -15,7 +15,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
     // 내부 API(/internal/v1/**) OpenAPI 계약 — 내부 포트의 /internal/v1/api-docs
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:3.1.1'
+    // Boot 3.5 라인 유지: 3.x 는 Boot 4 전용(ErrorPageRegistry), 2.9.1 미만은 GHSA-rhhx-6j8h-8cvw 영향권
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.9.1'
 
     // RestDocs — lol-server 에서 옮겨 오는 공개 API 의 요청·응답 스니펫 동일성 검증
     testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
