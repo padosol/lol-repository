@@ -25,12 +25,21 @@
 | `limit <한도>` | 가짜 서버의 application 한도를 바꾼다. 예: `limit 100:10` |
 | `reset` | `lol_lab`·`lol_lab_snapshot` 을 지우고 빈 `lol_lab` 재생성, Redis DB 1 비우기, vhost `lab` 재생성, 가짜 서버 epoch 0. 테이블은 앱 기동 때 Flyway 가 만들므로 **reset 뒤에는 앱을 다시 띄워야 한다** |
 | `seed` | 시작 상태를 만들고 `lol_lab_snapshot` 으로 뜬다 (아래 "seed") |
-| `load <시나리오>` | k6 부하만 건다. 시작 상태를 되돌리지 않고 판정도 하지 않는다 |
+| `load <시나리오>` | 앱이 `lab` 인지 확인한 뒤 k6 부하만 건다. 시작 상태를 되돌리지 않고 판정도 하지 않는다 |
 | `run <시나리오>` | 시작 상태 복원 → k6 부하 → 60초 대기 → 판정 (아래 "run"). FAIL 이면 종료 코드 1 |
 | `verify <시나리오> <START> <END>` | 판정만 한다 (unix 초). `run` 이 찍은 START·END 로 다시 볼 수 있다 |
 
-`lab.sh` 를 `source` 하면 `require_lab_app`, `mock_get_limits`, `mock_put_limits <json>`, `mock_reset [epoch]` 도 쓸 수 있다.
-조작 API 호출이 실패하면 curl 오류나 가짜 서버의 응답 본문(예: 400 의 `error`)을 찍고 멈춘다.
+`lab.sh` 는 `bash` 로 실행만 한다 (`source` 하지 않는다). 가짜 서버 조작 API 를 직접 부르려면 curl 을 쓴다 (예: `curl -s localhost:8099/admin/limits`).
+lab.sh 의 조작 API 호출이 실패하면 curl 오류나 가짜 서버의 응답 본문(예: 400 의 `error`)을 찍고 멈춘다.
+
+셸 환경변수로 바꿀 수 있는 값:
+
+| 변수 | 기본값 | 쓰는 곳 |
+|---|---|---|
+| `APP_URL` | `http://localhost:8111` | 앱 확인(`/actuator/info`·`health`). k6 컨테이너에는 `localhost`·`127.0.0.1` 을 `host.docker.internal` 로 바꿔 `-e APP_URL` 로 넘긴다 (k6 스크립트에는 기본값이 없다). Prometheus 수집 대상은 `prometheus.yml` 의 8111 고정이다 |
+| `MOCK_URL` | `http://localhost:8099` | 가짜 서버 조작 API |
+| `PROM_URL` | `http://localhost:9090` | seed 의 결과 확인 질의 |
+| `LAB_QUEUES` | `mmrtr.summoner` | 갱신 처리를 기다리고 판정할 vhost `lab` 큐 이름(공백 구분). 아래 "큐 고르기" |
 
 시나리오는 `docker/lab/k6/<시나리오>.js` 다. 1단계에는 `steady` 하나다. `RATE`·`DURATION` 을 셸에서 주면 k6 로 넘긴다 (예: `RATE=10 DURATION=1m bash docker/lab/lab.sh run steady`).
 
@@ -38,29 +47,38 @@
 
 앱이 `lab` 으로 떠 있고 `lol_lab` 이 비어 있을 때 한 번 돌린다 (다시 만들려면 `reset` → 앱 재기동 → `seed`).
 
+0. `lol_lab` 의 `riot.summoner` 가 비어 있지 않으면 아무것도 바꾸지 않고 종료 1 이다 (`lol_lab 이 비어 있지 않습니다 (riot.summoner 4000명). 먼저 bash docker/lab/lab.sh reset 을 하고 앱을 다시 띄우세요`). 테이블이 없으면(reset 뒤 앱을 다시 띄우지 않았으면) 앱을 다시 띄우라고 하고 종료 1 이다. 이미 돌린 `lol_lab` 에 다시 seed 하면 매치가 있는 첫 방문 소환사가 스냅숏에 들어가기 때문이다.
 1. 가짜 서버 한도를 저장해 두고 application·7개 method 한도를 모두 `100000:10` 으로 올린다. account-v1 의 `1000:60` 이면 Riot ID 조회 4000건이 초당 16건으로 묶인다.
 2. 가짜 서버 epoch 를 0 으로 둔다 (재방문 풀도 새 게임 없음).
 3. k6 `seed.js` `PHASE=create` — `lab1#LAB`..`lab4000#LAB` 를 `GET /api/riot/kr/summoners/lab{n}/LAB` 로 조회해 저장한다. 200 이 아니거나 puuid 가 다르면 바로 멈춘다.
 4. k6 `PHASE=warm` — 재방문 풀(2501..4000)의 첫 갱신을 초당 5건으로 요청한다 (폴링 없음). 모두 202 여야 한다.
-5. consumer 가 있는 vhost `lab` 큐의 메시지(대기+처리 중)가 10초 연속 0 이 될 때까지 기다린다 (최대 30분).
-6. 저장해 둔 한도 본문을 그대로 PUT 해 되돌린다. 중간에 실패해도 되돌린다.
-7. `lol_lab` 새 연결을 막고(`ALLOW_CONNECTIONS false`) 연결을 끊은 뒤 `CREATE DATABASE lol_lab_snapshot TEMPLATE lol_lab` 를 하고 연결을 다시 허용한다. 앱 커넥션 풀이 바로 다시 붙으면 템플릿 복사가 "being accessed by other users" 로 실패하기 때문이다.
+5. `LAB_QUEUES` 큐의 메시지(대기+처리 중)가 10초 연속 0 이 될 때까지 기다린다 (최대 30분). 진행 줄에 consumer 수를 같이 찍는다. 큐가 없으면 바로 실패한다.
+6. 결과를 확인한다. 소환사가 4000명이고, warm 시작부터 지금까지 앱의 `lol_renewal_completed_total` 증가량이 `success` 정확히 1500건, 그 밖(`failed`·`skipped`) 0건이어야 한다 (Prometheus 질의, verify 와 같은 증가량 식). 아니면 스냅숏을 뜨지 않고 종료 1 이다. 한도는 되돌리고, `lol_lab` 연결 허용은 건드리지 않은 상태다.
+7. 저장해 둔 한도 본문을 그대로 PUT 해 되돌린다. 중간에 실패해도 되돌린다.
+8. `lol_lab` 새 연결을 막고(`ALLOW_CONNECTIONS false`) 연결을 끊은 뒤 `CREATE DATABASE lol_lab_snapshot TEMPLATE lol_lab` 를 하고 연결을 다시 허용한다. 앱 커넥션 풀이 바로 다시 붙으면 템플릿 복사가 "being accessed by other users" 로 실패하기 때문이다.
 
 warm 을 초당 5건으로 둔 이유: 한도를 올린 채 초당 50건으로 요청하면 consumer 20개가 막힘 없이 돌아 매치 저장(`MatchService.saveAll`)이 10건 넘게 겹친다.
 `saveAll` 은 트랜잭션 커넥션을 쥔 채 다른 스레드(`timelineSaveExecutor`)의 저장을 기다리고 그 저장도 커넥션을 하나씩 쓰므로, Hikari 풀(15)이 다 잡혀 앱 전체가 30초 멈췄다 (`Connection is not available, request timed out after 30000ms (total=15, active=15, idle=0, waiting=213)`). 앱 쪽 결함이며 이 실험실이 처음 드러냈다.
 
-큐 대기에서 consumer 가 없는 큐는 뺀다. 이 브랜치에는 PR #130 이 없어 추가 매치 검색 리스너(`renewal.match.find.queue`)가 꺼져 있다.
+### 큐 고르기 (`LAB_QUEUES`)
+
+갱신 처리 대기(seed·run)와 판정의 큐 항목은 consumer 가 있게 설계된 큐를 **이름으로** 고른다. 기본값은 `mmrtr.summoner` 하나다.
+consumer 수(`> 0`)로 고르면 리스너가 죽어 consumer 가 0 이 됐을 때 그 큐가 빠져 적체가 숨는다. 이름으로 고르면 consumer 가 0 이어도 메시지가 그대로 세어져, 대기는 시간 초과로 실패하고 판정에는 적체가 WARN 으로 남는다.
+
+이 브랜치에는 PR #130 이 없어 추가 매치 검색 리스너(`renewal.match.find.queue`)가 꺼져 있다.
 가짜 서버의 기본 기록은 60게임이므로 첫 갱신은 언제나 20개를 받아 "추가 매치 검색" 메시지를 남기는데, 이 메시지는 처리되지 않는다.
 **그래서 첫 갱신은 매치를 20개만 저장한다** (#130 이 들어오면 나머지 40개를 배경에서 더 가져온다).
+#130 이 들어오면 `lab.sh` 의 `LAB_QUEUES` 기본값에 `renewal.match.find.queue` 를 더한다 (`LAB_QUEUES="mmrtr.summoner renewal.match.find.queue"`). verify.js 는 lab.sh 가 넘긴 값을 쓰므로 따로 고칠 곳이 없다.
 
 ## run — 시작 상태로 되돌리고 판정하기
 
 1. 앱이 `lab` 인지, `lol_lab_snapshot` 이 있는지 본다 (없으면 "먼저 seed" 로 종료 1).
-2. vhost `lab` 큐를 비우고, 처리 중인 갱신이 끝날 때까지(consumer 가 있는 큐가 10초 연속 0) 기다린 뒤 한 번 더 비운다. 지난 실행이 남긴 갱신이 새 실행에 섞이지 않게 한다.
+2. vhost `lab` 큐를 비우고, 처리 중인 갱신이 끝날 때까지(`LAB_QUEUES` 가 10초 연속 0) 기다린 뒤 한 번 더 비운다. 지난 실행이 남긴 갱신이 새 실행에 섞이지 않게 한다.
 3. `DROP DATABASE lol_lab WITH (FORCE)` → `CREATE DATABASE lol_lab TEMPLATE lol_lab_snapshot`.
 4. Redis DB 1 `FLUSHDB` (앱이 배운 한도·한도 카운터·갱신 표시가 지워진다).
 5. 앱 `/actuator/health` 가 UP 이 될 때까지 기다린다 (최대 30초). 커넥션 풀이 새 `lol_lab` 에 다시 붙었는지 보는 것이다.
-6. 가짜 서버 reset (epoch + 1, 한도 창·슬라이딩 피크 초기화. 한도 값은 그대로).
+6. 가짜 서버 reset (epoch + 1, 한도 창·슬라이딩 피크 초기화. 한도 값은 그대로). 5초 기다린 뒤 지금 application 한도를 찍는다.
+   기다리는 것은 reset 전 게이지 값(지난 실행의 슬라이딩 피크)을 담은 표본이 창 안에 들지 않게 하려는 것이다. 기다리지 않으면 START 뒤 2초 동안 지난 피크가 보인다 (Task 7 Step 5 창을 지금 판정으로 다시 보면 피크가 그 실행의 1.400 이 아니라 reset 전 값 2.433 이다).
 7. START 를 찍고 k6 시나리오를 돌린 뒤 60초 기다려 END 를 찍는다.
 8. `verify.js` 로 판정한다. FAIL 이 있으면 `FAIL` 을 찍고 종료 코드 1, 판정 자체가 실패하면(Prometheus 질의 실패 등) k6 종료 코드를 그대로 낸다.
 
@@ -76,61 +94,79 @@ epoch 가 실행마다 바뀌므로 재방문 소환사의 새 게임 수(0~3)�
 | 구분 | 항목 | 질의 | 등급 |
 |---|---|---|---|
 | 판정 | 가짜 서버 수집 (창 전체 up) | `min_over_time(up{job="riot-mock"}[R])` | 1 이 아니거나 비면 FAIL |
-| 판정 | 가짜 서버 429 (application·method) | `riot_mock_rate_limited_total{type=~"application\|method"}` 증가량 | 0 이 아니면 FAIL. 비면 0 (카운터가 첫 429 때 생긴다) |
-| 판정 | 10초 구간 최대 사용률 | `max(riot_mock_sliding_peak_ratio)` | 1 이상이거나 비면 FAIL. run 이 시작할 때 reset 하므로 END 값이 그 실행의 최댓값이다 |
+| 판정 | 가짜 서버 application 한도 (10초 창, 500 이하) | `riot_mock_window_limit{bucket=~".+[\|]app",window="10"}` 의 창 전체 `max_over_time(max(...)[R:1s])`, 같은 식의 min | 최댓값이 500 보다 크거나(기본값보다 느슨한 한도) 시리즈가 없으면 FAIL. 값은 `min=… max=…` 로 늘 찍는다. 더 엄격한 한도(예: `30:10`)는 통과한다 |
+| 판정 | 가짜 서버 429 (application·method) | `riot_mock_rate_limited_total{type=~"application\|method"}` 증가량 | 0 이 아니면 FAIL. 비면(창 안에 요청이 없으면) 0 |
+| 판정 | 10초 구간 최대 사용률 | `max_over_time(max(riot_mock_sliding_peak_ratio)[R:1s])` | 1 이상이거나 비면 FAIL. 창 전체의 최댓값이라 창 안에서 application 한도를 바꿔(추적기가 비워져도) 그 전 피크가 남는다 |
 | 판정 | 총 Riot 호출 | `riot_mock_requests_total` 증가량 | 0 이면 FAIL (아무것도 시험하지 않은 실행) |
+| 처리 | 앱 수집 (창 전체 up) | `min_over_time(up{job="lol-app"}[R])` | 1 보다 작거나 비면 WARN (창 안에서 앱이 멈췄거나 수집이 끊겼다) |
 | 처리 | 앱 갱신 결과 `<result>/<reason>` | `lol_renewal_completed_total` 증가량 (result·reason 별, 0 인 줄은 뺀다) | `failed` 면 WARN, 아니면 INFO. 하나도 없으면 WARN |
 | 처리 | k6 갱신 결과 | `k6_lab_renewal_outcome_total` 의 이 실행 마지막 값 | timeout 이나 error 가 있으면 WARN. 없으면 WARN |
 | 처리 | 갱신 끝남 p95 | `k6_lab_renewal_done_seconds_p95` 의 이 실행 마지막 값 | 폴링 상한(10초) 이상이면 WARN (값이 상한에서 잘린 것). 없으면 WARN |
-| 처리 | 갱신 큐 최대 대기 | consumer 있는 큐의 `rabbitmq_queue_messages_ready` 합의 `max_over_time(...[R:5s])` | 0 보다 크면 WARN. 없으면 WARN |
-| 처리 | END 에 남은 갱신 | consumer 있는 큐의 `rabbitmq_queue_messages`(대기+처리 중) 합, END 시각 | 0 보다 크면 WARN (END 에도 갱신이 밀려 있다). 없으면 WARN |
+| 처리 | 갱신 큐 최대 대기 (`LAB_QUEUES`) | 그 큐들의 `rabbitmq_queue_messages_ready` 합의 `max_over_time(...[R:1s])` | 0 보다 크면 WARN. 없으면 WARN |
+| 처리 | END 에 남은 갱신 (`LAB_QUEUES`, 대기+처리 중) | 그 큐들의 `rabbitmq_queue_messages` 합, END 시각 | 0 보다 크면 WARN (END 에도 갱신이 밀려 있다). 없으면 WARN |
 
 k6 의 `끝남(성공·실패 포함)` 은 폴링에서 PROGRESS 가 끝난 것이다. 앱 쪽에서 실패한 갱신도 여기 들어가므로 성공·실패는 "앱 갱신 결과" 줄로 본다.
-큐 항목은 consumer 가 있는 큐만 본다. consumer 없는 `renewal.match.find.queue` 는 늘 쌓이고, 처리 중(unacked) 메시지는 정상이라 최대 대기는 ready 로 센다.
+큐 항목은 `LAB_QUEUES`(기본 `mmrtr.summoner`)만 본다 (위 "큐 고르기"). 처리 중(unacked) 메시지는 정상이라 최대 대기는 ready 로 센다.
 큐가 다 빌 때까지 걸린 시간(소진 시간)은 아직 재지 않는다. 2단계 spike 시나리오에서 다룬다.
 
+application 한도 항목은 PASS 가 "기본값 이하의 한도에서 시험했다" 는 뜻이 되게 한다. `limit 100000:10` 뒤나, seed 가 올린 한도가 되돌아가지 않은 상태에서 돌리면 429 와 피크가 당연히 PASS 이므로 이 항목이 FAIL 로 막는다.
+`riot_mock_window_limit` 은 그 routing 에 요청이 온 뒤에만 생기므로(reset 하면 사라진다) 창 안에 요청이 없으면 `없음` 으로 FAIL 이다.
+
 증가량은 `increase()` 가 아니라 "END 값 − START 값, START 에 없던 시리즈는 END 값" 이다.
-가짜 서버의 429 카운터는 첫 429 때 생기는데, `increase()` 는 창 안에서 처음 생긴 시리즈의 첫 값을 세지 않아 429 가 한 번에 몰리면 0 으로 보일 수 있다.
+`increase()` 는 창 안에서 처음 생긴 시리즈의 첫 값을 세지 않는다. 가짜 서버는 routing 의 첫 요청 때 429·unknown 카운터를 0 으로 먼저 만들지만, 가짜 서버를 다시 띄운 직후처럼 창 안에서 시리즈가 생길 수 있어 이 식을 쓴다.
 그래서 창 안에서 가짜 서버나 앱이 재시작하면 값이 맞지 않는다. k6 지표는 실행마다 0 에서 시작하므로 그 실행의 마지막 값을 쓴다.
 
 ### 출력 예시 (`run steady`, 기본값 10건/초 · 5분)
 
 ```
-판정 steady  START=1793620690  END=1793621060  (370초)
+시작 상태 복원: lol_lab ← lol_lab_snapshot, Redis DB 1 비움, vhost lab 비움, 가짜 서버 {"epoch":1}, application 한도 500:10
+...
+판정 steady  START=1793626779  END=1793627149  (370초)
 PASS  가짜 서버 수집 (창 전체 up)  1
+PASS  가짜 서버 application 한도 (10초 창, 500 이하)  min=500 max=500
 PASS  가짜 서버 429 (application·method)  0
 PASS  10초 구간 최대 사용률 (한도 대비)  0.990
-PASS  총 Riot 호출  19173
-INFO  앱 갱신 결과 success/none  1432
-WARN  k6 갱신 결과  끝남(성공·실패 포함)=68 timeout=2766 rejected=160 error=3
+PASS  총 Riot 호출  19279
+INFO  앱 수집 (창 전체 up)  1
+INFO  앱 갱신 결과 success/none  1463
+WARN  k6 갱신 결과  끝남(성공·실패 포함)=70 timeout=2769 rejected=161 error=0
 WARN  갱신 끝남 p95  10.02s (폴링 상한 10s 에 걸림)
-WARN  갱신 큐 최대 대기 (consumer 있는 큐)  1665
-WARN  END 에 남은 갱신 (대기+처리 중)  1415
+WARN  갱신 큐 최대 대기 (mmrtr.summoner)  1656
+WARN  END 에 남은 갱신 (mmrtr.summoner, 대기+처리 중)  1394
 ```
 
 판정은 모두 PASS 라 종료 코드 0 이지만, 처리 항목은 갱신이 밀렸다고 말한다 (아래 "읽는 법").
 
-FAIL 이 하나라도 있으면 표 뒤에 `FAIL` 이 찍히고 종료 코드가 1 이다. `limit 30:10` 뒤 `RATE=10 DURATION=1m run steady` 를 돌리면 이렇게 된다.
+FAIL 이 하나라도 있으면 표 뒤에 `FAIL` 이 찍히고 종료 코드가 1 이다. `limit 100000:10` 뒤 `RATE=2 DURATION=30s load steady` 를 건 창을 `verify` 하면, 429·사용률은 당연히 통과하고 한도 항목이 막는다.
 
 ```
+판정 steady  START=1793627189  END=1793627242  (53초)
 PASS  가짜 서버 수집 (창 전체 up)  1
-FAIL  가짜 서버 429 (application·method)  22
-FAIL  10초 구간 최대 사용률 (한도 대비)  1.400
-PASS  총 Riot 호출  558
-INFO  앱 갱신 결과 success/none  34
-WARN  앱 갱신 결과 failed/budget_exceeded  94
-...
+FAIL  가짜 서버 application 한도 (10초 창, 500 이하)  min=100000 max=100000
+PASS  가짜 서버 429 (application·method)  0
+PASS  10초 구간 최대 사용률 (한도 대비)  0.000
+PASS  총 Riot 호출  61
+INFO  앱 수집 (창 전체 up)  1
+INFO  앱 갱신 결과 success/none  61
+INFO  k6 갱신 결과  끝남(성공·실패 포함)=61 timeout=0 rejected=0 error=0
+INFO  갱신 끝남 p95  1.01s
+INFO  갱신 큐 최대 대기 (mmrtr.summoner)  0
+INFO  END 에 남은 갱신 (mmrtr.summoner, 대기+처리 중)  0
+thresholds on metrics 'checks' have been crossed
+
 FAIL
 ```
+
+`limit 30:10` 뒤 `RATE=10 DURATION=1m run steady` 는 한도 항목은 통과하고(`min=30 max=30`, 더 엄격한 한도) 429(22건)와 사용률(1.400)이 FAIL 이다.
 
 가짜 서버 지표가 없는 창(수집 전)을 판정하면 `FAIL  가짜 서버 수집 (창 전체 up)  없음`, `FAIL  10초 구간 최대 사용률 (한도 대비)  없음`, `FAIL  총 Riot 호출  0` 으로 실패한다.
 
 ### 읽는 법 (1단계 측정)
 
 - 10건/초 중 첫 방문 3건은 매치 20개를 새로 받으므로 asia 호출 수요가 초당 100건을 넘는다. 앱은 `500:10` 을 초당 45건으로 나눠 쓰므로(10초 창에 최대 11칸 × 45 = 495) asia 가 초당 45건 남짓에서 막히고, 슬라이딩 피크가 0.990 에 붙는다.
-  그래서 갱신 큐가 쌓이고(대기 최대 1665, END 에도 1415 남음) 대부분 10초 안에 끝나지 않는다(timeout). 429 는 없다.
+  그래서 갱신 큐가 쌓이고(대기 최대 1656, END 에도 1394 남음) 대부분 10초 안에 끝나지 않는다(timeout). 429 는 없다.
 - `rejected` 는 재방문 풀(1500명)을 한 바퀴 돌아 같은 소환사를 다시 골랐을 때, 큐 적체로 늦게 끝난 지난 갱신의 2분 규칙에 걸린 것이다.
-- `error`(3건, 두 번째 실행 6건)는 k6 → `host.docker.internal` 연결이 `dial: i/o timeout` 으로 실패한 것이다. 같은 시각 앱 로그에는 멈춤이 없었다 (Docker Desktop 의 호스트 연결 문제로 본다).
+- `error`(3건, 두 번째 실행 6건, 세 번째 0건)는 k6 → `host.docker.internal` 연결이 `dial: i/o timeout` 으로 실패한 것이다. 같은 시각 앱 로그에는 멈춤이 없었다 (Docker Desktop 의 호스트 연결 문제로 본다).
 - 갱신 끝남 p95 가 10.02초인 것은 폴링이 10초에서 끝나기 때문이다. 큐가 쌓이면 이 값은 상한에 붙고, 실제 지연은 이보다 길다.
 - `limit 30:10` 직후에는 run 이 Redis DB 1 을 비워 앱이 배운 한도를 잃으므로, 첫 응답이 `30:10` 을 알려 줄 때까지 기본값 `500:10` 으로 보내 429 가 난다. 앱이 배운 한도는 대시보드에 없고 Redis DB 1 `riot:rl:limits` 와 앱 로그 `Riot 한도 갱신 [asia|app] 30:10` 으로 본다.
 
@@ -138,7 +174,7 @@ FAIL
 
 | 단계 | 시간 |
 |---|---|
-| seed 전체 | 327초 (create 12초, warm 요청 301초, 큐 비우기 10초, 스냅숏 4초) |
+| seed 전체 | 약 330초 (create 12~13초, warm 요청 300초, 큐 비우기 10~11초, 결과 확인 1초 미만, 스냅숏 4초) |
 | run steady (기본값) | 약 7분 (복원·대기 20~40초 + 부하 5분 + 60초 + 판정) |
 | run steady (`RATE=10 DURATION=1m`) | 약 3분 |
 
@@ -167,12 +203,16 @@ Grafana·Prometheus·riot-mock·redis_exporter 는 인증이 없어 `127.0.0.1` 
 - `dev,lab`·`prod,lab` 처럼 dev·prod 와 lab 을 같이 켜면 `LabIsolationGuard` 가 빈 생성 전에 `riot.mock.base-url` 을 이름만 대고 막는다 (DB·Redis 연결 전).
 - seed 뒤 Redis DB 1 에는 `riot:rl:limits` 가 생기고, DB 0 의 `riot:rl:*` 키 수(0)와 vhost `/` 큐 메시지 수(모두 0)는 seed 전과 같다.
 - run 이 앱을 띄운 채 `lol_lab` 을 바꿔도 Hikari 가 끊긴 연결을 버리고("Failed to validate connection") 새로 붙어 health 가 UP 이다. 두 번째 run 도 FAIL 없이 끝났다.
-- 같은 스냅숏에서 `run steady` 를 두 번 돌린 총 Riot 호출은 19173 · 19266 (0.5% 차이)이다.
+- 같은 스냅숏에서 `run steady` 를 두 번 돌린 총 Riot 호출은 19173 · 19266 (0.5% 차이)이다. seed 를 새로 떠서 돌린 세 번째는 19279 다.
+- seed 는 `riot.summoner` 가 4000명인 `lol_lab` 에서 아무것도 바꾸지 않고 종료 1 이고, reset 뒤 앱을 다시 띄우기 전(테이블 없음)에도 종료 1 이다. 빈 `lol_lab` 에서는 결과 확인(`소환사 4000명, 첫 갱신 success 1500건, failed·skipped 0건`)을 통과해야 스냅숏을 뜬다.
+- 가짜 서버는 routing 의 첫 요청 때 `riot_mock_rate_limited_total{type=application|method}`·`riot_mock_unknown_total` 을 0 으로 만든다. 그래서 `increase()` 도 429 가 처음 몰린 창을 센다 (`limit 30:10` 뒤 kr 로 40건: 패널 1 식·옛 `increase()` 식 모두 약 10).
+- 패널 1 은 창 안에서 새로 생긴 시리즈를 `X unless X offset 5m` 로 그대로 더한다. 가짜 서버가 처음 보는 routing 에 첫 1초 안에 429 가 몰리면(첫 수집 전에 값이 오른다) `increase()` 만으로는 0 이 된다 (같은 시험을 새 routing `sea` 로 하면 옛 식은 sea 를 0 으로, 패널 1 식은 10 으로 셌다). 5분이 지나면 0 으로 돌아온다.
 - 실행 중 k6 표본은 Prometheus 에 1초 안에 들어오고, 대시보드는 1초마다 새로 그린다.
 
 ## k6 지표 (Prometheus remote write)
 
 부하 스크립트(seed·steady)만 `lab.sh` 가 `-o experimental-prometheus-rw` 로 지표를 보낸다. 판정 `verify.js` 는 보내지 않는다.
+k6 는 늘 `lab.sh` 로 돌린다. `lab.sh` 가 앱 주소(`-e APP_URL`, 위 "명령" 의 변수 표)와 큐 이름(`-e LAB_QUEUES`)을 넘기고, `lib/lab.js` 는 `APP_URL` 이 없으면 바로 멈춘다.
 주소·trend 통계·전송 주기(1초)는 `compose.yml` 의 `K6_PROMETHEUS_RW_*` 에 있다. 기본 5초면 패널 8 의 `rate(...[5s])` 가 비어 보인다.
 
 | 지표 | 이름 | 태그 |
@@ -192,7 +232,7 @@ trend 는 실행 시작부터의 누적 값이다 (마지막 값이 k6 요약의
 | `grafana/grafana` | 13.2.5 |
 | `oliver006/redis_exporter` | v1.96.0 |
 | `grafana/k6` | 2.3.0 |
-| `eclipse-temurin` (riot-mock) | 21-jre |
+| `eclipse-temurin` (riot-mock) | `21.0.11_10-jre@sha256:d2b9f8f12212cadcfdf889461531784e8fd097feade954d65b31ee7a71c473ec` (JRE 21.0.11+10. 같은 버전 태그도 OS 패치로 다시 빌드되므로 검증한 이미지를 다이제스트로 고정) |
 | `postgres` / `rabbitmq` / `redis` | 기본 `docker/docker-compose.yml` 그대로 |
 
 ## `.env` 키 충돌

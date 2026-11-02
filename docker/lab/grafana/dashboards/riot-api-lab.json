@@ -46,7 +46,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(riot_mock_rate_limited_total{type=~\"application|method\"}[5m])) or vector(0)",
+          "expr": "sum((riot_mock_rate_limited_total{type=~\"application|method\"} unless riot_mock_rate_limited_total{type=~\"application|method\"} offset 5m) or increase(riot_mock_rate_limited_total{type=~\"application|method\"}[5m])) or vector(0)",
           "refId": "A",
           "instant": false
         }

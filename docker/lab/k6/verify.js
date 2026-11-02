@@ -1,4 +1,4 @@
-// 실행 판정. lab.sh run·verify 가 START·END(unix 초)와 SCENARIO 를 넘긴다.
+// 실행 판정. lab.sh run·verify 가 START·END(unix 초)와 SCENARIO, LAB_QUEUES 를 넘긴다.
 // 한 줄에 `<등급>  <항목>  <값>` 을 찍는다.
 //   판정 항목: PASS 또는 FAIL. FAIL 이 하나라도 있으면 종료 코드 99 다.
 //   처리 항목: WARN(나쁨) 또는 INFO. 1단계에서는 실행을 실패시키지 않는다.
@@ -18,8 +18,18 @@ if (!/^[a-z][a-z0-9-]*$/.test(SCENARIO)) {
 }
 const R = `${END - START}s`;
 
-// consumer 가 있는 vhost lab 큐만 고른다. consumer 가 없는 큐(이 브랜치의 renewal.match.find.queue 등)는 늘 쌓인다.
-const CONSUMED = 'and on (vhost, queue) (rabbitmq_queue_consumers{vhost="lab"} > 0)';
+// 갱신 처리를 보는 vhost lab 큐. lab.sh 의 LAB_QUEUES(공백 구분) 그대로다. consumer 수가 아니라 이름으로 고른다.
+const QUEUES = (__ENV.LAB_QUEUES || '').split(/[\s,]+/).filter((q) => q.length > 0);
+if (QUEUES.length === 0 || QUEUES.some((q) => !/^[A-Za-z0-9._-]+$/.test(q))) {
+  throw new Error(`LAB_QUEUES 가 필요합니다 (예: mmrtr.summoner): ${__ENV.LAB_QUEUES}`);
+}
+// PromQL 문자열 안의 정규식이라 점을 \\. 로 쓴다
+const QUEUE_SELECTOR = `vhost="lab",queue=~"${QUEUES.map((q) => q.replace(/\./g, '\\\\.')).join('|')}"`;
+const QUEUE_LABEL = QUEUES.join(',');
+
+// 가짜 서버 application 한도(10초 창)의 상한. 기본값 500:10 보다 느슨하면 판정이 의미가 없다 (더 엄격한 한도는 된다).
+const APP_LIMIT_CEILING = 500;
+const APP_LIMIT_10S = 'riot_mock_window_limit{bucket=~".+[|]app",window="10"}';
 
 export const options = {
   vus: 1,
@@ -28,7 +38,7 @@ export const options = {
 };
 
 // 가짜 서버·앱 카운터의 [START, END] 증가량 = END 값 − START 값.
-// increase() 는 창 안에서 처음 생긴 시리즈의 첫 값을 세지 않는다 (가짜 서버 429 카운터는 첫 429 때 생긴다).
+// increase() 는 창 안에서 처음 생긴 시리즈의 첫 값을 세지 않는다 (가짜 서버를 다시 띄운 뒤 처음 쓰는 routing 등).
 // 그래서 START 에 없던 시리즈는 END 값을 그대로 더한다. 창 안에서 그 프로세스가 재시작하면 맞지 않는다.
 function delta(selector, by = '') {
   return `sum${by} ((${selector} - ${selector} offset ${R}) or (${selector} unless ${selector} offset ${R}))`;
@@ -37,6 +47,15 @@ function delta(selector, by = '') {
 // k6 지표는 실행마다 0 에서 시작하므로 이 실행의 마지막 값을 쓴다.
 function k6Last(name, by = '') {
   return `sum${by} (last_over_time(${name}{scenario="${SCENARIO}"}[${R}]))`;
+}
+
+// 게이지의 창 전체 최댓값·최솟값. 1초 간격으로 본다 (Prometheus 수집 주기와 같다).
+function maxOver(expr) {
+  return `max_over_time((${expr})[${R}:1s])`;
+}
+
+function minOver(expr) {
+  return `min_over_time((${expr})[${R}:1s])`;
 }
 
 function query(q) {
@@ -82,18 +101,28 @@ export default function () {
   const up = scalarOrNull(`min_over_time(up{job="riot-mock"}[${R}])`);
   judge(up === 1, '가짜 서버 수집 (창 전체 up)', up === null ? '없음' : count(up));
 
-  // 429 카운터는 첫 429 때 생기므로 결과가 비면 0 이다
+  // 창 안에서 적용된 application 10초 한도. 하나라도 500 보다 느슨했거나 시리즈가 없으면 FAIL 이다
+  const limitMax = scalarOrNull(maxOver(`max(${APP_LIMIT_10S})`));
+  const limitMin = scalarOrNull(minOver(`min(${APP_LIMIT_10S})`));
+  judge(limitMax !== null && limitMax <= APP_LIMIT_CEILING,
+    `가짜 서버 application 한도 (10초 창, ${APP_LIMIT_CEILING} 이하)`,
+    limitMax === null ? '없음' : `min=${count(limitMin)} max=${count(limitMax)}`);
+
+  // 429 카운터는 routing 의 첫 요청 때 0 으로 생긴다. 결과가 비면(창 안에 요청이 없었다) 0 이다
   const rateLimited = scalarOrNull(delta('riot_mock_rate_limited_total{type=~"application|method"}')) || 0;
   judge(rateLimited === 0, '가짜 서버 429 (application·method)', count(rateLimited));
 
-  // run 이 시작할 때 가짜 서버를 reset 하므로 END 시각 값이 그 실행의 최댓값이다
-  const peak = scalarOrNull('max(riot_mock_sliding_peak_ratio)');
+  // 창 전체의 최댓값이다. 창 안에서 application 한도를 바꾸면 추적기가 비워져도 그 전 값이 남는다
+  const peak = scalarOrNull(maxOver('max(riot_mock_sliding_peak_ratio)'));
   judge(peak !== null && peak < 1, '10초 구간 최대 사용률 (한도 대비)', peak === null ? '없음' : peak.toFixed(3));
 
   const calls = scalarOrNull(delta('riot_mock_requests_total')) || 0;
   judge(calls > 0, '총 Riot 호출', count(calls));
 
   // 처리 — WARN 이어도 1단계에서는 실행을 실패시키지 않는다
+  const appUp = scalarOrNull(`min_over_time(up{job="lol-app"}[${R}])`);
+  report(appUp === null || appUp < 1, '앱 수집 (창 전체 up)', appUp === null ? '없음' : count(appUp));
+
   // 지난 실행에서 생긴 시리즈는 이번 창에 0 으로 남으므로 뺀다
   const renewals = query(delta('lol_renewal_completed_total', ' by (result, reason)'))
     .filter((r) => Number(r.value[1]) !== 0);
@@ -126,11 +155,11 @@ export default function () {
     report(capped, '갱신 끝남 p95', `${p95.toFixed(2)}s${capped ? ` (폴링 상한 ${POLL_CAP_SECONDS}s 에 걸림)` : ''}`);
   }
 
-  const waiting = scalarOrNull(`max_over_time(sum(rabbitmq_queue_messages_ready{vhost="lab"} ${CONSUMED})[${R}:5s])`);
-  report(waiting === null || waiting > 0, '갱신 큐 최대 대기 (consumer 있는 큐)', waiting === null ? '없음' : count(waiting));
+  const waiting = scalarOrNull(maxOver(`sum(rabbitmq_queue_messages_ready{${QUEUE_SELECTOR}})`));
+  report(waiting === null || waiting > 0, `갱신 큐 최대 대기 (${QUEUE_LABEL})`, waiting === null ? '없음' : count(waiting));
 
-  const left = scalarOrNull(`sum(rabbitmq_queue_messages{vhost="lab"} ${CONSUMED})`);
-  report(left === null || left > 0, 'END 에 남은 갱신 (대기+처리 중)', left === null ? '없음' : count(left));
+  const left = scalarOrNull(`sum(rabbitmq_queue_messages{${QUEUE_SELECTOR}})`);
+  report(left === null || left > 0, `END 에 남은 갱신 (${QUEUE_LABEL}, 대기+처리 중)`, left === null ? '없음' : count(left));
 }
 
 // 기본 요약 대신 위의 표만 남긴다
