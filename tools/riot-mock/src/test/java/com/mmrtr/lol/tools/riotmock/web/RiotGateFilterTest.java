@@ -117,6 +117,23 @@ class RiotGateFilterTest extends LabWebTestSupport {
     }
 
     @Test
+    @DisplayName("routing의 첫 요청 뒤 그 routing의 429·unknown 카운터가 0으로 먼저 생긴다")
+    void prometheus_routing첫요청뒤_429와unknown카운터가_0으로있다() throws Exception {
+        // given: 다른 테스트가 쓰지 않는 routing 이다 (컨텍스트와 레지스트리는 테스트끼리 공유한다)
+        assertThat(registry.find("riot_mock_rate_limited_total").tag("routing", "sea").counters()).isEmpty();
+
+        // when
+        mvc.perform(get("/sea/riot/account/v1/accounts/by-riot-id/lab1/LAB").header("X-Riot-Token", "lab-key"))
+                .andExpect(status().isOk());
+
+        // then
+        String scrape = scrape();
+        assertThat(scrape).contains("riot_mock_rate_limited_total{routing=\"sea\",type=\"application\"} 0.0");
+        assertThat(scrape).contains("riot_mock_rate_limited_total{routing=\"sea\",type=\"method\"} 0.0");
+        assertThat(scrape).contains("riot_mock_unknown_total{routing=\"sea\"} 0.0");
+    }
+
+    @Test
     @DisplayName("창이 지난 버킷은 지표에서 0으로 보인다")
     void prometheus_창만료_카운트0() throws Exception {
         // given

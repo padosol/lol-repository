@@ -15,11 +15,15 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 심판 지표. 카운터는 reset 해도 비우지 않는다 (판정은 increase 로 한다).
+ * 심판 지표. 카운터는 reset 해도 비우지 않는다 (판정은 구간 증가량으로 한다).
  * 게이지는 1초마다 엔진과 슬라이딩 피크 추적기의 현재 값으로 다시 그린다.
  */
 @Component
 public class MockMetrics {
+
+    private static final String RATE_LIMITED = "riot_mock_rate_limited_total";
+    private static final String UNKNOWN = "riot_mock_unknown_total";
+    private static final List<String> RATE_LIMIT_TYPES = List.of(RateLimitEngine.APPLICATION, RateLimitEngine.METHOD);
 
     private final MeterRegistry registry;
     private final RateLimitEngine engine;
@@ -41,17 +45,35 @@ public class MockMetrics {
     }
 
     public void recordRequest(String routing, String endpoint, int status) {
-        seenRoutings.add(routing);
+        see(routing);
         registry.counter("riot_mock_requests_total",
                 "routing", routing, "endpoint", endpoint, "status", String.valueOf(status)).increment();
     }
 
     public void recordRateLimited(String routing, String type) {
-        registry.counter("riot_mock_rate_limited_total", "routing", routing, "type", type).increment();
+        see(routing);
+        registry.counter(RATE_LIMITED, "routing", routing, "type", type).increment();
     }
 
     public void recordUnknown(String routing) {
-        registry.counter("riot_mock_unknown_total", "routing", routing).increment();
+        see(routing);
+        registry.counter(UNKNOWN, "routing", routing).increment();
+    }
+
+    /**
+     * routing 을 처음 보면 429·unknown 카운터를 0 으로 먼저 만든다.
+     * 첫 429 때 시리즈가 생기면 Prometheus increase() 가 그 첫 값을 세지 않아 429 가 몰려도 0 으로 보인다.
+     * 등록은 멱등이므로 먼저 등록하고 나서 본 것으로 표시한다 (표시를 본 스레드는 0 시리즈가 있음을 보장받는다).
+     */
+    private void see(String routing) {
+        if (seenRoutings.contains(routing)) {
+            return;
+        }
+        for (String type : RATE_LIMIT_TYPES) {
+            registry.counter(RATE_LIMITED, "routing", routing, "type", type);
+        }
+        registry.counter(UNKNOWN, "routing", routing);
+        seenRoutings.add(routing);
     }
 
     @Scheduled(fixedRate = 1000)

@@ -11,8 +11,9 @@ import java.util.function.LongSupplier;
 /** Riot 방식의 고정 창 한도 엔진. routing 별로 application 버킷과 method 버킷을 센다. */
 public class RateLimitEngine {
 
-    private static final String APPLICATION = "application";
-    private static final String METHOD = "method";
+    /** 거절 사유(X-Rate-Limit-Type) 값. */
+    public static final String APPLICATION = "application";
+    public static final String METHOD = "method";
 
     private final Map<String, String> methodLimits = new LinkedHashMap<>();
     private String defaultMethodLimit;
