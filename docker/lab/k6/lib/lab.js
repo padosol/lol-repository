@@ -16,6 +16,8 @@ export const SYSTEM_TAGS = ['status', 'method', 'name', 'scenario', 'expected_re
 
 // 누적 10초
 const POLL_INTERVALS = [1, 1.5, 2, 2, 2, 1.5];
+/** 폴링을 그만두는 시각(초). 갱신 완료 시간은 이 값에서 잘린다. */
+export const POLL_CAP_SECONDS = POLL_INTERVALS.reduce((a, b) => a + b, 0);
 
 const renewalDone = new Trend('lab_renewal_done_seconds');
 const renewalOutcome = new Counter('lab_renewal_outcome');
@@ -49,7 +51,10 @@ export function renewalStatusOf(res) {
   }
 }
 
-/** 갱신을 요청하고 끝날 때까지(최대 10초) 폴링한다. 결과는 lab_renewal_outcome 의 outcome 태그로 센다. */
+/**
+ * 갱신을 요청하고 끝날 때까지(최대 10초) 폴링한다. 결과는 lab_renewal_outcome 의 outcome 태그로 센다.
+ * done 은 PROGRESS 가 끝났다는 뜻일 뿐이다 (앱 쪽 실패도 done). 성공·실패는 앱의 lol_renewal_completed_total 로 본다.
+ */
 export function renewAndPoll(puuid) {
   const url = `${APP}/api/v1/summoners/${puuid}/renewal`;
   const started = Date.now();

@@ -68,17 +68,26 @@ epoch 가 실행마다 바뀌므로 재방문 소환사의 새 게임 수(0~3)�
 
 ### 판정 항목
 
-한 줄에 `FAIL|WARN|PASS  <항목>  <값>` 이다. 범위는 [START, END] 이고 질의 시각은 END 다.
+한 줄에 `<등급>  <항목>  <값>` 이다. 범위는 [START, END] 이고 질의 시각은 END 다.
 
-| 항목 | 질의 | 판정 |
-|---|---|---|
-| 가짜 서버 429 (application·method) | `riot_mock_rate_limited_total{type=~"application\|method"}` 증가량 | 0 이 아니면 FAIL |
-| 10초 구간 최대 사용률 | `max(riot_mock_sliding_peak_ratio)` | 1 이상이면 FAIL. run 이 시작할 때 reset 하므로 END 값이 그 실행의 최댓값이다 |
-| 앱 갱신 결과 `<result>/<reason>` | `lol_renewal_completed_total` 증가량 (result·reason 별) | `failed` 면 WARN |
-| k6 갱신 결과 | `k6_lab_renewal_outcome_total` 의 이 실행 마지막 값 | `error` 가 있으면 WARN |
-| 갱신 완료 p95 | `k6_lab_renewal_done_seconds_p95` 의 이 실행 마지막 값 | 보고만 (POST 부터 PROGRESS 가 끝난 폴링까지, 10초 안에 끝난 것만) |
-| vhost lab 큐 최대 적체 | `max_over_time(sum(rabbitmq_queue_messages{vhost="lab"})[R:5s])` | 보고만 (consumer 없는 `renewal.match.find.queue` 도 들어간다) |
-| 총 Riot 호출 | `riot_mock_requests_total` 증가량 | 0 이면 WARN |
+- **판정 항목**은 `PASS` 또는 `FAIL` 이다. FAIL 이 하나라도 있으면 run·verify 가 종료 코드 1 로 끝난다.
+- **처리 항목**은 `WARN`(나쁨) 또는 `INFO` 다. PASS 로 찍지 않는다. 1단계에서는 WARN 이어도 실행을 실패시키지 않는다 (처리 지연을 판정에 넣는 것은 2단계).
+
+| 구분 | 항목 | 질의 | 등급 |
+|---|---|---|---|
+| 판정 | 가짜 서버 수집 (창 전체 up) | `min_over_time(up{job="riot-mock"}[R])` | 1 이 아니거나 비면 FAIL |
+| 판정 | 가짜 서버 429 (application·method) | `riot_mock_rate_limited_total{type=~"application\|method"}` 증가량 | 0 이 아니면 FAIL. 비면 0 (카운터가 첫 429 때 생긴다) |
+| 판정 | 10초 구간 최대 사용률 | `max(riot_mock_sliding_peak_ratio)` | 1 이상이거나 비면 FAIL. run 이 시작할 때 reset 하므로 END 값이 그 실행의 최댓값이다 |
+| 판정 | 총 Riot 호출 | `riot_mock_requests_total` 증가량 | 0 이면 FAIL (아무것도 시험하지 않은 실행) |
+| 처리 | 앱 갱신 결과 `<result>/<reason>` | `lol_renewal_completed_total` 증가량 (result·reason 별, 0 인 줄은 뺀다) | `failed` 면 WARN, 아니면 INFO. 하나도 없으면 WARN |
+| 처리 | k6 갱신 결과 | `k6_lab_renewal_outcome_total` 의 이 실행 마지막 값 | timeout 이나 error 가 있으면 WARN. 없으면 WARN |
+| 처리 | 갱신 끝남 p95 | `k6_lab_renewal_done_seconds_p95` 의 이 실행 마지막 값 | 폴링 상한(10초) 이상이면 WARN (값이 상한에서 잘린 것). 없으면 WARN |
+| 처리 | 갱신 큐 최대 대기 | consumer 있는 큐의 `rabbitmq_queue_messages_ready` 합의 `max_over_time(...[R:5s])` | 0 보다 크면 WARN. 없으면 WARN |
+| 처리 | END 에 남은 갱신 | consumer 있는 큐의 `rabbitmq_queue_messages`(대기+처리 중) 합, END 시각 | 0 보다 크면 WARN (END 에도 갱신이 밀려 있다). 없으면 WARN |
+
+k6 의 `끝남(성공·실패 포함)` 은 폴링에서 PROGRESS 가 끝난 것이다. 앱 쪽에서 실패한 갱신도 여기 들어가므로 성공·실패는 "앱 갱신 결과" 줄로 본다.
+큐 항목은 consumer 가 있는 큐만 본다. consumer 없는 `renewal.match.find.queue` 는 늘 쌓이고, 처리 중(unacked) 메시지는 정상이라 최대 대기는 ready 로 센다.
+큐가 다 빌 때까지 걸린 시간(소진 시간)은 아직 재지 않는다. 2단계 spike 시나리오에서 다룬다.
 
 증가량은 `increase()` 가 아니라 "END 값 − START 값, START 에 없던 시리즈는 END 값" 이다.
 가짜 서버의 429 카운터는 첫 429 때 생기는데, `increase()` 는 창 안에서 처음 생긴 시리즈의 첫 값을 세지 않아 429 가 한 번에 몰리면 0 으로 보일 수 있다.
@@ -88,33 +97,41 @@ epoch 가 실행마다 바뀌므로 재방문 소환사의 새 게임 수(0~3)�
 
 ```
 판정 steady  START=1793620690  END=1793621060  (370초)
+PASS  가짜 서버 수집 (창 전체 up)  1
 PASS  가짜 서버 429 (application·method)  0
 PASS  10초 구간 최대 사용률 (한도 대비)  0.990
-PASS  앱 갱신 결과 success/none  1432
-WARN  k6 갱신 결과  done=68 timeout=2766 rejected=160 error=3
-PASS  갱신 완료 p95  10.02s
-PASS  vhost lab 큐 최대 적체  2015
 PASS  총 Riot 호출  19173
+INFO  앱 갱신 결과 success/none  1432
+WARN  k6 갱신 결과  끝남(성공·실패 포함)=68 timeout=2766 rejected=160 error=3
+WARN  갱신 끝남 p95  10.02s (폴링 상한 10s 에 걸림)
+WARN  갱신 큐 최대 대기 (consumer 있는 큐)  1665
+WARN  END 에 남은 갱신 (대기+처리 중)  1415
 ```
+
+판정은 모두 PASS 라 종료 코드 0 이지만, 처리 항목은 갱신이 밀렸다고 말한다 (아래 "읽는 법").
 
 FAIL 이 하나라도 있으면 표 뒤에 `FAIL` 이 찍히고 종료 코드가 1 이다. `limit 30:10` 뒤 `RATE=10 DURATION=1m run steady` 를 돌리면 이렇게 된다.
 
 ```
+PASS  가짜 서버 수집 (창 전체 up)  1
 FAIL  가짜 서버 429 (application·method)  22
 FAIL  10초 구간 최대 사용률 (한도 대비)  1.400
-PASS  앱 갱신 결과 success/none  34
+PASS  총 Riot 호출  558
+INFO  앱 갱신 결과 success/none  34
 WARN  앱 갱신 결과 failed/budget_exceeded  94
 ...
 FAIL
 ```
 
+가짜 서버 지표가 없는 창(수집 전)을 판정하면 `FAIL  가짜 서버 수집 (창 전체 up)  없음`, `FAIL  10초 구간 최대 사용률 (한도 대비)  없음`, `FAIL  총 Riot 호출  0` 으로 실패한다.
+
 ### 읽는 법 (1단계 측정)
 
 - 10건/초 중 첫 방문 3건은 매치 20개를 새로 받으므로 asia 호출 수요가 초당 100건을 넘는다. 앱은 `500:10` 을 초당 45건으로 나눠 쓰므로(10초 창에 최대 11칸 × 45 = 495) asia 가 초당 45건 남짓에서 막히고, 슬라이딩 피크가 0.990 에 붙는다.
-  그래서 갱신 큐가 쌓이고(최대 2015) 대부분 10초 안에 끝나지 않는다(timeout). 429 는 없다.
+  그래서 갱신 큐가 쌓이고(대기 최대 1665, END 에도 1415 남음) 대부분 10초 안에 끝나지 않는다(timeout). 429 는 없다.
 - `rejected` 는 재방문 풀(1500명)을 한 바퀴 돌아 같은 소환사를 다시 골랐을 때, 큐 적체로 늦게 끝난 지난 갱신의 2분 규칙에 걸린 것이다.
 - `error`(3건, 두 번째 실행 6건)는 k6 → `host.docker.internal` 연결이 `dial: i/o timeout` 으로 실패한 것이다. 같은 시각 앱 로그에는 멈춤이 없었다 (Docker Desktop 의 호스트 연결 문제로 본다).
-- 갱신 완료 p95 가 10.02초인 것은 폴링이 10초에서 끝나기 때문이다. 큐가 쌓이면 이 값은 상한에 붙는다.
+- 갱신 끝남 p95 가 10.02초인 것은 폴링이 10초에서 끝나기 때문이다. 큐가 쌓이면 이 값은 상한에 붙고, 실제 지연은 이보다 길다.
 - `limit 30:10` 직후에는 run 이 Redis DB 1 을 비워 앱이 배운 한도를 잃으므로, 첫 응답이 `30:10` 을 알려 줄 때까지 기본값 `500:10` 으로 보내 429 가 난다. 앱이 배운 한도는 대시보드에 없고 Redis DB 1 `riot:rl:limits` 와 앱 로그 `Riot 한도 갱신 [asia|app] 30:10` 으로 본다.
 
 ### 걸린 시간 (2026-11-02, Apple Silicon 로컬)
@@ -161,8 +178,8 @@ Grafana·Prometheus·riot-mock·redis_exporter 는 인증이 없어 `127.0.0.1` 
 | 지표 | 이름 | 태그 |
 |---|---|---|
 | 요청 수 | `k6_http_reqs_total` | `name`(`seed-create`·`seed-warm`·`renewal-post`·`renewal-poll`), `method`, `status`, `scenario`, `expected_response` |
-| 갱신 완료 시간 | `k6_lab_renewal_done_seconds_p95` (`_p99`, `_avg`) | `scenario` |
-| 갱신 결과 | `k6_lab_renewal_outcome_total` | `outcome`(`done`·`timeout`·`rejected`·`error`), `scenario` |
+| 갱신 끝남 시간 (POST 부터 PROGRESS 가 끝난 폴링까지, 10초 안에 끝난 것만) | `k6_lab_renewal_done_seconds_p95` (`_p99`, `_avg`) | `scenario` |
+| 갱신 결과 | `k6_lab_renewal_outcome_total` | `outcome`(`done`=끝남, 성공·실패 포함 · `timeout` · `rejected` · `error`), `scenario` |
 
 `url` 태그는 소환사마다 달라 시리즈가 수천 개로 늘어나므로 보내지 않는다 (`systemTags`).
 trend 는 실행 시작부터의 누적 값이다 (마지막 값이 k6 요약의 `p(95)` 와 같다). 카운터는 실행마다 0 에서 다시 센다.
