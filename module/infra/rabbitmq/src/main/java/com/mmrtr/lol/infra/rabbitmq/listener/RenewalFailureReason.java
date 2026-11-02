@@ -5,6 +5,11 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -41,7 +46,7 @@ final class RenewalFailureReason {
         if (t instanceof RiotServerException) {
             return RIOT_5XX;
         }
-        if (t instanceof TimeoutException) {
+        if (causedByTimeout(throwable)) {
             return TIMEOUT;
         }
         return OTHER;
@@ -53,5 +58,19 @@ final class RenewalFailureReason {
             t = t.getCause();
         }
         return t;
+    }
+
+    /**
+     * cause 사슬 어딘가에 시간 초과가 있는지 본다.
+     * HTTP 읽기 시간 초과는 RestClient 가 {@code ResourceAccessException(HttpTimeoutException)} 으로 감싸 올린다.
+     */
+    private static boolean causedByTimeout(Throwable throwable) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable t = throwable; t != null && seen.add(t); t = t.getCause()) {
+            if (t instanceof TimeoutException || t instanceof HttpTimeoutException || t instanceof SocketTimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 }
