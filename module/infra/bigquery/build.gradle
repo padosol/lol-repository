@@ -6,7 +6,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter'
 
     // BigQuery (챔피언 통계 OLAP) — app 모듈의 GCS 와 같은 BOM
-    implementation platform('com.google.cloud:libraries-bom:26.43.0')
+    implementation platform('com.google.cloud:libraries-bom:26.91.0')
     implementation 'com.google.cloud:google-cloud-bigquery'
 
     // Jackson (빌드 아이템 배열 JSON 파싱)
