@@ -313,4 +313,46 @@ class RenewalSummonerStepTest {
         assertThat(priorities).containsExactly(RiotCallPriority.USER);
         assertThat(retryEnabled).containsExactly(false);
     }
+
+    @Test
+    @DisplayName("조회 뒤 단계에서 예외가 나면 레코드를 실패시키고 정상 반환한다")
+    void run_exceptionAfterFetch_failsRecordAndReturnsNormally() {
+        // given
+        given(recordPort.markSteps("p1", "r1", EnumSet.of(RenewalStep.SUMMONER)))
+                .willThrow(new IllegalStateException("db down"));
+
+        // when
+        step.run(message("r1"));
+
+        // then
+        verify(finisher).fail("p1", "r1", "other");
+        verifyNoInteractions(stepPublisher);
+    }
+
+    @Test
+    @DisplayName("발행이 던져도 레코드를 실패시키고 정상 반환한다")
+    void run_publishThrows_failsRecordAndReturnsNormally() {
+        // given
+        org.mockito.Mockito.doThrow(new IllegalStateException("rabbit down"))
+                .when(stepPublisher).publish(any(), any());
+
+        // when
+        step.run(message("r1"));
+
+        // then
+        verify(finisher).fail("p1", "r1", "other");
+    }
+
+    @Test
+    @DisplayName("실패 표시 자체가 던져도 정상 반환한다")
+    void run_failItselfThrows_stillReturnsNormally() {
+        // given
+        given(recordPort.markSteps("p1", "r1", EnumSet.of(RenewalStep.SUMMONER)))
+                .willThrow(new IllegalStateException("db down"));
+        org.mockito.Mockito.doThrow(new IllegalStateException("redis down"))
+                .when(finisher).fail(anyString(), anyString(), anyString());
+
+        // when // then
+        org.assertj.core.api.Assertions.assertThatCode(() -> step.run(message("r1"))).doesNotThrowAnyException();
+    }
 }
