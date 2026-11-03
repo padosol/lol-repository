@@ -57,6 +57,6 @@ class TierCollectionServiceTest {
         service.execute("KR");
 
         verify(publishPort).publishForCollection(List.of("p1"), "KR");
-        verify(publishPort, never()).publishForRenewal(any(), any());
+        verify(publishPort, never()).publishForRenewal(any(), any(), any());
     }
 }

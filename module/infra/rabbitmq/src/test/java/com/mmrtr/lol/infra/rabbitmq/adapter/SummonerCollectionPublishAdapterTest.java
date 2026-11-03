@@ -21,13 +21,15 @@ class SummonerCollectionPublishAdapterTest {
     private final SummonerCollectionPublishAdapter adapter = new SummonerCollectionPublishAdapter(rabbitTemplate);
 
     @Test
-    @DisplayName("사용자 갱신 발행은 background=false 로 보낸다")
-    void publishForRenewal_sendsUserMessage() {
-        adapter.publishForRenewal(List.of("p1"), "KR");
+    @DisplayName("사용자 갱신 발행은 renewalId 를 싣고 background=false 로 보낸다")
+    void publishForRenewal_sendsRenewalIdToSummonerQueue() {
+        adapter.publishForRenewal("p1", "KR", "r1");
 
         assertThat(sent(1)).singleElement().satisfies(m -> {
             assertThat(m.getPuuid()).isEqualTo("p1");
             assertThat(m.getPlatformId()).isEqualTo("KR");
+            assertThat(m.getRenewalId()).isEqualTo("r1");
+            assertThat(m.getAttempt()).isZero();
             assertThat(m.isBackground()).isFalse();
         });
     }
