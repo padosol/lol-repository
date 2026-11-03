@@ -94,7 +94,7 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
             bits |= step.bit();
         }
         Long result = redis.execute(MARK,
-                List.of(recordKey(puuid), ACTIVE_KEY),
+                List.of(recordKey(puuid), ACTIVE_KEY, targetsKey(puuid)),
                 renewalId, String.valueOf(bits), puuid,
                 String.valueOf(DONE_TTL.toSeconds()), String.valueOf(DEADLINE_FAILED_TTL.toSeconds()));
         return toTransition(result);
@@ -112,7 +112,7 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
 
     private RenewalTransition runFail(String puuid, String renewalId, String reason, String mode) {
         Long result = redis.execute(FAIL,
-                List.of(recordKey(puuid), ACTIVE_KEY),
+                List.of(recordKey(puuid), ACTIVE_KEY, targetsKey(puuid)),
                 renewalId, reason, puuid, mode,
                 String.valueOf(DONE_TTL.toSeconds()), String.valueOf(DEADLINE_FAILED_TTL.toSeconds()),
                 DEADLINE_REASON);

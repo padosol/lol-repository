@@ -256,6 +256,48 @@ class RenewalRecordRedisAdapterTest {
     }
 
     @Test
+    @DisplayName("기한 실패로 레코드 TTL 이 다시 잡혀도 대상 집합은 레코드보다 먼저 만료되지 않는다")
+    void targets_ttlFollowsRecordTtl_afterDeadlineFailure() {
+        // given
+        adapter.open("p1", "r1", "KR");
+        adapter.recordTargets("p1", "r1", List.of("KR_1"));
+        assertThat(redis.getExpire(KEY + ":matches")).isBetween(290L, 300L);
+        redis.expire(KEY + ":matches", java.time.Duration.ofSeconds(10));
+        redis.opsForHash().put(KEY, "deadlineAt", "1");
+
+        // when
+        adapter.failIfOverdue("p1", "r1");
+
+        // then
+        assertThat(redis.getExpire(KEY + ":matches")).isGreaterThanOrEqualTo(redis.getExpire(KEY) - 1);
+        assertThat(redis.getExpire(KEY + ":matches")).isBetween(290L, 300L);
+    }
+
+    @Test
+    @DisplayName("일반 실패와 성공 때도 대상 집합 TTL 을 레코드와 맞춘다")
+    void targets_ttlFollowsRecordTtl_onFailAndSuccessAndLateFailure() {
+        // given 일반 실패
+        adapter.open("p1", "r1", "KR");
+        adapter.recordTargets("p1", "r1", List.of("KR_1"));
+        adapter.fail("p1", "r1", "not_found");
+        assertThat(redis.getExpire(KEY + ":matches")).isBetween(1L, 30L);
+
+        // given 성공
+        adapter.open("p1", "r2", "KR");
+        adapter.recordTargets("p1", "r2", List.of("KR_1"));
+        adapter.markSteps("p1", "r2", EnumSet.allOf(com.mmrtr.lol.domain.summoner.domain.RenewalStep.class));
+        assertThat(redis.getExpire(KEY + ":matches")).isBetween(1L, 30L);
+
+        // given 기한 뒤 마지막 비트
+        adapter.open("p1", "r3", "KR");
+        adapter.recordTargets("p1", "r3", List.of("KR_1"));
+        redis.expire(KEY + ":matches", java.time.Duration.ofSeconds(10));
+        redis.opsForHash().put(KEY, "deadlineAt", "1");
+        adapter.markSteps("p1", "r3", EnumSet.allOf(com.mmrtr.lol.domain.summoner.domain.RenewalStep.class));
+        assertThat(redis.getExpire(KEY + ":matches")).isBetween(290L, 300L);
+    }
+
+    @Test
     @DisplayName("deactivate 는 active 에서 뺀다")
     void deactivate_removesFromActive() {
         // given

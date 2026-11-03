@@ -1,4 +1,4 @@
--- KEYS[1]=record hash, KEYS[2]=active zset
+-- KEYS[1]=record hash, KEYS[2]=active zset, KEYS[3]=targets set (record 와 같은 TTL 로 맞춘다)
 -- ARGV[1]=renewalId, ARGV[2]=step bits, ARGV[3]=puuid, ARGV[4]=done ttl, ARGV[5]=deadline-failed ttl
 -- 반환 (RenewalTransition ordinal): 0 NONE, 1 SUCCEEDED, 3 FAILED_LATE_COMPLETED, 4 LATE_COMPLETED
 if redis.call('HGET', KEYS[1], 'renewalId') ~= ARGV[1] then
@@ -19,11 +19,13 @@ if status == 'PROGRESS' then
     if now <= deadline then
         redis.call('HSET', KEYS[1], 'status', 'SUCCESS')
         redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
+        redis.call('EXPIRE', KEYS[3], tonumber(ARGV[4]))
         redis.call('ZREM', KEYS[2], ARGV[3])
         return 1
     end
     redis.call('HSET', KEYS[1], 'status', 'FAILED', 'reason', 'deadline', 'lateDone', '1')
     redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
+    redis.call('EXPIRE', KEYS[3], tonumber(ARGV[5]))
     redis.call('ZREM', KEYS[2], ARGV[3])
     return 3
 end
