@@ -1,4 +1,8 @@
 spring:
+  task:
+    scheduling:
+      pool:
+        size: 4
   batch:
     jdbc:
       initialize-schema: never
