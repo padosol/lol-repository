@@ -39,7 +39,7 @@
   - revisionDate 가 같으면 1 에서 바로 `SUCCESS` 다.
 - **G2. 접수부터 5초 안에 끝나지 않으면 `FAILED` 와 "잠시 후 다시 시도해 주세요" 를 돌려준다.** 실패한 단계가 있어도 `FAILED`, 진행 중이면 `PROGRESS` 다. 상태 GET 은 이 셋을 돌려준다. **[결정]**
 - **G3. `FAILED` 뒤에도 서버는 그 갱신의 일을 끝까지 한다.** 유저가 다시 눌렀을 때 결과가 보이게 하기 위해서다. **[결정]** (Plan 2 설계 5.2-7 과 같다)
-- **G4. 갱신 단계마다 큐와 리스너가 따로 있고, 리스너는 서로의 동작을 바꾸지 않는다.** 사용자 쪽과 백그라운드 쪽이 만나는 곳은 Riot 예산(한도 관리자), DB, 그리고 매치 적재 큐 `mmrtr.matchId` 의 메시지 우선순위다. **[결정]**
+- **G4. 갱신 단계마다 큐와 리스너가 따로 있고, 리스너는 서로의 동작을 바꾸지 않는다.** 사용자 쪽과 백그라운드 쪽이 만나는 곳은 Riot 예산(한도 관리자), DB, 그리고 매치 적재 큐 `mmrtr.matchId` 의 처리 순위다. **[결정]**
 - **G5. 사용자 갱신끼리 같은 매치를 Riot 에 두 번 요청하지 않는다.** Riot 호출 전에 DB 와 Redis 를 확인한다. **[결정]**
 - **G6. 갱신의 매치 호출은 429 를 인라인으로 재시도하지 않는다.** 429 받은 매치는 따로 빼서 `mmrtr.matchId` 에 높은 우선순위로 넣는다. **[결정]**
 - **G7. 사용자 쪽 리스너(①~④)는 DB 에 쓴 뒤에 ack 한다.** 처리 중에 프로세스가 죽어도 메시지가 다시 와서 일이 사라지지 않는다. **[결정]**
@@ -95,10 +95,10 @@ flowchart LR
     end
     subgraph BG["매치 적재 — 유저와 무관"]
         T["티어 수집"] --> Q5["⑤ renewal.match.find.queue<br/>matchId 검색"]
-        Q5 -- "우선순위 1" --> Q6["⑥ mmrtr.matchId<br/>매치 적재 (우선순위 큐)"]
+        Q5 -- "순위 3" --> Q6["⑥ mmrtr.matchId<br/>매치 적재 (우선순위 큐)"]
     end
     Q4 -- "20개 꽉 참: 21번째부터" --> Q5
-    Q4 -- "429 · 예약 실패: 우선순위 3" --> Q6
+    Q4 -- "429 · 예약 실패: 순위 2" --> Q6
     J(("완료 판정기")) -. "Redis 갱신 레코드 · DB 확인" .- USER
 ```
 
@@ -115,9 +115,9 @@ flowchart LR
 | ① | `mmrtr.summoner` (기존) | lol-repository POST, lol-server | `SummonerRenewalListener` | **소환사 단계.** summoner-v4 조회 → revisionDate 비교. 같으면 `SUCCESS`. 다르면 소환사 정보 저장 → 소환사 비트 → ②③④ 발행 | USER | DB 저장·발행 뒤 |
 | ② | `mmrtr.renewal.account` (새) | ① | 계정 리스너 | **계정 단계.** account-v1 조회 → 닉네임·태그 저장 → 계정 비트 | USER | DB 저장 뒤 |
 | ③ | `mmrtr.renewal.league` (새) | ① | 리그 리스너 | **리그 단계.** league-v4 entries-by-puuid 조회 → 리그 정보 저장 → 리그 비트 | USER | DB 저장 뒤 |
-| ④ | `mmrtr.renewal.match` (새) | ① | 매치 리스너 | **매치 단계.** match ids(커서 이후 20개) → DB 에 없는 대상 기록 → 선점한 대상의 match + timeline 을 병렬 조회 → DB 저장. 429·예약 실패한 매치는 ⑥ 에 우선순위 3 으로. 20개 꽉 차면 ⑤ 로 넘김. 대상이 전부 DB 에 있으면 매치 비트 | USER | DB 저장 뒤 |
-| ⑤ | `renewal.match.find.queue` (기존, #130 이 켬) | 티어 수집(offset 0), ④(offset 20) | `MatchFindListener` | **matchId 검색.** puuid 의 match ids 를 100개씩 최대 10페이지 모아, DB·`match:pending` 확인 후 ⑥ 에 우선순위 1 로 | BACKGROUND | 지금 그대로 |
-| ⑥ | `mmrtr.matchId` (기존, **우선순위 큐로 다시 만듦**, #130 이 켬) | ⑤(우선순위 1), ④(우선순위 3) | `MatchListener` | **매치 적재.** 우선순위 높은 메시지부터 꺼낸다 → DB 확인 → `match:processing` 선점 → match + timeline → 배치 저장 | 메시지 우선순위 3 이면 USER, 아니면 BACKGROUND | 지금 그대로 (배치 큐에 넣은 뒤) |
+| ④ | `mmrtr.renewal.match` (새) | ① | 매치 리스너 | **매치 단계.** match ids(커서 이후 20개) → DB 에 없는 대상 기록 → 선점한 대상의 match + timeline 을 병렬 조회 → DB 저장. 429·예약 실패한 매치는 ⑥ 에 순위 2 로. 20개 꽉 차면 ⑤ 로 넘김. 대상이 전부 DB 에 있으면 매치 비트 | USER | DB 저장 뒤 |
+| ⑤ | `renewal.match.find.queue` (기존, #130 이 켬) | 티어 수집(offset 0), ④(offset 20) | `MatchFindListener` | **matchId 검색.** puuid 의 match ids 를 100개씩 최대 10페이지 모아, DB·`match:pending` 확인 후 ⑥ 에 순위 3 으로 | BACKGROUND | 지금 그대로 |
+| ⑥ | `mmrtr.matchId` (기존, **우선순위 큐로 다시 만듦**, #130 이 켬) | ⑤(순위 3), ④(순위 2), Plan 2(순위 1) | `MatchListener` | **매치 적재.** 처리 순위가 앞선 메시지부터 꺼낸다 → DB 확인 → `match:processing` 선점 → match + timeline → 배치 저장 | 처리 순위로 정한다 (4.3) | 지금 그대로 (배치 큐에 넣은 뒤) |
 
 - 새 큐 ②~④ 는 exchange `mmrtr.renewal.exchange`(direct) 하나에 routing key 로 묶고, 각자 DLX `<큐 이름>.dlx` 를 둔다. 이름은 **[판단]** 이다.
 - 사용자 쪽 리스너 ②~④ 는 prefetch 1, 수동 ack. 동시 수는 설정값이다 (시작값: ② 10, ③ 10, ④ 20).
@@ -126,21 +126,27 @@ flowchart LR
   - ④ 는 그 매치만 ⑥ 으로 보낸다.
   - 5xx·IO 오류는 지금의 `RetryInterceptor` 인라인 재시도(최대 3번)를 그대로 쓴다.
 
-### 4.3 `mmrtr.matchId` 메시지 우선순위 [결정: 우선순위 큐에 재시도를 넣는다 / 판단: 값]
+### 4.3 `mmrtr.matchId` 처리 순위 [결정]
 
-- 큐 인자 `x-max-priority: 3`. RabbitMQ 는 숫자가 클수록 먼저 꺼낸다.
+- 큐 인자 `x-max-priority: 3`.
+- **처리 순위는 1 이 가장 먼저다.** 1 은 나중 타임라인이다. 갱신을 막 끝낸 유저가 상세 화면을 보고 있는데 그래프·빌드 순서가 비어 있는 상태라 가장 급하다. **[결정]**
+- RabbitMQ 의 메시지 priority 값은 반대로 숫자가 클수록 먼저 꺼낸다. 그래서 메시지에 싣는 AMQP 값은 처리 순위를 뒤집어 넣는다. 코드에서는 처리 순위를 enum 으로 두고 AMQP 값으로 바꾸는 곳을 한 군데로 모은다. **[판단]**
 
-  | 메시지 우선순위 | 넣는 곳 | 내용 | Riot 호출 우선순위 |
-  |---|---|---|---|
-  | 3 | ④ | 사용자 갱신이 429·예약 실패로 넘긴 매치 | USER |
-  | 2 | (비워 둔다) | Plan 2 의 "나중 타임라인" 자리 | — |
-  | 1 | ⑤ | 20게임 이후 매치, 티어 수집 매치 | BACKGROUND |
+  | 처리 순위 | AMQP priority | 넣는 곳 | 내용 | Riot 호출 우선순위 |
+  |---|---|---|---|---|
+  | 1 (가장 먼저) | 3 | Plan 2 | 나중 타임라인. 이번에는 자리만 둔다 | Plan 2 가 정한다 (#135 의 DEFERRED 가 이 용도) |
+  | 2 | 2 | ④ | 사용자 갱신이 429·예약 실패로 넘긴 매치 | USER |
+  | 3 (가장 나중) | 1 | ⑤ | 20게임 이후 매치, 티어 수집 매치 | BACKGROUND |
 
-- 메시지 우선순위 → Riot 호출 우선순위는 위 표의 고정 규칙이다. `MatchListener` 는 누구의 갱신인지 모르고 메시지 우선순위만 본다 (G4).
+- 처리 순위 → Riot 호출 우선순위는 위 표의 고정 규칙이다. `MatchListener` 는 누구의 갱신인지 모르고 처리 순위만 본다 (G4).
+- 큐의 꺼내는 순서와 Riot 호출 우선순위는 별개다. 순위 1 이 큐에서 가장 먼저 나와도, Riot 호출은 한도 관리자의 우선순위(USER 먼저)를 따른다.
 - 우선순위는 큐에서 기다리는 메시지에만 적용된다. 이미 리스너에게 넘어간 메시지는 순서가 바뀌지 않으므로 prefetch 는 지금처럼 1 로 둔다.
-- 우선순위 3 이 계속 들어오면 1 은 굶는다. 3 은 429 가 났을 때만 생기므로 드물다. 대량으로 생기면 지표(5.8)로 보인다.
-- requeue(`QUEUE_FULL`, 시간 초과, 예약 실패)한 메시지는 우선순위를 그대로 가진다.
-- 우선순위 3 메시지도 429 를 받으면 `MatchListener` 의 지금 동작(인라인 재시도 후 실패 시 DLX)을 따른다. 이때는 사용자 갱신을 묶지 않는다.
+- 앞 순위가 계속 들어오면 뒤 순위는 굶는다.
+  - 순위 2 는 429 가 났을 때만 생겨 드물다.
+  - 순위 1 은 Plan 2 에서 갱신마다 최대 17건 생긴다. 그동안 백필(순위 3)은 기다린다. 백필은 남는 예산만 쓰는 일이라 받아들인다.
+  - 대량으로 생기면 지표(5.8)로 보인다.
+- requeue(`QUEUE_FULL`, 시간 초과, 예약 실패)한 메시지는 순위를 그대로 가진다.
+- 순위 2 메시지도 429 를 받으면 `MatchListener` 의 지금 동작(인라인 재시도 후 실패 시 DLX)을 따른다. 이때는 사용자 갱신을 묶지 않는다.
 
 ### 4.4 메시지
 
@@ -150,7 +156,7 @@ flowchart LR
 | ②③ | {renewalId, puuid, platform, attempt} |
 | ④ | {renewalId, puuid, platform, startTime(DB revisionDate 초), attempt} |
 | ⑤ | `SummonerRenewalMessage` {puuid, platform, revisionDate} + **startOffset(새, 없으면 20)** |
-| ⑥ | 지금 그대로 (본문 matchId, 헤더 region) + **메시지 priority** (AMQP 속성) |
+| ⑥ | 지금 그대로 (본문 matchId, 헤더 region) + **AMQP priority** (처리 순위를 뒤집은 값, 4.3) |
 
 ## 5. 설계
 
@@ -232,7 +238,7 @@ flowchart LR
    | 결과 | 처리 |
    |---|---|
    | 성공 | 모아서 한 번에 DB 저장(`saveAll`). 요청자 캐시도 쓴다. 저장 뒤 선점을 푼다 |
-   | 429 · 예약 실패 | 그 매치를 ⑥ `mmrtr.matchId` 에 **우선순위 3** 으로 넣고 선점을 푼다 |
+   | 429 · 예약 실패 | 그 매치를 ⑥ `mmrtr.matchId` 에 **처리 순위 2** 로 넣고 선점을 푼다 |
    | 4xx (429 제외) | 실패 표시(5.4)를 남기고 선점을 푼다 |
 
 5. 대상이 전부 DB 에 있으면 매치 비트를 켠다. 아니면(⑥ 으로 넘긴 것, 다른 갱신이 선점한 것) 판정기가 DB 를 보고 켠다.
@@ -284,10 +290,10 @@ flowchart LR
 ### 5.7 매치 적재 쪽 (백그라운드) [결정: 유저와 무관하게 매치 적재만]
 
 - 티어 수집(`TierCollectionService` → `SummonerCollectionPublishPort.publishForCollection`)은 `mmrtr.summoner` 대신 ⑤ `renewal.match.find.queue` 에 `startOffset` 0, `revisionDate` 0 으로 넣는다.
-- ⑤ `MatchFindService` 는 지금처럼 `startTime` 하한을 2026-01-01 로 두고, 메시지의 `startOffset` 부터 100개씩 최대 10페이지 모은다. DB·`match:pending` 확인 후 ⑥ 에 우선순위 1 로 보낸다.
+- ⑤ `MatchFindService` 는 지금처럼 `startTime` 하한을 2026-01-01 로 두고, 메시지의 `startOffset` 부터 100개씩 최대 10페이지 모은다. DB·`match:pending` 확인 후 ⑥ 에 처리 순위 3 으로 보낸다.
 - ⑥ `MatchListener` → `MatchDataProcessor` → `MatchBatchProcessor` 는 지금 구조 그대로이고 세 가지만 바꾼다.
-  - Riot 호출 우선순위를 고정값 BACKGROUND 대신 메시지 우선순위로 정한다 (4.3).
-  - 처리 전에 DB 를 확인해 이미 있으면 `DUPLICATE` 로 끝낸다. 우선순위 3 메시지는 발행 뒤 다른 경로가 저장했을 수 있다.
+  - Riot 호출 우선순위를 고정값 BACKGROUND 대신 처리 순위로 정한다 (4.3).
+  - 처리 전에 DB 를 확인해 이미 있으면 `DUPLICATE` 로 끝낸다. 순위 2 메시지는 발행 뒤 다른 경로가 저장했을 수 있다.
   - 실패(FAILURE)일 때도 `match:processing` 을 푼다 (값이 내 것일 때만). 지금은 30분 동안 남아 같은 매치의 재시도 메시지가 `DUPLICATE` 로 버려진다.
 - 백그라운드는 소환사·계정·리그를 저장하지 않는다. 그 결과는 8장 한계에 적는다.
 - `SummonerRenewalService` 의 BACKGROUND 실행 경로(`AsyncMatchSaver` 포함)와 부르는 곳 없는 `SummonerCollectService` 는 걷어 낸다.
@@ -302,9 +308,9 @@ flowchart LR
   - `lol.renewal.late_completed` — 늦은 완료 수 (counter)
   - `lol.renewal.active` — 진행 중 갱신 수 (gauge)
   - `lol.renewal.step{step, result}` — 단계 리스너별 결과 (success / requeue / failed)
-  - `lol.match.process{priority, result}` — ⑥ 처리 결과를 메시지 우선순위별로 (success / duplicate / failure / requeue)
+  - `lol.match.process{rank, result}` — ⑥ 처리 결과를 처리 순위별로. `rank` 는 숫자 대신 이름(`timeline_later` / `user_retry` / `backfill`)으로 둔다 (success / duplicate / failure / requeue)
 - 실험실:
-  - `verify` 에 END 시점 ②~④ 큐 깊이, ⑥ 의 우선순위 3 처리 수, `lol.renewal.duration` p95, `deadline` 비율을 WARN/INFO 로 더한다 (실험실 설계의 "처리 항목은 FAIL 로 치지 않는다" 규칙을 그대로 따른다). Grafana 에 같은 패널을 더한다.
+  - `verify` 에 END 시점 ②~④ 큐 깊이, ⑥ 의 `user_retry` 처리 수, `lol.renewal.duration` p95, `deadline` 비율을 WARN/INFO 로 더한다 (실험실 설계의 "처리 항목은 FAIL 로 치지 않는다" 규칙을 그대로 따른다). Grafana 에 같은 패널을 더한다.
   - k6 는 GET `status != PROGRESS` 를 끝으로 보므로 바꿀 필요가 없다 (`FAILED` 도 끝). k6 폴링 상한(10초)은 5초 기한보다 길다.
   - 실험실 vhost `lab` 의 `mmrtr.matchId` 도 우선순위 큐로 다시 만들어야 한다. `lab.sh` 의 초기화가 큐를 지우고 다시 만들게 한다.
 - 완료 기준: `lab.sh run steady` FAIL 0. 결과를 #139 기준선(`timeout=2769`, 갱신 끝남 p95 10.02s)과 나란히 PR 에 적는다.
@@ -317,7 +323,7 @@ flowchart LR
 | 6.1 `remainingMatches` 카운터 + Lua + "이번 갱신에서 처리한 matchId" 집합 | 단계 비트 + 대상 집합 + DB 상태 판정(5.5). 카운터는 다른 갱신이 처리한 매치를 줄이지 못한다. 비트는 이번에 만들고, Plan 2 는 진행률 = 10 × 켜진 비트 수로 내보내기만 한다 |
 | 6.1 키 `summoner:renewal:v2:{puuid}` | `summoner:renewal-v2:{puuid}` (lol-server SCAN 패턴 밖, 3장) |
 | 6.2 매치 단계 완료 = 매치 목록 캐시에 쓴 뒤 | DB 커밋 뒤. 다른 경로가 적재한 매치는 요청자 캐시에 없다 |
-| 6.5 match 큐 우선순위 1·2·3 (우선순위 큐 하나 또는 큐 셋) | 사용자 갱신 매치는 ④ 가 직접 부른다. `mmrtr.matchId` 를 `x-max-priority: 3` 우선순위 큐로 만들어 RabbitMQ 3 = 사용자 재시도, 2 = (Plan 2 나중 타임라인), 1 = 백필로 쓴다. RabbitMQ 는 숫자가 클수록 먼저라 Plan 2 설계의 번호(1 이 가장 먼저)와 반대다 |
+| 5.4·6.5 match 큐 우선순위 1 = 갱신 중인 매치, 2 = 나중 타임라인, 3 = 백필 | 갱신 중인 매치는 큐를 거치지 않고 ④ 가 직접 부른다. `mmrtr.matchId` 를 `x-max-priority: 3` 우선순위 큐로 만들고 처리 순위를 **1 = 나중 타임라인, 2 = 사용자 재시도, 3 = 백필** 로 쓴다 **[결정]**. AMQP 값은 뒤집어 싣는다(3 / 2 / 1, 4.3) |
 | 6.7 GET `FAILED` → 구 `status` 는 `SUCCESS` | 구 `status` 도 `FAILED` 이고 문구 필드를 더한다 **[결정]**. Plan 2 는 `state`·`progress` 만 더한다 |
 | 6.9 "계정·소환사·리그·매치 목록 단계는 컨슈머 안에서 비동기로" | 단계마다 큐와 리스너를 둔다 **[결정]** |
 | 6.10 사용자 갱신을 새 큐 `mmrtr.renewal.user` 로, 기존 `mmrtr.summoner` 는 BACKGROUND | 반대로 간다. `mmrtr.summoner` 는 사용자 갱신 입구로 남기고(lol-server 가 이미 쓴다), 티어 수집을 ⑤ 로 옮긴다 |
@@ -332,8 +338,8 @@ flowchart LR
   1. 티어 수집을 멈추고 `mmrtr.summoner` 를 비운다. 남아 있는 `background=true` 메시지는 사용자 갱신으로 처리된다 (틀리지는 않지만 호출이 늘어난다).
   2. `mmrtr.matchId` 깊이를 확인하고(지금은 넣는 곳이 없어 0 이어야 한다) 큐를 지운다. 예: `rabbitmqctl delete_queue -p <vhost> mmrtr.matchId`. 배포된 앱이 `x-max-priority: 3` 으로 다시 만든다. 지우지 않으면 선언이 `PRECONDITION_FAILED` 로 거절된다.
 - **기준선:** 이 작업 뒤의 `lab.sh run steady` 결과가 Plan 2 의 비교 기준이다.
-- **Plan 2 에 넘기는 것:** 단계 큐 ①~④, 갱신 레코드와 단계 비트(5.1), 완료 판정기(5.5), 우선순위 큐 `mmrtr.matchId` 의 빈 자리 2.
-- **Plan 2 가 할 일:** 진행률 노출, 접수 거절, 타임라인 나중 받기(메시지 우선순위 2), 기한이 지난 갱신의 우선순위 낮추기 검토, lol-ui.
+- **Plan 2 에 넘기는 것:** 단계 큐 ①~④, 갱신 레코드와 단계 비트(5.1), 완료 판정기(5.5), 우선순위 큐 `mmrtr.matchId` 의 빈 자리(처리 순위 1).
+- **Plan 2 가 할 일:** 진행률 노출, 접수 거절, 타임라인 나중 받기(처리 순위 1, Riot 호출 우선순위 결정 포함), 기한이 지난 갱신의 우선순위 낮추기 검토, lol-ui.
 
 ## 8. 알려진 한계
 
@@ -355,4 +361,4 @@ flowchart LR
 - 단계별 저장 경로를 나누는 방법 (`SummonerAssembler`·`SaveSummonerDataUseCase` 분리).
 - `MatchService.saveAll` hold-and-wait 를 고치는 방법 (트랜잭션 범위 조정, 저장 순서 변경 등). 고친 뒤 실험실 seed warm 50/s 로 재현이 없는지 확인한다.
 - 429 인라인 재시도를 끄는 방법 (요청 attribute 로 사용자 쪽 호출만 끄기 등). 공개 API 의 동기 호출과 ⑥ 은 지금 동작을 유지한다.
-- 테스트 구성. 기존 패턴(리스너·처리기 단위 테스트, Testcontainers Redis·RabbitMQ)을 따른다. 우선순위 큐는 Testcontainers RabbitMQ 로 "3 이 1 보다 먼저 나온다" 를 확인한다.
+- 테스트 구성. 기존 패턴(리스너·처리기 단위 테스트, Testcontainers Redis·RabbitMQ)을 따른다. 우선순위 큐는 Testcontainers RabbitMQ 로 "처리 순위 1 이 2 보다, 2 가 3 보다 먼저 나온다" 를 확인한다.
