@@ -4,12 +4,14 @@
 - 범위: lol-repository (갱신 리스너·큐 · 매치 처리 · 갱신 상태 API · 티어 수집 경로 · 실험실 지표)
 - 상태: 설계 (구현 전)
 - 선행 문서: `2026-10-27-summoner-renewal-pipeline-design.md` (이하 "Plan 2 설계"), `2026-11-01-riot-api-lab-design.md` (이하 "실험실 설계")
+- 기준 코드 (2026-11-03 확인): lol-repository develop(= 이 작업의 base `feat/riot-api-lab` 에 모두 들어 있음, #129 운영 커넥션 풀 10 포함), lol-server main(#169·#175 배포 뒤), lol-ui main 1.13.0(`eb83947`), lol-deploy main(RabbitMQ 3.13)
 - 표기: **[결정]** 은 사용자가 정한 것, **[판단]** 은 설계 작성자가 정한 것으로 빌더가 더 나은 근거가 있으면 바꿀 수 있다.
 
 ## 1. 왜 하나
 
 ### 지금 구조
 
+- **Riot 관련 처리는 모두 lol-repository 가 한다.** lol-server 는 #169(Riot 데이터 모듈 제거)·#175(2026-10-25 운영 배포)로 소환사·전적·랭킹·관전·game-data 모듈과 RabbitMQ 의존을 지웠다. 남은 도메인은 championstats·community·duo·member 다. 그래서 갱신 입구는 lol-repository 공개 API POST 하나이고, `mmrtr.summoner` 에 넣는 것도, `summoner:renewal:*`·`summoner:click-cooldown:*` 를 읽는 것도 lol-repository 뿐이다. **[결정]**
 - 갱신 상태는 Redis `summoner:renewal:{puuid}` 의 존재 여부 하나다. 갱신 리스너(`SummonerRenewalListener`)가 끝나면 finally 에서 지운다. 실패해도 지우므로 상태 GET 은 `SUCCESS` 를 돌려준다.
 - `SummonerRenewalService.doRenew` 가 메시지 하나 안에서 summoner → account ∥ league → match ids → match·timeline ×N 을 모두 기다린다. 호출 하나만 실패해도 `join()` 예외로 아무것도 저장되지 않는다.
 - 소환사는 Riot 의 새 revisionDate 로 저장되는데, 매치 DB 저장(`AsyncMatchSaver`)은 그 뒤에 비동기로 돈다. 비동기 저장이 실패하면 커서(DB revisionDate = 다음 갱신의 match ids `startTime`)는 이미 앞으로 가 있어 그 매치는 다시 조회되지 않는다.
@@ -52,7 +54,7 @@
 - 사용자 쪽과 백그라운드 쪽 사이의 중복 방지. 둘은 처리 표시를 공유하지 않는다 (G4). 같은 매치를 둘 다 부를 수 있고, DB 는 `ON CONFLICT` 로 하나만 남긴다. **[결정]**
 - `mmrtr.matchId` 리스너(`MatchListener`)의 ack 시점 변경. 지금처럼 메모리 배치 큐에 넣은 뒤 ack 한다. **[판단]**
 - 기한이 지난 갱신의 남은 호출 우선순위 낮추기. 이번에는 끝까지 USER 로 돈다 (8장 한계). **[판단]**
-- lol-server · lol-ui 코드 변경.
+- lol-ui 코드 변경. lol-server 는 갱신과 관련된 코드가 이미 없어 바꿀 것이 없다.
 
 ### 안티목표 — 돌아가더라도 실패로 본다
 
@@ -62,22 +64,25 @@
 - 같은 판의 두 유저가 동시에 갱신했는데 같은 매치를 둘 다 Riot 에 요청한다.
 - 429 하나 때문에 갱신 전체가 Retry-After 동안 묶이거나, 429 받은 호출이 한꺼번에 다시 나간다.
 - 재시도 매치가 백그라운드 매치 수천 개 뒤에서 차례를 기다린다.
-- lol-server 가 깨지거나(WRONGTYPE 등), 배포된 lol-ui 가 깨진다.
+- 배포된 lol-ui 가 깨진다.
 - 메시지 재전달이나 인스턴스 여러 대 때문에 완료 지표가 두 번 세지거나, 끝난 상태가 `SUCCESS` ↔ `FAILED` 로 뒤집힌다.
 - 지난 갱신의 메시지나 실패 표시가 새 갱신의 결과를 정한다.
 
 ## 3. 제약
 
-- **lol-server 는 `summoner:renewal:{puuid}` 를 문자열로 읽는다** (`SummonerCacheAdapter.isUpdating`, `getRefreshingPuuids` 의 키 스캔). 키 이름·타입·값(puuid)을 바꾸지 않는다. lol-server 도 같은 키를 TTL 2분으로 만들고 같은 `mmrtr.summoner` 큐(`mmrtr.exchange` / `mmrtr.key`)에 사용자 갱신 메시지를 넣는다. lol-server 가 만든 메시지에는 갱신 id 가 없다.
-- **새 Redis 키는 `summoner:renewal:*` 패턴 밖에 둔다.** lol-server `getRefreshingPuuids` 가 이 패턴을 SCAN 해 키 뒷부분을 puuid 로 읽는다. 지금은 부르는 곳이 없지만, 부르게 되면 뒷부분을 puuid 로 잘못 읽는다.
-- **배포된 lol-ui:** POST `status == FAILED` 는 거절(쿨다운 문구), GET `status != PROGRESS` 는 끝(데이터 다시 불러오기)으로 읽는다. GET `FAILED` 도 구 UI 에서는 "끝" 으로 읽혀 문구 없이 데이터를 다시 불러온다. 깨지지 않는다. 문구를 화면에 띄우는 것은 lol-ui 몫이다.
+- **갱신 키·큐는 lol-repository 만 쓴다** (1장). 그래서 옛 표시 키 `summoner:renewal:{puuid}` 를 다른 서비스와 맞출 필요가 없고, 이 작업에서 쓰지 않게 된다 (5.1).
+- **배포된 lol-ui (1.13.0, `ProfileSection.tsx`):**
+  - POST `status == FAILED` 는 거절로 보고 쿨다운 문구를 띄운다.
+  - 그 밖이면 0.2초 뒤 첫 GET, 이후 1초 간격으로 폴링한다. `status != PROGRESS` 면 멈추고 데이터를 다시 불러온다.
+  - 10초가 되면 무조건 멈추고 다시 불러온다.
+  - 그래서 GET `FAILED` 도 "끝" 으로 읽혀 문구 없이 데이터를 다시 불러온다. 깨지지 않는다. 문구를 화면에 띄우는 것은 lol-ui 몫이다.
 - **RabbitMQ 3.13** (docker-compose, lol-deploy helm). classic 큐는 `x-max-priority` 를 지원한다. **이미 선언된 큐의 인자는 바꿀 수 없다.** 다른 인자로 다시 선언하면 `PRECONDITION_FAILED` 로 거절된다. 그래서 `mmrtr.matchId` 를 우선순위 큐로 바꾸려면 환경마다 지우고 다시 만들어야 한다 (7장).
 - **지금 `mmrtr.matchId` 에 넣는 경로는 없다.** `MatchFindListener` 는 꺼져 있고(#130 이 켬), `SummonerCollectService` 는 부르는 곳이 없다. 지워도 잃을 메시지가 없을 가능성이 높다. 지우기 전에 깊이를 확인한다.
 - **컨텍스트 경계 (ArchUnit):** summoner 도메인은 match 도메인 port 에 의존하지 않는다. 매치 존재 확인이 필요한 완료 판정은 두 도메인에 이미 의존하는 `module:infra:rabbitmq` 에 둔다. 상태 GET 은 Redis 만 읽는다.
 - **인스턴스가 여러 대일 수 있다.** 상태 전이와 단계 표시는 Redis 에서 원자적으로 한다.
 - **공개 API 규약** (`@PublicApi`, `ApiResponse<T>`, RestDocs). HTTP 코드는 바꾸지 않는다. GET `status` 값의 의미가 바뀌고 문구 필드가 더해진다.
 - **Riot 호출은 #135 한도 관리자를 그대로 쓴다.** 우선순위는 `RiotCallScope` 로 정하고, 한도 관리자가 Riot 호출을 내보낼 때만 쓴다. RabbitMQ 메시지 우선순위와는 별개다. USER 는 10초 앞까지 칸을 예약하고 못 잡으면 `RiotBudgetExceededException`. 429 를 받으면 그 routing 버킷 전체가 Retry-After 동안 멈춘다.
-- **`MatchService.saveAll` 의 커넥션 hold-and-wait** (실험실 PR #139 의 앱 문제 1): 트랜잭션 커넥션을 쥔 채 타임라인 저장(각자 커넥션 필요)을 기다린다. 실험실에서 약 10건이 겹치자 Hikari 풀(15)이 30초 멈췄다. G7 로 사용자 쪽 저장이 리스너 안에서 바로 일어나므로 **이번 범위에서 고친다**.
+- **`MatchService.saveAll` 의 커넥션 hold-and-wait** (실험실 PR #139 의 앱 문제 1): 트랜잭션 커넥션을 쥔 채 타임라인 저장(각자 커넥션 필요)을 기다린다. 실험실에서 약 10건이 겹치자 Hikari 풀(로컬 15)이 30초 멈췄다. 운영 풀은 #129 로 10 이라 더 일찍 막힌다. G7 로 사용자 쪽 저장이 리스너 안에서 바로 일어나므로 **이번 범위에서 고친다**.
 - **매치 목록 읽기 경로:** `MatchQueryService` 는 DB 결과에 요청자 캐시(`match:ids:v1:{puuid}`, `match:v1:{matchId}`, TTL 3분)를 덮어 보여 준다.
 - **검증:** `./gradlew check` 통과, 실험실 `lab.sh run steady` 판정에 FAIL 없음.
 
@@ -88,7 +93,7 @@
 ```mermaid
 flowchart LR
     subgraph USER["사용자 갱신 — 갱신을 요청한 유저만"]
-        P["POST /renewal<br/>lol-server"] --> Q1["① mmrtr.summoner<br/>소환사 단계"]
+        P["POST /api/v1/summoners/{puuid}/renewal"] --> Q1["① mmrtr.summoner<br/>소환사 단계"]
         Q1 --> Q2["② mmrtr.renewal.account<br/>계정 단계"]
         Q1 --> Q3["③ mmrtr.renewal.league<br/>리그 단계"]
         Q1 --> Q4["④ mmrtr.renewal.match<br/>매치 단계"]
@@ -112,7 +117,7 @@ flowchart LR
 
 | # | 큐 | 넣는 곳 | 받는 리스너 | 하는 일 | Riot 우선순위 | ack |
 |---|---|---|---|---|---|---|
-| ① | `mmrtr.summoner` (기존) | lol-repository POST, lol-server | `SummonerRenewalListener` | **소환사 단계.** summoner-v4 조회 → revisionDate 비교. 같으면 `SUCCESS`. 다르면 소환사 정보 저장 → 소환사 비트 → ②③④ 발행 | USER | DB 저장·발행 뒤 |
+| ① | `mmrtr.summoner` (기존) | lol-repository POST | `SummonerRenewalListener` | **소환사 단계.** summoner-v4 조회 → revisionDate 비교. 같으면 `SUCCESS`. 다르면 소환사 정보 저장 → 소환사 비트 → ②③④ 발행 | USER | DB 저장·발행 뒤 |
 | ② | `mmrtr.renewal.account` (새) | ① | 계정 리스너 | **계정 단계.** account-v1 조회 → 닉네임·태그 저장 → 계정 비트 | USER | DB 저장 뒤 |
 | ③ | `mmrtr.renewal.league` (새) | ① | 리그 리스너 | **리그 단계.** league-v4 entries-by-puuid 조회 → 리그 정보 저장 → 리그 비트 | USER | DB 저장 뒤 |
 | ④ | `mmrtr.renewal.match` (새) | ① | 매치 리스너 | **매치 단계.** match ids(커서 이후 20개) → DB 에 없는 대상 기록 → 선점한 대상의 match + timeline 을 병렬 조회 → DB 저장. 429·예약 실패한 매치는 ⑥ 에 순위 2 로. 20개 꽉 차면 ⑤ 로 넘김. 대상이 전부 DB 에 있으면 매치 비트 | USER | DB 저장 뒤 |
@@ -152,7 +157,7 @@ flowchart LR
 
 | 큐 | 본문 |
 |---|---|
-| ① | `SummonerMessage` {platformId, puuid, revisionDate, background, **renewalId(새, 선택)**}. `background` 는 더 이상 읽지 않는다. lol-server 는 renewalId 를 보내지 않아도 된다 |
+| ① | `SummonerMessage` {platformId, puuid, revisionDate, **renewalId(새)**, **attempt(새)**}. `background` 는 티어 수집이 ⑤ 로 옮겨 가므로 지운다. renewalId 가 없는 메시지는 배포 순간 큐에 남은 옛 메시지뿐이라 `stale` 로 버린다 |
 | ②③ | {renewalId, puuid, platform, attempt} |
 | ④ | {renewalId, puuid, platform, startTime(DB revisionDate 초), attempt} |
 | ⑤ | `SummonerRenewalMessage` {puuid, platform, revisionDate} + **startOffset(새, 없으면 20)** |
@@ -162,7 +167,7 @@ flowchart LR
 
 ### 5.1 갱신 레코드 [판단]
 
-- Redis hash `summoner:renewal-v2:{puuid}`. Plan 2 설계 6.1 의 `summoner:renewal:v2:{puuid}` 를 3장 이유로 `renewal-v2` 로 바꾼다.
+- Redis hash `summoner:renewal-v2:{puuid}`. 옛 표시 키 `summoner:renewal:{puuid}` 는 문자열이라, 같은 이름에 hash 를 쓰면 배포 직후 남은 옛 키(TTL 2분)와 타입이 부딪힌다(WRONGTYPE). 그래서 새 이름을 쓰고, `summoner:renewal:*` 패턴과도 겹치지 않게 `renewal-v2` 로 둔다 (Plan 2 설계 6.1 의 `summoner:renewal:v2:{puuid}` 대신).
 
   | 필드 | 내용 |
   |---|---|
@@ -171,7 +176,7 @@ flowchart LR
   | `reason` | `FAILED` 일 때 이유. `lol.renewal.completed` 의 reason 과 같은 값 |
   | `steps` | 끝난 단계 비트마스크: 계정 1, 소환사 2, 리그 4, 매치 8 (Plan 2 설계 6.1 과 같은 값). 15 면 전부 끝 |
   | `targetsReady` | 매치 단계가 대상 집합을 다 기록했는지 (0/1) |
-  | `acceptedAt` | 접수 시각(epoch ms). lol-server 메시지처럼 접수 기록이 없으면 ① 리스너 시작 시각 |
+  | `acceptedAt` | 접수 시각(epoch ms, Redis `TIME`) |
   | `deadlineAt` | `acceptedAt` + 5초 |
   | `riotRevisionDate` | summoner-v4 의 revisionDate(ms). 끝날 때 커서로 쓴다 |
   | `platform` | 플랫폼 |
@@ -184,16 +189,16 @@ flowchart LR
   - 단계 비트를 켜고, 전부 켜졌는데 `status` 가 `PROGRESS` 면 바꾼다. 지금이 `deadlineAt` 이전이면 `SUCCESS`, 지났으면 `FAILED`(`deadline`) + 늦은 완료다. 5초를 넘긴 갱신이 `SUCCESS` 가 되지 않게 하려는 것이다.
   - 시각은 인스턴스마다 시계가 다를 수 있으므로 Redis `TIME` 을 쓴다.
   - 결과로 "방금 `SUCCESS` 가 됐다 / 방금 늦은 완료가 됐다 / 아무 일 없음" 을 돌려준다. 방금 바뀐 쪽만 뒷일(5.6)을 한다. 그래서 인스턴스가 여러 대이거나, 메시지가 다시 오거나, 지난 갱신의 메시지가 늦게 와도 한 번만, 제 갱신에만 일어난다.
-- **기존 표시 키 `summoner:renewal:{puuid}`:** 지금처럼 POST 에서 만든다(TTL 2분). 지우는 시점만 "리스너 finally" 에서 "`SUCCESS`/`FAILED` 전이" 로 옮긴다. 기한이 5초라 TTL 을 다시 걸 필요는 없다.
+- **옛 표시 키 `summoner:renewal:{puuid}` 는 더 쓰지 않는다.** "진행 중" 은 이 레코드 하나로 판단한다. 읽던 lol-server 코드가 없어졌기 때문이다(1장). 옛 키를 만들고 지우던 코드(`markRenewing`·`isRenewing`·`RedisLockHandler.deleteSummonerRenewal`)는 걷어 낸다. 클릭 쿨다운 키 `summoner:click-cooldown:{puuid}`(SET NX 10초)는 그대로 쓴다.
 
 ### 5.2 접수 (POST) 와 상태 조회 (GET)
 
 - POST 규칙은 그대로다 (`NOT_FOUND_PUUID`, 플랫폼 확인, 진행 중, 클릭 쿨다운 10초, 마지막 Riot 호출 후 2분).
-- "진행 중" 판단 = 레코드 `status == PROGRESS` **또는** 기존 표시 키 있음. lol-server 가 시작한 갱신도 막기 위해서다. **[판단]**
-- 접수하면 레코드(`PROGRESS`, 새 `renewalId`, `acceptedAt`, `deadlineAt`) → 판정 색인 → 기존 표시 키 → ① 발행 순으로 한다.
+- "진행 중" 판단 = 레코드의 지금 상태(`statusAt(now)`)가 `PROGRESS`. 기한이 지난 `PROGRESS` 는 진행 중으로 보지 않는다.
+- 접수하면 레코드(`PROGRESS`, 새 `renewalId`, `acceptedAt`, `deadlineAt`) → 판정 색인 → ① 발행 순으로 한다.
 - GET 은 레코드가 있으면 그 `status` 를 돌려준다. **[판단]**
   - 단 `PROGRESS` 인데 `deadlineAt` 이 지났으면 판정기를 기다리지 않고 `FAILED` 를 돌려준다 (읽기만 하고, 전이는 판정기가 한다). 판정 주기(500ms) 때문에 5초를 넘겨 `PROGRESS` 가 나가지 않게 하려는 것이다.
-  - 레코드가 없으면 기존 표시 키가 있을 때 `PROGRESS`, 없을 때 `SUCCESS`(지금과 같은 "진행 중인 갱신 없음")다.
+  - 레코드가 없으면 `SUCCESS`(지금과 같은 "진행 중인 갱신 없음")다.
 - `FAILED` 응답에는 문구 필드(예: `message: "잠시 후 다시 시도해 주세요"`)를 더한다. 필드 추가라 구 UI 는 무시한다. **[결정: 문구를 보낸다 / 판단: 필드 모양]**
 - `RenewalStatus` 주석, RestDocs 설명·필드를 고친다.
 
@@ -201,21 +206,19 @@ flowchart LR
 
 **① 소환사 단계 (`SummonerRenewalListener`)**
 
-- `background` 분기를 없앤다. 이 큐에는 사용자 갱신만 들어온다 (티어 수집은 ⑤ 로 옮긴다, 5.7).
+- `background` 분기를 없앤다. 이 큐에는 lol-repository POST 가 넣은 사용자 갱신만 들어온다 (티어 수집은 ⑤ 로 옮긴다, 5.7).
 - 이 메시지가 어느 갱신인지 먼저 정한다. **[판단]**
 
   | 메시지 | 레코드 | 처리 |
   |---|---|---|
-  | `renewalId` 있음 | 같은 `renewalId` | 진행 (`FAILED` 여도 진행한다 — G3) |
-  | `renewalId` 있음 | 없음 또는 다른 `renewalId` | 지난 갱신의 메시지로 보고 버린다 (`skipped/stale`). 새 갱신은 자기 메시지로 돈다 |
-  | `renewalId` 없음 (lol-server) | `PROGRESS` | 이미 다른 흐름이 처리 중이라 버린다 (`skipped/already_in_progress`) |
-  | `renewalId` 없음 (lol-server) | 없음 또는 끝남 | 새 `renewalId` 로 레코드를 열고 진행 |
+  | `renewalId` 가 레코드와 같음 | 있음 | 진행 (`FAILED` 여도 진행한다 — G3) |
+  | `renewalId` 가 다르거나 없음 | 아무 상태 | 지난 갱신의 메시지(또는 배포 순간 남은 옛 메시지)로 보고 버린다 (`skipped/stale`). 새 갱신은 자기 메시지로 돈다 |
 
 - 소환사 분산 락은 없앤다. **[판단]**
   - 같은 갱신이 두 번 돌아도 단계 표시가 한 번만 켜지고 매치 선점(5.4)이 걸러 내므로 결과가 같다.
   - 락을 두고 "못 잡으면 건너뜀" 을 하면, 지난 갱신이 락을 쥔 동안 새 갱신이 건너뛰어져 5초에 실패한다.
 - 순서:
-  1. summoner-v4 조회. 결과 없음 → `FAILED`(`not_found`). 잘못된 platform → `FAILED`(`other`).
+  1. summoner-v4 조회. 결과 없음 → `FAILED`(`not_found`). 잘못된 platform → `FAILED`(`other`). (POST 가 DB 에 있는 소환사만 받으므로, DB 에 행이 없으면 그사이 지워진 경우뿐이다 → `FAILED`(`not_found`).)
   2. revisionDate 가 같으면 `updateLastRiotCallDate` 후 네 비트를 모두 켜 `SUCCESS`.
   3. 다르면 summoner-v4 의 정보(레벨, 아이콘 등)를 저장한다. **revisionDate 와 lastRiotCallDate 는 DB 값을 유지한다** (5.6 에서 옮긴다). Riot 의 revisionDate 는 레코드 `riotRevisionDate` 에 둔다. 소환사 비트.
   4. ②③④ 를 발행한다. ④ 에는 DB revisionDate(초)를 `startTime` 으로 싣는다.
@@ -274,11 +277,11 @@ flowchart LR
 
 - **`SUCCESS`:**
   - 소환사 revisionDate = 레코드의 `riotRevisionDate`, lastRiotCallDate = 지금. (revisionDate 가 같았던 경우는 lastRiotCallDate 만.)
-  - 기존 표시 키 삭제, 판정 색인에서 제거, 레코드 TTL 30초.
+  - 판정 색인에서 제거, 레코드 TTL 30초.
   - 지표 `lol.renewal.completed{result=success, reason=none}`, 소요 시간 `lol.renewal.duration{result}` (`acceptedAt` 부터).
 - **`FAILED`:**
   - 커서와 lastRiotCallDate 는 그대로 둔다. 실패 직후에도 클릭 쿨다운(10초)만 지나면 다시 누를 수 있다. 지금 실패했을 때와 같은 동작이다.
-  - 기존 표시 키 삭제, 지표 `failed/<reason>`.
+  - 지표 `failed/<reason>`.
   - `deadline` 이면 색인에 남기고 TTL 5분, 그 밖이면 색인에서 빼고 TTL 30초.
   - 다른 단계는 계속 돈다 (G3).
 - **늦은 완료:** 기한 `FAILED` 뒤에 네 비트가 모두 켜지면 커서(revisionDate)만 옮긴다.
@@ -302,7 +305,7 @@ flowchart LR
 
 - `lol.renewal.completed{result, reason}` 는 갱신이 끝났을 때 한 번 센다 (지금은 리스너가 끝날 때). `priority` 태그는 이제 항상 user 라 뺀다. 실험실 `verify`·Grafana 의 이 지표 쿼리도 함께 맞춘다.
   - failed reason: `not_found`, `other`, `match_failed`, `deadline`
-  - skipped reason: `stale`, `already_in_progress`
+  - skipped reason: `stale`
 - 새 지표:
   - `lol.renewal.duration{result}` — 접수부터 끝까지 (timer)
   - `lol.renewal.late_completed` — 늦은 완료 수 (counter)
@@ -321,12 +324,14 @@ flowchart LR
 |---|---|
 | G2 "3초 안에 40" | 이번 단계의 사용자 응답 상한은 5초다 **[결정]**. Plan 2 시작 때 3초 목표를 다시 맞춘다 |
 | 6.1 `remainingMatches` 카운터 + Lua + "이번 갱신에서 처리한 matchId" 집합 | 단계 비트 + 대상 집합 + DB 상태 판정(5.5). 카운터는 다른 갱신이 처리한 매치를 줄이지 못한다. 비트는 이번에 만들고, Plan 2 는 진행률 = 10 × 켜진 비트 수로 내보내기만 한다 |
-| 6.1 키 `summoner:renewal:v2:{puuid}` | `summoner:renewal-v2:{puuid}` (lol-server SCAN 패턴 밖, 3장) |
+| 6.1 키 `summoner:renewal:v2:{puuid}` | `summoner:renewal-v2:{puuid}` (옛 문자열 키와 타입 충돌을 피한다, 5.1) |
+| 3장 "lol-server 는 `summoner:renewal:{puuid}` 를 문자열로 읽는다", 1장 "lol-server 가 같은 큐에 넣는다", 비목표 "lol-server 갱신 엔드포인트 정리" | 해당 없음. lol-server #169·#175(2026-10-25 배포)가 이미 지웠다. 옛 표시 키도 이 작업에서 걷어 낸다 |
+| 6.1 "기존 키 `summoner:renewal:{puuid}` 는 타입을 바꾸지 않는다" | 옛 키는 쓰지 않는다. "진행 중" 은 갱신 레코드로만 판단한다 |
 | 6.2 매치 단계 완료 = 매치 목록 캐시에 쓴 뒤 | DB 커밋 뒤. 다른 경로가 적재한 매치는 요청자 캐시에 없다 |
 | 5.4·6.5 match 큐 우선순위 1 = 갱신 중인 매치, 2 = 나중 타임라인, 3 = 백필 | 갱신 중인 매치는 큐를 거치지 않고 ④ 가 직접 부른다. `mmrtr.matchId` 를 `x-max-priority: 3` 우선순위 큐로 만들고 처리 순위를 **1 = 나중 타임라인, 2 = 사용자 재시도, 3 = 백필** 로 쓴다 **[결정]**. AMQP 값은 뒤집어 싣는다(3 / 2 / 1, 4.3) |
 | 6.7 GET `FAILED` → 구 `status` 는 `SUCCESS` | 구 `status` 도 `FAILED` 이고 문구 필드를 더한다 **[결정]**. Plan 2 는 `state`·`progress` 만 더한다 |
 | 6.9 "계정·소환사·리그·매치 목록 단계는 컨슈머 안에서 비동기로" | 단계마다 큐와 리스너를 둔다 **[결정]** |
-| 6.10 사용자 갱신을 새 큐 `mmrtr.renewal.user` 로, 기존 `mmrtr.summoner` 는 BACKGROUND | 반대로 간다. `mmrtr.summoner` 는 사용자 갱신 입구로 남기고(lol-server 가 이미 쓴다), 티어 수집을 ⑤ 로 옮긴다 |
+| 6.10 사용자 갱신을 새 큐 `mmrtr.renewal.user` 로, 기존 `mmrtr.summoner` 는 BACKGROUND | 반대로 간다. `mmrtr.summoner` 는 사용자 갱신 입구(lol-repository POST 만 넣는다)로 남기고, 티어 수집을 ⑤ 로 옮긴다. 새 큐를 만들고 옮기는 일이 없어진다 |
 | 6.10 사용자 갱신 새 메시지에 "갱신 id" | `SummonerMessage.renewalId` 로 이번에 들어온다 |
 | (없음) 커서 | revisionDate 는 `SUCCESS`·늦은 완료 때만 옮긴다(5.6) |
 
@@ -335,7 +340,7 @@ flowchart LR
 - **머지 순서:** #136 → #135 → #139 → 이 작업. 이 작업 브랜치는 #139(`feat/riot-api-lab`)에서 딴다. 실험실로 전후를 비교하기 위해서다.
 - **#130 (백필 리스너 켜기):** ⑤⑥ 은 #130 이 켜는 `MatchFindListener`·`MatchListener` 로 돈다. 티어 수집이 ⑤ 로 옮겨 가고 사용자 재시도도 ⑥ 으로 가므로, #130 없이는 둘 다 처리되지 않는다. #130 이 먼저 머지되지 않으면 그 변경(두 `@RabbitListener` 켜기)을 이 작업에 흡수한다. **[판단]**
 - **배포 전 운영 작업 (환경마다, 손으로):**
-  1. 티어 수집을 멈추고 `mmrtr.summoner` 를 비운다. 남아 있는 `background=true` 메시지는 사용자 갱신으로 처리된다 (틀리지는 않지만 호출이 늘어난다).
+  1. 티어 수집을 멈추고 `mmrtr.summoner` 를 비운다. 남아 있는 옛 메시지는 renewalId 가 없어 `stale` 로 버려지므로 틀리지는 않지만, 티어 수집분이 매치 적재로 넘어가지 않고 사라진다. 옛 표시 키(TTL 2분)는 그냥 만료되게 둔다.
   2. `mmrtr.matchId` 깊이를 확인하고(지금은 넣는 곳이 없어 0 이어야 한다) 큐를 지운다. 예: `rabbitmqctl delete_queue -p <vhost> mmrtr.matchId`. 배포된 앱이 `x-max-priority: 3` 으로 다시 만든다. 지우지 않으면 선언이 `PRECONDITION_FAILED` 로 거절된다.
 - **기준선:** 이 작업 뒤의 `lab.sh run steady` 결과가 Plan 2 의 비교 기준이다.
 - **Plan 2 에 넘기는 것:** 단계 큐 ①~④, 갱신 레코드와 단계 비트(5.1), 완료 판정기(5.5), 우선순위 큐 `mmrtr.matchId` 의 빈 자리(처리 순위 1).
