@@ -62,9 +62,13 @@ public class SummonerEntity {
                 .platformId(summoner.getPlatformId())
                 .gameName(summoner.getGameIdentity().gameName())
                 .tagLine(summoner.getGameIdentity().tagLine())
-                .searchName((summoner.getGameIdentity().gameName().replace(" ", "") + "#" + summoner.getGameIdentity().tagLine()).toLowerCase())
+                .searchName(toSearchName(summoner.getGameIdentity().gameName(), summoner.getGameIdentity().tagLine()))
                 .lastRiotCallDate(summoner.getRevisionInfo().lastRiotCallDate())
                 .build();
+    }
+
+    private static String toSearchName(String gameName, String tagLine) {
+        return (gameName.replace(" ", "") + "#" + tagLine).toLowerCase();
     }
 
     public Summoner toDomain() {
@@ -84,6 +88,21 @@ public class SummonerEntity {
 
     public void updateLastRiotCallDate() {
         this.lastRiotCallDate = LocalDateTime.now();
+    }
+
+    public void updateStatusInfo(int profileIconId, long summonerLevel) {
+        this.profileIconId = profileIconId;
+        this.summonerLevel = summonerLevel;
+    }
+
+    public void updateGameIdentity(String gameName, String tagLine) {
+        this.gameName = gameName;
+        this.tagLine = tagLine;
+        this.searchName = toSearchName(gameName, tagLine);
+    }
+
+    public void updateRevisionDate(LocalDateTime revisionDate) {
+        this.revisionDate = revisionDate;
     }
 
     public void initRevisionDate() {
