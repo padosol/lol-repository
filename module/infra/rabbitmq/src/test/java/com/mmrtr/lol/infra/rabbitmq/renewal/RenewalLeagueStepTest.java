@@ -224,6 +224,18 @@ class RenewalLeagueStepTest {
     }
 
     @Test
+    @DisplayName("레코드 조회가 던지면 Riot 을 부르지 않고 failed 를 센 뒤 정상 반환한다")
+    void run_recordLookupThrows_countsFailedAndReturnsNormally() {
+        // given
+        given(recordPort.find("p1")).willThrow(new IllegalStateException("redis down"));
+
+        // when // then
+        assertThatCode(() -> step.run(msg("r1"))).doesNotThrowAnyException();
+        verifyNoInteractions(riotApiService, stepPublisher, saveSummonerDataUseCase);
+        assertThat(count("failed")).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("Riot 호출은 USER 우선순위이고 429 인라인 재시도가 꺼져 있다")
     void run_riotCallIsUserPriorityWithoutRateLimitRetry() {
         // given

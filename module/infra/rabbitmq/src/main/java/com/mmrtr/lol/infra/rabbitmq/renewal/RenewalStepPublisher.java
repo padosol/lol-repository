@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.rabbitmq.renewal;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
+import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import java.time.Duration;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,12 @@ public class RenewalStepPublisher {
     public void requeueLater(RabbitMqBinding binding, RenewalStepMessage message) {
         sleeper.sleep(REQUEUE_DELAY);
         publish(binding, message);
+    }
+
+    /** 20개를 꽉 채운 매치 단계가 21번째부터의 매치 검색을 백그라운드 검색 큐에 넘긴다. */
+    public void publishMatchFind(SummonerRenewalMessage message) {
+        rabbitTemplate.convertAndSend(RabbitMqBinding.RENEWAL_MATCH_FIND.getExchange(),
+                RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey(), message);
     }
 
     public void republishSummoner(SummonerMessage message) {

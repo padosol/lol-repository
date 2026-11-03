@@ -189,6 +189,32 @@ class RenewalAccountStepTest {
     }
 
     @Test
+    @DisplayName("레코드 조회가 던지면 Riot 을 부르지 않고 failed 를 센 뒤 정상 반환한다")
+    void run_recordLookupThrows_countsFailedAndReturnsNormally() {
+        // given
+        given(recordPort.find("p1")).willThrow(new IllegalStateException("redis down"));
+
+        // when // then
+        assertThatCode(() -> step.run(msg("r1"))).doesNotThrowAnyException();
+        verifyNoInteractions(riotApiService, stepPublisher);
+        assertThat(count("failed")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("stale 기록이 던져도 failed 를 센 뒤 정상 반환한다")
+    void run_staleSkippedThrows_countsFailedAndReturnsNormally() {
+        // given
+        givenRecord("r2");
+        doThrow(new IllegalStateException("meter down")).when(finisher).skipped(anyString());
+
+        // when // then
+        assertThatCode(() -> step.run(msg("r1"))).doesNotThrowAnyException();
+        verifyNoInteractions(riotApiService, stepPublisher);
+        assertThat(count("failed")).isEqualTo(1);
+        assertThat(count("skipped")).isZero();
+    }
+
+    @Test
     @DisplayName("성공하면 단계 지표 success 를 센다")
     void run_success_countsStepMetric() {
         // when

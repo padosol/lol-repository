@@ -1,6 +1,7 @@
 package com.mmrtr.lol.infra.rabbitmq.renewal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -184,6 +185,19 @@ class RenewalSummonerStepTest {
         // then
         verify(finisher).skipped("stale");
         verifyNoInteractions(riotApiService);
+    }
+
+    @Test
+    @DisplayName("레코드 조회가 던지면 Riot 을 부르지 않고 failed 를 센 뒤 정상 반환한다")
+    void run_recordLookupThrows_countsFailedAndReturnsNormally() {
+        // given
+        given(recordPort.find("p1")).willThrow(new IllegalStateException("redis down"));
+
+        // when // then
+        assertThatCode(() -> step.run(message("r1"))).doesNotThrowAnyException();
+        verifyNoInteractions(riotApiService, stepPublisher);
+        assertThat(meterRegistry.get("lol.renewal.step").tags("step", "summoner", "result", "failed")
+                .counter().count()).isEqualTo(1);
     }
 
     @Test

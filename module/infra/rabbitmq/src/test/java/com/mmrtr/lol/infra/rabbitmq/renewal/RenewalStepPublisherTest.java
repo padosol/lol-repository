@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
+import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +42,20 @@ class RenewalStepPublisherTest {
         // then
         assertThat(sleeps).containsExactly(Duration.ofSeconds(1));
         verify(rabbitTemplate).convertAndSend("mmrtr.renewal.exchange", "renewal.match", message);
+    }
+
+    @Test
+    @DisplayName("publishMatchFind 는 renewal.topic.exchange/renewal.match.find 로 보낸다")
+    void publishMatchFind_sendsToMatchFindQueue() {
+        // given
+        SummonerRenewalMessage findMessage = new SummonerRenewalMessage("p1", "KR", 100L, 20);
+
+        // when
+        publisher.publishMatchFind(findMessage);
+
+        // then
+        verify(rabbitTemplate).convertAndSend("renewal.topic.exchange", "renewal.match.find", findMessage);
+        assertThat(sleeps).isEmpty();
     }
 
     @Test

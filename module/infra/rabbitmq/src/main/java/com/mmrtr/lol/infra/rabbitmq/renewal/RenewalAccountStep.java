@@ -3,7 +3,6 @@ package com.mmrtr.lol.infra.rabbitmq.renewal;
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
-import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
@@ -41,16 +40,14 @@ public class RenewalAccountStep {
         this.stepPublisher = stepPublisher;
         this.finisher = finisher;
         this.requestExecutor = requestExecutor;
-        this.failures = new RenewalStepFailures("account", finisher, meterRegistry);
+        this.failures = new RenewalStepFailures("account", recordPort, finisher, meterRegistry);
     }
 
     public void run(RenewalStepMessage message) {
         String puuid = message.puuid();
         String renewalId = message.renewalId();
 
-        RenewalRecord record = recordPort.find(puuid).orElse(null);
-        if (record == null || !record.isFor(renewalId)) {
-            failures.stale(puuid, renewalId);
+        if (!failures.isCurrent(puuid, renewalId)) {
             return;
         }
 
