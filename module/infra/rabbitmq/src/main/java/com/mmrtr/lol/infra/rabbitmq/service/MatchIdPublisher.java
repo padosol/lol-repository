@@ -26,7 +26,7 @@ public class MatchIdPublisher {
         int sentCount = 0;
         for (String matchId : matchIds) {
             if (!existingSet.contains(matchId) && matchRedisService.tryMarkPending(matchId)) {
-                messageSender.sendMessageByMatchId(matchId, platformName);
+                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.BACKFILL);
                 sentCount++;
             }
         }

@@ -17,4 +17,8 @@ dependencies {
     implementation 'io.micrometer:micrometer-core'  // lol.renewal.completed
 
     implementation 'org.springframework:spring-web'  // RiotClientException.getStatus() 의 HttpStatusCode
+
+    testImplementation 'org.testcontainers:testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:rabbitmq'
 }

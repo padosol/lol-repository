@@ -10,13 +10,15 @@ import org.springframework.stereotype.Component;
 public class MessageSender {
 
     private final RabbitTemplate rabbitTemplate;
-    public void sendMessageByMatchId(String matchId, String region) {
+
+    public void sendMessageByMatchId(String matchId, String region, MatchQueueRank rank) {
         rabbitTemplate.convertAndSend(
                 RabbitMqBinding.MATCH_ID.getExchange(),
                 RabbitMqBinding.MATCH_ID.getRoutingKey(),
                 matchId,
                 message -> {
                     message.getMessageProperties().setHeader("region", region);
+                    message.getMessageProperties().setPriority(rank.amqpPriority());
                     return message;
                 }
         );

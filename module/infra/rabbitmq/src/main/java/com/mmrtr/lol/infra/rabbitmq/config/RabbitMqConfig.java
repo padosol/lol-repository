@@ -84,6 +84,7 @@ public class RabbitMqConfig {
         return QueueBuilder.durable(RabbitMqBinding.MATCH_ID.getQueue())
                 .withArgument("x-dead-letter-exchange", RabbitMqBinding.MATCH_ID_DLX.getExchange())
                 .withArgument("x-dead-letter-routing-key", RabbitMqBinding.MATCH_ID_DLX.getRoutingKey())
+                .maxPriority(3)
                 .build();
     }
 
@@ -133,6 +134,87 @@ public class RabbitMqConfig {
         return BindingBuilder.bind(matchFind())
                 .to(renewalExchange())
                 .with(RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey());
+    }
+
+    @Bean
+    public DirectExchange renewalStepExchange() {
+        return new DirectExchange(RabbitMqBinding.Exchange.RENEWAL);
+    }
+
+    @Bean
+    public DirectExchange renewalStepDlxExchange() {
+        return new DirectExchange(RabbitMqBinding.Exchange.RENEWAL_DLX);
+    }
+
+    @Bean
+    public Queue renewalAccountQueue() {
+        return renewalStepQueue(RabbitMqBinding.RENEWAL_ACCOUNT, RabbitMqBinding.RENEWAL_ACCOUNT_DLX);
+    }
+
+    @Bean
+    public Queue renewalLeagueQueue() {
+        return renewalStepQueue(RabbitMqBinding.RENEWAL_LEAGUE, RabbitMqBinding.RENEWAL_LEAGUE_DLX);
+    }
+
+    @Bean
+    public Queue renewalMatchQueue() {
+        return renewalStepQueue(RabbitMqBinding.RENEWAL_MATCH, RabbitMqBinding.RENEWAL_MATCH_DLX);
+    }
+
+    @Bean
+    public Queue renewalAccountDlxQueue() {
+        return new Queue(RabbitMqBinding.RENEWAL_ACCOUNT_DLX.getQueue(), true);
+    }
+
+    @Bean
+    public Queue renewalLeagueDlxQueue() {
+        return new Queue(RabbitMqBinding.RENEWAL_LEAGUE_DLX.getQueue(), true);
+    }
+
+    @Bean
+    public Queue renewalMatchDlxQueue() {
+        return new Queue(RabbitMqBinding.RENEWAL_MATCH_DLX.getQueue(), true);
+    }
+
+    @Bean
+    public Binding renewalAccountBinding() {
+        return stepBinding(renewalAccountQueue(), renewalStepExchange(), RabbitMqBinding.RENEWAL_ACCOUNT);
+    }
+
+    @Bean
+    public Binding renewalLeagueBinding() {
+        return stepBinding(renewalLeagueQueue(), renewalStepExchange(), RabbitMqBinding.RENEWAL_LEAGUE);
+    }
+
+    @Bean
+    public Binding renewalMatchBinding() {
+        return stepBinding(renewalMatchQueue(), renewalStepExchange(), RabbitMqBinding.RENEWAL_MATCH);
+    }
+
+    @Bean
+    public Binding renewalAccountDlxBinding() {
+        return stepBinding(renewalAccountDlxQueue(), renewalStepDlxExchange(), RabbitMqBinding.RENEWAL_ACCOUNT_DLX);
+    }
+
+    @Bean
+    public Binding renewalLeagueDlxBinding() {
+        return stepBinding(renewalLeagueDlxQueue(), renewalStepDlxExchange(), RabbitMqBinding.RENEWAL_LEAGUE_DLX);
+    }
+
+    @Bean
+    public Binding renewalMatchDlxBinding() {
+        return stepBinding(renewalMatchDlxQueue(), renewalStepDlxExchange(), RabbitMqBinding.RENEWAL_MATCH_DLX);
+    }
+
+    private Queue renewalStepQueue(RabbitMqBinding binding, RabbitMqBinding dlx) {
+        return QueueBuilder.durable(binding.getQueue())
+                .withArgument("x-dead-letter-exchange", dlx.getExchange())
+                .withArgument("x-dead-letter-routing-key", dlx.getRoutingKey())
+                .build();
+    }
+
+    private Binding stepBinding(Queue queue, DirectExchange exchange, RabbitMqBinding binding) {
+        return BindingBuilder.bind(queue).to(exchange).with(binding.getRoutingKey());
     }
 
     @Bean
