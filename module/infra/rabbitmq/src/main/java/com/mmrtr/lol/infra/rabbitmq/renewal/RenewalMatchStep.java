@@ -39,6 +39,7 @@ import org.springframework.stereotype.Component;
  * 한꺼번에 병렬로 받아 한 번에 저장한다. 4xx(429 제외)로 실패한 매치만 실패 표시를 남기고(스펙 5.4), 그 밖의 실패
  * (429·예약 실패·5xx·시간 초과·IO 등)는 매치 적재 큐에 사용자 재시도 순위로 넘긴다. 실패 표시는 매치 단위라 그 매치를
  * 대상으로 둔 다른 갱신까지 match_failed 로 끝내므로, 매치 자체가 잘못된 경우에만 남긴다.
+ * 계속 실패해 대상에서 뺀 매치는 버리지 않고 매치 적재 큐에 백필 순위로 넘긴다. 커서가 그 매치를 지나가도 잃지 않는다 (G8).
  * 대상이 전부 DB 에 들어가면 매치 비트를 켜고, 아니면 판정기가 DB 를 보고 켠다.
  * 밖으로 던지는 예외는 첫 전달의 저장 실패뿐이다 (재전달받아 DB 에 쓴 뒤에만 ack 한다).
  */
@@ -109,7 +110,7 @@ public class RenewalMatchStep {
 
         List<String> claimed = List.of();
         try {
-            Set<String> targets = recordTargets(puuid, renewalId, ids);
+            Set<String> targets = recordTargets(puuid, renewalId, platformName, ids);
             claimed = claim(targets, renewalId);
             completeClaimed(message, platformName, targets, claimed);
             handOffRest(message, platformName, ids);
@@ -132,17 +133,19 @@ public class RenewalMatchStep {
 
     /**
      * DB 에 없고 계속 실패해 빠지지 않은 매치를 대상으로 기록한다. 0개여도 기록해 targetsReady 를 켠다.
-     * 뺀 매치는 로그와 지표({@code lol.renewal.match_excluded})로 남긴다 (스펙 5.6).
+     * 뺀 매치는 로그와 지표({@code lol.renewal.match_excluded})로 남기고(스펙 5.6), 매치 적재 큐에 백필 순위로 넘긴다.
+     * 넘기기가 실패하면 예외가 run 까지 올라가 갱신이 실패하므로 커서가 그 매치를 지나가지 않는다.
      */
-    private Set<String> recordTargets(String puuid, String renewalId, List<String> ids) {
+    private Set<String> recordTargets(String puuid, String renewalId, String platformName, List<String> ids) {
         Set<String> targets = new LinkedHashSet<>(ids);
         if (!targets.isEmpty()) {
             targets.removeAll(matchRepositoryPort.findExistingMatchIds(ids));
         }
         Set<String> excluded = targets.isEmpty() ? Set.of() : claimService.findExcluded(targets);
         if (!excluded.isEmpty()) {
-            log.warn("계속 실패한 매치를 갱신 대상에서 뺀다. puuid={}, renewalId={}, matchIds={}",
+            log.warn("계속 실패한 매치를 갱신 대상에서 빼고 매치 적재 큐에 백필로 넘긴다. puuid={}, renewalId={}, matchIds={}",
                     puuid, renewalId, excluded);
+            excluded.forEach(matchId -> messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.BACKFILL));
         }
         targets.removeAll(excluded);
         meterRegistry.counter(EXCLUDED_METRIC).increment(excluded.size());

@@ -107,6 +107,22 @@ class RenewalMatchClaimServiceTest {
     }
 
     @Test
+    @DisplayName("TTL 없이 남은 실패 횟수가 있어도 markFailed 뒤에는 횟수·표시 모두 TTL 이 있다")
+    void markFailed_leftoverCountWithoutTtl_getsTtl() {
+        // given — 옛 코드가 INCR 와 EXPIRE 사이에서 죽어 남긴 TTL 없는 횟수
+        redis.opsForValue().set("renewal:match:failed-count:m1", "1");
+        assertThat(redis.getExpire("renewal:match:failed-count:m1")).isEqualTo(-1L);
+
+        // when
+        service.markFailed("m1");
+
+        // then
+        assertThat(redis.opsForValue().get("renewal:match:failed-count:m1")).isEqualTo("2");
+        assertThat(redis.getExpire("renewal:match:failed-count:m1")).isPositive();
+        assertThat(redis.getExpire("renewal:match:failed:m1")).isBetween(1L, 300L);
+    }
+
+    @Test
     @DisplayName("선점 TTL 은 5분이다")
     void claim_ttlFiveMinutes() {
         // when

@@ -29,7 +29,8 @@ public class RenewalMatchClaimService {
     private static final String FAILED_PREFIX = "renewal:match:failed:";
     private static final String FAILED_COUNT_PREFIX = "renewal:match:failed-count:";
 
-    private static final DefaultRedisScript<Long> RELEASE = releaseScript();
+    private static final DefaultRedisScript<Long> RELEASE = script("renewal/claim-release.lua");
+    private static final DefaultRedisScript<Long> MARK_FAILED = script("renewal/claim-mark-failed.lua");
 
     private final StringRedisTemplate redis;
 
@@ -37,9 +38,9 @@ public class RenewalMatchClaimService {
         this.redis = redis;
     }
 
-    private static DefaultRedisScript<Long> releaseScript() {
+    private static DefaultRedisScript<Long> script(String location) {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
-        script.setLocation(new ClassPathResource("renewal/claim-release.lua"));
+        script.setLocation(new ClassPathResource(location));
         script.setResultType(Long.class);
         return script;
     }
@@ -57,12 +58,12 @@ public class RenewalMatchClaimService {
         redis.execute(RELEASE, List.of(CLAIM_PREFIX + matchId), renewalId);
     }
 
+    /** 실패 표시(값 = 지금 ms, TTL 5분)와 실패 횟수(+1, TTL 1일)를 Lua 하나로 함께 쓴다. TTL 없는 횟수가 남지 않는다. */
     public void markFailed(String matchId) {
-        redis.opsForValue().set(
-                FAILED_PREFIX + matchId, String.valueOf(System.currentTimeMillis()), FAILED_TTL);
-        String countKey = FAILED_COUNT_PREFIX + matchId;
-        redis.opsForValue().increment(countKey);
-        redis.expire(countKey, FAILED_COUNT_TTL);
+        redis.execute(MARK_FAILED, List.of(FAILED_PREFIX + matchId, FAILED_COUNT_PREFIX + matchId),
+                String.valueOf(System.currentTimeMillis()),
+                String.valueOf(FAILED_TTL.toSeconds()),
+                String.valueOf(FAILED_COUNT_TTL.toSeconds()));
     }
 
     /** 실패 표시가 있는 매치만 담는다. 값은 표시한 시각(ms). */

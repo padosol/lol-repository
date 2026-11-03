@@ -305,8 +305,8 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("계속 실패해 빠진 매치는 대상에 넣지 않고 match_excluded 를 센다")
-    void run_excludedMatch_notTargeted() {
+    @DisplayName("계속 실패해 빠진 매치는 대상에 넣지 않고 부르지 않으며, 매치 적재 큐에 백필 순위로 넘기고 match_excluded 를 센다")
+    void run_excludedMatch_notTargetedAndHandedOffAsBackfill() {
         // given
         given(claimService.findExcluded(anyCollection())).willReturn(Set.of("m1"));
 
@@ -316,8 +316,26 @@ class RenewalMatchStepTest {
         // then
         verify(recordPort).recordTargets("p1", "r1", Set.of("m2"));
         verify(claimService, never()).claim(eq("m1"), anyString());
+        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any());
+        verify(matchApiPort, never()).fetchTimelineById(eq("m1"), any(), any());
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.BACKFILL);
+        verify(messageSender, never()).sendMessageByMatchId(eq("m2"), anyString(), any());
         verify(recordPort).markSteps("p1", "r1", MATCH);
         assertThat(count("lol.renewal.match_excluded")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("빠진 매치를 넘기지 못하면 갱신을 실패시켜 커서가 그 매치를 지나가지 않게 한다")
+    void run_excludedHandOffFails_failsRenewal() {
+        // given
+        given(claimService.findExcluded(anyCollection())).willReturn(Set.of("m1"));
+        doThrow(new IllegalStateException("mq down"))
+                .when(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.BACKFILL);
+
+        // when // then
+        assertThatCode(() -> step.run(msg("r1", 0), false)).doesNotThrowAnyException();
+        verify(finisher).fail("p1", "r1", "other");
+        verify(recordPort, never()).markSteps(any(), any(), any());
     }
 
     @Test
