@@ -12,6 +12,7 @@ import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRequestAttributes;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotCallScope;
+import com.mmrtr.lol.support.riot.RiotRetryScope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -38,10 +39,12 @@ public class RiotApiService {
         String path = "/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}";
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getRegionalHost() + path, gameName, tagLine)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "account-v1.by-riot-id")
                                 .retrieve()
                                 .body(AccountDto.class)
@@ -53,10 +56,12 @@ public class RiotApiService {
         String path = String.format("/riot/account/v1/accounts/by-puuid/%s", puuid);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getRegionalHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "account-v1.by-puuid")
                                 .retrieve()
                                 .body(AccountDto.class)
@@ -68,10 +73,12 @@ public class RiotApiService {
         String path = String.format("/lol/summoner/v4/summoners/by-puuid/%s", puuid);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getPlatformHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "summoner-v4.by-puuid")
                                 .retrieve()
                                 .body(SummonerDto.class)
@@ -83,10 +90,12 @@ public class RiotApiService {
         String path = String.format("/lol/league/v4/entries/by-puuid/%s", puuid);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getPlatformHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "league-v4.entries-by-puuid")
                                 .retrieve()
                                 .body(new ParameterizedTypeReference<Set<LeagueEntryDto>>() {})
@@ -98,10 +107,12 @@ public class RiotApiService {
         String path = String.format("/lol/summoner/v4/summoners/by-name/%s", summonerName);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getPlatformHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "summoner-v4.by-name")
                                 .retrieve()
                                 .body(SummonerDto.class)
@@ -113,10 +124,12 @@ public class RiotApiService {
         String path = String.format("/lol/match/v5/matches/by-puuid/%s/ids", puuid);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getRegionalHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "match-v5.ids-by-puuid")
                                 .retrieve()
                                 .body(new ParameterizedTypeReference<List<String>>() {})
@@ -129,6 +142,7 @@ public class RiotApiService {
         String path = String.format("/lol/match/v5/matches/by-puuid/%s/ids", puuid);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getRegionalHost() + path, uriBuilder -> uriBuilder
@@ -136,6 +150,7 @@ public class RiotApiService {
                                         .queryParam("start", start)
                                         .queryParam("count", count).build())
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "match-v5.ids-by-puuid")
                                 .retrieve()
                                 .body(new ParameterizedTypeReference<List<String>>() {})
@@ -147,10 +162,12 @@ public class RiotApiService {
         URI uri = URI.create(platform.getRegionalHost() + "/lol/match/v5/matches/" + matchId);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(uri)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "match-v5.match")
                                 .retrieve()
                                 .body(MatchDto.class)
@@ -162,10 +179,12 @@ public class RiotApiService {
         String path = String.format("/lol/match/v5/matches/%s/timeline", matchId);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getRegionalHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "match-v5.timeline")
                                 .retrieve()
                                 .body(TimelineDto.class)
@@ -177,10 +196,12 @@ public class RiotApiService {
             String queue, String tier, String division, int page, Platform platform) {
         String path = String.format("/lol/league/v4/entries/%s/%s/%s", queue, tier, division);
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return riotRestClient.get()
                 .uri(platform.getPlatformHost() + path, uriBuilder ->
                         uriBuilder.queryParam("page", page).build())
                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                 .attribute(RiotRequestAttributes.METHOD, "league-v4.entries")
                 .retrieve()
                 .body(new ParameterizedTypeReference<Set<LeagueEntryDto>>() {});
@@ -191,10 +212,12 @@ public class RiotApiService {
         String path = String.format("/lol/league/v4/%s/by-queue/%s", tierPath, queue);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getPlatformHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "league-v4." + tierPath)
                                 .retrieve()
                                 .body(LeagueListDto.class),
@@ -207,10 +230,12 @@ public class RiotApiService {
 
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getPlatformHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "champion-v3.rotations")
                                 .retrieve()
                                 .body(ChampionInfo.class)
@@ -223,10 +248,12 @@ public class RiotApiService {
         String path = String.format("/lol/spectator/v5/active-games/by-summoner/%s", puuid);
         // supplyAsync 는 다른 스레드에서 돌아 ThreadLocal 스코프가 사라지므로 호출 스레드에서 먼저 읽는다
         RiotCallPriority priority = RiotCallScope.current();
+        boolean retryOn429 = RiotRetryScope.rateLimitRetryEnabled();
         return CompletableFuture.supplyAsync(() ->
                         riotRestClient.get()
                                 .uri(platform.getPlatformHost() + path)
                                 .attribute(RiotRequestAttributes.PRIORITY, priority)
+                                .attribute(RiotRequestAttributes.RETRY_ON_429, retryOn429)
                                 .attribute(RiotRequestAttributes.METHOD, "spectator-v5.active-games")
                                 .retrieve()
                                 .body(CurrentGameInfoVO.class)

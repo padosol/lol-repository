@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.riot.interceptor;
 import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
+import com.mmrtr.lol.infra.riot.ratelimit.RiotRequestAttributes;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -88,7 +89,70 @@ class RetryInterceptorTest {
     }
 
     @Test
-    @DisplayName("시나리오 2: 429 Retry-After:1 → 1s sleep → 200")
+    @DisplayName("RETRY_ON_429=false 면 429 를 받자마자 던지고 자지 않는다")
+    void intercept_retryOn429False_throwsImmediatelyWithoutSleep() {
+        // given
+        wm.stubFor(get(urlEqualTo("/x"))
+                .willReturn(aResponse().withStatus(429).withHeader("Retry-After", "2")));
+
+        // when & then
+        assertThatThrownBy(() -> restClient.get().uri("/x")
+                .attribute(RiotRequestAttributes.RETRY_ON_429, false)
+                .retrieve().body(String.class))
+                .isInstanceOf(RiotRateLimitException.class);
+        assertThat(sleeps).isEmpty();
+        wm.verify(1, getRequestedFor(urlEqualTo("/x")));
+    }
+
+    @Test
+    @DisplayName("RETRY_ON_429=false 여도 5xx 는 지금처럼 재시도한다")
+    void intercept_retryOn429False_still_retries5xx() {
+        // given
+        wm.stubFor(get(urlEqualTo("/x")).inScenario("d")
+                .whenScenarioStateIs("Started")
+                .willReturn(aResponse().withStatus(503))
+                .willSetStateTo("ok"));
+        wm.stubFor(get(urlEqualTo("/x")).inScenario("d")
+                .whenScenarioStateIs("ok")
+                .willReturn(aResponse().withStatus(200).withBody("ok")));
+
+        // when
+        String body = restClient.get().uri("/x")
+                .attribute(RiotRequestAttributes.RETRY_ON_429, false)
+                .retrieve().body(String.class);
+
+        // then
+        assertThat(body).isEqualTo("ok");
+        wm.verify(2, getRequestedFor(urlEqualTo("/x")));
+        assertThat(sleeps).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("RETRY_ON_429=false 면 안쪽에서 던진 RiotRateLimitException 도 바로 던진다")
+    void intercept_retryOn429False_innerRateLimitException_throwsImmediately() {
+        // given
+        RiotRateLimitException thrown = new RiotRateLimitException(
+                Duration.ofSeconds(2), HttpStatus.TOO_MANY_REQUESTS, "limit", LogLevel.WARN);
+        RetryInterceptor withInner = new RetryInterceptor(meterRegistry, (long ms) -> sleeps.add(ms), List.of(
+                (request, body, execution) -> {
+                    throw thrown;
+                }));
+        RestClient client = RestClient.builder()
+                .requestFactory(factory)
+                .baseUrl(wm.baseUrl())
+                .requestInterceptor(withInner)
+                .build();
+
+        // when & then
+        assertThatThrownBy(() -> client.get().uri("/x")
+                .attribute(RiotRequestAttributes.RETRY_ON_429, false)
+                .retrieve().body(String.class))
+                .isSameAs(thrown);
+        assertThat(sleeps).isEmpty();
+    }
+
+    @Test
+    @DisplayName("시나리오 2:429 Retry-After:1 → 1s sleep → 200")
     void scenario2_429_retry_after_then_200() {
         wm.stubFor(get(urlEqualTo("/x")).inScenario("a")
                 .whenScenarioStateIs("Started")
