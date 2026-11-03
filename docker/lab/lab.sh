@@ -8,13 +8,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 MOCK_URL="${MOCK_URL:-http://localhost:8099}"
 # 호스트에서 본 앱 주소. k6 컨테이너에는 k6_app_url 이 바꾼 주소로 넘긴다 (Prometheus 수집 대상은 prometheus.yml 의 8111 고정).
 APP_URL="${APP_URL:-http://localhost:8111}"
-PROM_URL="${PROM_URL:-http://localhost:9090}"
+PROM_URL="${PROM_URL:-http://localhost:${LAB_PROMETHEUS_PORT:-9090}}"
 LAB_SERVICES=(postgres rabbitmq redis prometheus grafana riot-mock redis-exporter)
 DRAIN_TIMEOUT_SECONDS=1800
-# 갱신 처리를 기다리고 적체를 판정할 vhost lab 큐. 이 브랜치에서 consumer 가 있게 설계된 큐를 이름으로 고른다.
-# consumer 수로 고르면 리스너가 죽었을 때 적체가 숨는다. PR #130 이 들어와 추가 매치 검색 리스너가 켜지면
-# renewal.match.find.queue 를 더한다 (LAB_QUEUES="mmrtr.summoner renewal.match.find.queue"). verify.js 도 이 값을 받는다.
-LAB_QUEUES="${LAB_QUEUES:-mmrtr.summoner}"
+# 갱신 처리를 기다리고 적체를 판정할 vhost lab 큐. 갱신 단계 큐(계정·리그·매치)와 추가 매치 검색 큐를 이름으로 고른다.
+# consumer 수로 고르면 리스너가 죽었을 때 적체가 숨는다. verify.js 도 이 값을 받는다.
+LAB_QUEUES="${LAB_QUEUES:-mmrtr.summoner mmrtr.renewal.account mmrtr.renewal.league mmrtr.renewal.match renewal.match.find.queue}"
 # seed 가 만드는 소환사 수와 첫 갱신을 보내는 재방문 풀 크기 (k6/lib/lab.js 의 FIRST·RETURNING: 1..4000, 2501..4000)
 SEED_PLAYERS=4000
 SEED_RETURNING_COUNT=1500
@@ -82,7 +81,7 @@ cmd_app() {
 }
 
 cmd_urls() {
-  echo "Grafana     http://localhost:3000"
+  echo "Grafana     http://localhost:${LAB_GRAFANA_PORT:-3000}"
   echo "Prometheus  ${PROM_URL}"
   echo "RabbitMQ    http://localhost:15672 (guest/guest, vhost lab)"
   echo "riot-mock   ${MOCK_URL}"

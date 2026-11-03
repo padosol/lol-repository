@@ -38,8 +38,9 @@ lab.sh 의 조작 API 호출이 실패하면 curl 오류나 가짜 서버의 응
 |---|---|---|
 | `APP_URL` | `http://localhost:8111` | 앱 확인(`/actuator/info`·`health`). k6 컨테이너에는 `localhost`·`127.0.0.1` 을 `host.docker.internal` 로 바꿔 `-e APP_URL` 로 넘긴다 (k6 스크립트에는 기본값이 없다). Prometheus 수집 대상은 `prometheus.yml` 의 8111 고정이다 |
 | `MOCK_URL` | `http://localhost:8099` | 가짜 서버 조작 API |
+| `LAB_PROMETHEUS_PORT`·`LAB_GRAFANA_PORT` | `9090`·`3000` | 호스트에 여는 Prometheus·Grafana 포트. 그 포트가 이미 쓰이고 있으면 다른 값을 준다 (compose, `PROM_URL` 기본값, `urls` 출력이 따른다) |
 | `PROM_URL` | `http://localhost:9090` | seed 의 결과 확인 질의 |
-| `LAB_QUEUES` | `mmrtr.summoner` | 갱신 처리를 기다리고 판정할 vhost `lab` 큐 이름(공백 구분). 아래 "큐 고르기" |
+| `LAB_QUEUES` | `mmrtr.summoner mmrtr.renewal.account mmrtr.renewal.league mmrtr.renewal.match renewal.match.find.queue` | 갱신 처리를 기다리고 판정할 vhost `lab` 큐 이름(공백 구분). 아래 "큐 고르기" |
 
 시나리오는 `docker/lab/k6/<시나리오>.js` 다. 1단계에는 `steady` 하나다. `RATE`·`DURATION` 을 셸에서 주면 k6 로 넘긴다 (예: `RATE=10 DURATION=1m bash docker/lab/lab.sh run steady`).
 
@@ -62,13 +63,11 @@ warm 을 초당 5건으로 둔 이유: 한도를 올린 채 초당 50건으로 �
 
 ### 큐 고르기 (`LAB_QUEUES`)
 
-갱신 처리 대기(seed·run)와 판정의 큐 항목은 consumer 가 있게 설계된 큐를 **이름으로** 고른다. 기본값은 `mmrtr.summoner` 하나다.
+갱신 처리 대기(seed·run)와 판정의 큐 항목은 consumer 가 있게 설계된 큐를 **이름으로** 고른다. 기본값은 위 표의 다섯 큐다.
 consumer 수(`> 0`)로 고르면 리스너가 죽어 consumer 가 0 이 됐을 때 그 큐가 빠져 적체가 숨는다. 이름으로 고르면 consumer 가 0 이어도 메시지가 그대로 세어져, 대기는 시간 초과로 실패하고 판정에는 적체가 WARN 으로 남는다.
 
-이 브랜치에는 PR #130 이 없어 추가 매치 검색 리스너(`renewal.match.find.queue`)가 꺼져 있다.
-가짜 서버의 기본 기록은 60게임이므로 첫 갱신은 언제나 20개를 받아 "추가 매치 검색" 메시지를 남기는데, 이 메시지는 처리되지 않는다.
-**그래서 첫 갱신은 매치를 20개만 저장한다** (#130 이 들어오면 나머지 40개를 배경에서 더 가져온다).
-#130 이 들어오면 `lab.sh` 의 `LAB_QUEUES` 기본값에 `renewal.match.find.queue` 를 더한다 (`LAB_QUEUES="mmrtr.summoner renewal.match.find.queue"`). verify.js 는 lab.sh 가 넘긴 값을 쓰므로 따로 고칠 곳이 없다.
+갱신 단계 큐(`mmrtr.renewal.account`·`league`·`match`)와 추가 매치 검색 큐(`renewal.match.find.queue`)에 모두 consumer 가 있다. `mmrtr.matchId` 는 갱신 완료 판정에 쓰지 않아 목록에 없다.
+verify.js 는 lab.sh 가 넘긴 값을 쓰므로 따로 고칠 곳이 없다.
 
 ## run — 시작 상태로 되돌리고 판정하기
 
@@ -102,11 +101,15 @@ epoch 가 실행마다 바뀌므로 재방문 소환사의 새 게임 수(0~3)�
 | 처리 | 앱 갱신 결과 `<result>/<reason>` | `lol_renewal_completed_total` 증가량 (result·reason 별, 0 인 줄은 뺀다) | `failed` 면 WARN, 아니면 INFO. 하나도 없으면 WARN |
 | 처리 | k6 갱신 결과 | `k6_lab_renewal_outcome_total` 의 이 실행 마지막 값 | timeout 이나 error 가 있으면 WARN. 없으면 WARN |
 | 처리 | 갱신 끝남 p95 | `k6_lab_renewal_done_seconds_p95` 의 이 실행 마지막 값 | 폴링 상한(10초) 이상이면 WARN (값이 상한에서 잘린 것). 없으면 WARN |
+| 처리 | 갱신 기한 초과 비율 (failed/deadline ÷ 끝남) | `lol_renewal_completed_total{result="failed",reason="deadline"}` 증가량 ÷ 전체 증가량 | 0 보다 크면 WARN |
+| 처리 | 앱 갱신 소요 p95 (success) | `histogram_quantile(0.95, lol_renewal_duration_seconds_bucket{result="success"})`. lab 프로파일이 히스토그램을 켠다. 없으면 평균(sum/count)을 찍는다 | INFO |
+| 처리 | 매치 처리 user_retry | `lol_match_process_total{rank="user_retry"}` 증가량 | INFO |
+| 처리 | 기한 뒤 늦게 끝난 갱신 | `lol_renewal_late_completed_total` 증가량 | INFO |
 | 처리 | 갱신 큐 최대 대기 (`LAB_QUEUES`) | 그 큐들의 `rabbitmq_queue_messages_ready` 합의 `max_over_time(...[R:1s])` | 0 보다 크면 WARN. 없으면 WARN |
 | 처리 | END 에 남은 갱신 (`LAB_QUEUES`, 대기+처리 중) | 그 큐들의 `rabbitmq_queue_messages` 합, END 시각 | 0 보다 크면 WARN (END 에도 갱신이 밀려 있다). 없으면 WARN |
 
 k6 의 `끝남(성공·실패 포함)` 은 폴링에서 PROGRESS 가 끝난 것이다. 앱 쪽에서 실패한 갱신도 여기 들어가므로 성공·실패는 "앱 갱신 결과" 줄로 본다.
-큐 항목은 `LAB_QUEUES`(기본 `mmrtr.summoner`)만 본다 (위 "큐 고르기"). 처리 중(unacked) 메시지는 정상이라 최대 대기는 ready 로 센다.
+큐 항목은 `LAB_QUEUES`(기본: 위 다섯 큐)만 본다 (위 "큐 고르기"). 처리 중(unacked) 메시지는 정상이라 최대 대기는 ready 로 센다.
 큐가 다 빌 때까지 걸린 시간(소진 시간)은 아직 재지 않는다. 2단계 spike 시나리오에서 다룬다.
 
 application 한도 항목은 PASS 가 "기본값 이하의 한도에서 시험했다" 는 뜻이 되게 한다. `limit 100000:10` 뒤나, seed 가 올린 한도가 되돌아가지 않은 상태에서 돌리면 429 와 피크가 당연히 PASS 이므로 이 항목이 FAIL 로 막는다.

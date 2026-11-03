@@ -27,6 +27,7 @@ management:
     distribution:
       percentiles-histogram:
         riot.ratelimit.wait: true
+        lol.renewal.duration: true
 
 info:
   lab: true
