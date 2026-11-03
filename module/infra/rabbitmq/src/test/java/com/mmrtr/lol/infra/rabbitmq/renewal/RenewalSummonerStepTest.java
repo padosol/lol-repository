@@ -31,6 +31,7 @@ import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -57,9 +58,11 @@ class RenewalSummonerStepTest {
     private final RiotApiService riotApiService = mock(RiotApiService.class);
     private final RenewalStepPublisher stepPublisher = mock(RenewalStepPublisher.class);
     private final RenewalFinisher finisher = mock(RenewalFinisher.class);
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalSummonerStep step = new RenewalSummonerStep(
-            recordPort, summonerRepositoryPort, revisionChecker, riotApiService, stepPublisher, finisher, executor);
+            recordPort, summonerRepositoryPort, revisionChecker, riotApiService, stepPublisher, finisher,
+            meterRegistry, executor);
 
     private SummonerDto summonerDto;
 
@@ -354,5 +357,19 @@ class RenewalSummonerStepTest {
 
         // when // then
         org.assertj.core.api.Assertions.assertThatCode(() -> step.run(message("r1"))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("단계 지표를 summoner 태그로 센다")
+    void run_countsStepMetricWithSummonerTag() {
+        // when
+        step.run(message("r1"));
+        step.run(message("r2"));
+
+        // then
+        assertThat(meterRegistry.get("lol.renewal.step").tags("step", "summoner", "result", "success")
+                .counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.get("lol.renewal.step").tags("step", "summoner", "result", "skipped")
+                .counter().count()).isEqualTo(1);
     }
 }

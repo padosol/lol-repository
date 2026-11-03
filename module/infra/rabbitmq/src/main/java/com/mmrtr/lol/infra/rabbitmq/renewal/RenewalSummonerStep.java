@@ -13,19 +13,13 @@ import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker.RevisionCheckResult;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
-import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
-import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
-import java.util.Collections;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
-import java.util.IdentityHashMap;
-import java.util.Set;
 import java.util.concurrent.Executor;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -35,10 +29,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class RenewalSummonerStep {
-
-    static final int MAX_RATE_LIMIT_ATTEMPT = 2;
 
     private final RenewalRecordPort recordPort;
     private final SummonerRepositoryPort summonerRepositoryPort;
@@ -47,6 +38,21 @@ public class RenewalSummonerStep {
     private final RenewalStepPublisher stepPublisher;
     private final RenewalFinisher finisher;
     private final Executor requestExecutor;
+    private final RenewalStepFailures failures;
+
+    public RenewalSummonerStep(RenewalRecordPort recordPort, SummonerRepositoryPort summonerRepositoryPort,
+                               SummonerRevisionChecker revisionChecker, RiotApiService riotApiService,
+                               RenewalStepPublisher stepPublisher, RenewalFinisher finisher,
+                               MeterRegistry meterRegistry, Executor requestExecutor) {
+        this.recordPort = recordPort;
+        this.summonerRepositoryPort = summonerRepositoryPort;
+        this.revisionChecker = revisionChecker;
+        this.riotApiService = riotApiService;
+        this.stepPublisher = stepPublisher;
+        this.finisher = finisher;
+        this.requestExecutor = requestExecutor;
+        this.failures = new RenewalStepFailures("summoner", finisher, meterRegistry);
+    }
 
     public void run(SummonerMessage message) {
         String puuid = message.getPuuid();
@@ -54,15 +60,14 @@ public class RenewalSummonerStep {
 
         RenewalRecord record = recordPort.find(puuid).orElse(null);
         if (record == null || !record.isFor(renewalId)) {
-            log.info("낡은 갱신 메시지를 건너뜀. puuid={}, renewalId={}", puuid, renewalId);
-            finisher.skipped("stale");
+            failures.stale(puuid, renewalId);
             return;
         }
 
         Platform platform = Platform.valueOfName(message.getPlatformId());
         if (platform == null) {
             log.error("유효하지 않은 platform: {}, message: {}", message.getPlatformId(), message);
-            finisher.fail(puuid, renewalId, RenewalFailureReason.OTHER);
+            failures.fail(puuid, renewalId, RenewalFailureReason.OTHER);
             return;
         }
 
@@ -78,7 +83,7 @@ public class RenewalSummonerStep {
             saveAndDispatch(message, platform, summonerDto);
         } catch (Exception e) {
             log.error("소환사 단계 처리 실패. puuid={}", puuid, e);
-            failSafely(puuid, renewalId, e);
+            failures.fail(puuid, renewalId, e);
         }
     }
 
@@ -88,12 +93,13 @@ public class RenewalSummonerStep {
         RevisionCheckResult check = revisionChecker.check(puuid, summonerDto);
         if (!check.needsRenewal()) {
             finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.allOf(RenewalStep.class)));
+            failures.success();
             return;
         }
 
         if (!summonerRepositoryPort.updateStatusInfo(
                 puuid, summonerDto.getProfileIconId(), summonerDto.getSummonerLevel())) {
-            finisher.fail(puuid, renewalId, "not_found");
+            failures.fail(puuid, renewalId, "not_found");
             return;
         }
         recordPort.saveRiotRevisionDate(puuid, renewalId, summonerDto.getRevisionDate());
@@ -107,15 +113,7 @@ public class RenewalSummonerStep {
         stepPublisher.publish(RabbitMqBinding.RENEWAL_MATCH,
                 new RenewalStepMessage(renewalId, puuid, platformName, check.dbRevisionDateSeconds(), 0));
         finisher.finish(puuid, transition);
-    }
-
-    /** 실패 표시마저 던지면 메시지가 다시 돌기만 하므로, 로그만 남기고 정상 반환한다. */
-    private void failSafely(String puuid, String renewalId, Exception cause) {
-        try {
-            finisher.fail(puuid, renewalId, RenewalFailureReason.of(cause));
-        } catch (Exception failure) {
-            log.error("갱신 실패 표시에 실패. puuid={}, renewalId={}", puuid, renewalId, failure);
-        }
+        failures.success();
     }
 
     private SummonerDto fetchSummoner(String puuid, Platform platform) {
@@ -125,31 +123,8 @@ public class RenewalSummonerStep {
     }
 
     private void handleFetchFailure(SummonerMessage message, Exception e) {
-        String puuid = message.getPuuid();
-        String renewalId = message.getRenewalId();
-        if (causedBy(e, RiotClientNotFoundException.class)) {
-            finisher.fail(puuid, renewalId, "not_found");
-        } else if (causedBy(e, RiotBudgetExceededException.class)) {
-            stepPublisher.republishSummonerLater(message);
-        } else if (causedBy(e, RiotRateLimitException.class)) {
-            if (message.getAttempt() < MAX_RATE_LIMIT_ATTEMPT) {
-                stepPublisher.republishSummoner(message.nextAttempt());
-            } else {
-                finisher.fail(puuid, renewalId, RenewalFailureReason.RIOT_429);
-            }
-        } else {
-            log.error("소환사 조회 실패. puuid={}", puuid, e);
-            finisher.fail(puuid, renewalId, RenewalFailureReason.of(e));
-        }
-    }
-
-    private static boolean causedBy(Throwable throwable, Class<? extends Throwable> type) {
-        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Throwable t = throwable; t != null && seen.add(t); t = t.getCause()) {
-            if (type.isInstance(t)) {
-                return true;
-            }
-        }
-        return false;
+        failures.fetchFailed(message.getPuuid(), message.getRenewalId(), message.getAttempt(), e,
+                () -> stepPublisher.republishSummoner(message.nextAttempt()),
+                () -> stepPublisher.republishSummonerLater(message));
     }
 }
