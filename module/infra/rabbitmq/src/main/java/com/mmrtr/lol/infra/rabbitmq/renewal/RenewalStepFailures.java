@@ -123,12 +123,17 @@ final class RenewalStepFailures {
 
     /** cause 사슬(CompletionException 포함) 어딘가에 type 이 있는지 본다. */
     static boolean causedBy(Throwable throwable, Class<? extends Throwable> type) {
+        return findCause(throwable, type) != null;
+    }
+
+    /** cause 사슬(CompletionException 포함)에서 처음 나오는 type 예외. 없으면(throwable 이 null 이어도) null. */
+    static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Throwable t = throwable; t != null && seen.add(t); t = t.getCause()) {
             if (type.isInstance(t)) {
-                return true;
+                return type.cast(t);
             }
         }
-        return false;
+        return null;
     }
 }

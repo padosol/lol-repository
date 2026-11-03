@@ -36,12 +36,14 @@ import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;
 import com.mmrtr.lol.infra.redis.service.RenewalMatchClaimService;
 import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
+import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -56,6 +58,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.client.ResourceAccessException;
 
 class RenewalMatchStepTest {
 
@@ -237,40 +240,60 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("타임라인이 5xx 면 매치가 받아졌어도 저장하지 않고 실패 표시를 남긴다")
-    void run_timeline5xx_marksFailedWithoutSavingThatMatch() {
+    @DisplayName("타임라인이 5xx 면 그 매치는 저장하지 않고 실패 표시 없이 사용자 재시도 순위로 넘긴다")
+    void run_timeline5xx_handsOffAsUserRetryWithoutFailedMark() {
         // given
         givenTimeline("m1", CompletableFuture.failedFuture(
-                new RiotServerException(HttpStatus.INTERNAL_SERVER_ERROR, "")));
+                new RiotServerException(HttpStatus.SERVICE_UNAVAILABLE, "")));
 
         // when
         step.run(msg("r1", 0), false);
 
         // then
-        verify(claimService).markFailed("m1");
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
+        verify(claimService).release("m1", "r1");
+        verify(claimService, never()).markFailed(anyString());
         verify(saveMatchDataUseCase).execute(List.of(match2), List.of(timeline2));
     }
 
     @Test
-    @DisplayName("한쪽이 429 여도 다른 쪽이 4xx 면 넘기지 않고 실패 표시를 남긴다")
-    void run_match429AndTimeline4xx_marksFailed() {
+    @DisplayName("Riot 예외가 아닌 조회 실패(읽기 시간 초과 등)는 실패 표시 없이 사용자 재시도 순위로 넘긴다")
+    void run_matchNonRiotFailure_handsOffAsUserRetryWithoutFailedMark() {
         // given
-        givenMatch("m1", CompletableFuture.failedFuture(rateLimit()));
-        givenTimeline("m1", CompletableFuture.failedFuture(new RiotClientException(HttpStatus.FORBIDDEN, "", null)));
+        givenMatch("m1", CompletableFuture.failedFuture(
+                new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out"))));
 
         // when
         step.run(msg("r1", 0), false);
 
         // then
-        verify(claimService).markFailed("m1");
-        verify(messageSender, never()).sendMessageByMatchId(anyString(), anyString(), any());
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
+        verify(claimService).release("m1", "r1");
+        verify(claimService, never()).markFailed(anyString());
     }
 
     @Test
-    @DisplayName("Riot 예외가 아닌 매치 조회 실패(시간 초과 등)도 실패 표시를 남긴다")
-    void run_matchNonRiotFailure_marksFailed() {
+    @DisplayName("상태가 429 인 RiotClientException 은 4xx 로 보지 않고 사용자 재시도 순위로 넘긴다")
+    void run_plainClientException429_handsOffAsUserRetry() {
         // given
-        givenMatch("m1", CompletableFuture.failedFuture(new IllegalStateException("read timed out")));
+        givenMatch("m1", CompletableFuture.failedFuture(
+                new RiotClientException(HttpStatus.TOO_MANY_REQUESTS, "", null)));
+
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
+        verify(claimService, never()).markFailed(anyString());
+    }
+
+    @Test
+    @DisplayName("한쪽이 429 여도 다른 쪽이 404 면 넘기지 않고 실패 표시를 남긴다")
+    void run_match429AndTimeline404_marksFailed() {
+        // given
+        givenMatch("m1", CompletableFuture.failedFuture(rateLimit()));
+        givenTimeline("m1", CompletableFuture.failedFuture(
+                new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
 
         // when
         step.run(msg("r1", 0), false);
@@ -278,6 +301,7 @@ class RenewalMatchStepTest {
         // then
         verify(claimService).markFailed("m1");
         verify(claimService).release("m1", "r1");
+        verify(messageSender, never()).sendMessageByMatchId(anyString(), anyString(), any());
     }
 
     @Test
