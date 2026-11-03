@@ -1,12 +1,15 @@
 package com.mmrtr.lol.infra.rabbitmq.listener;
 
+import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchDataProcessor;
+import com.mmrtr.lol.infra.rabbitmq.service.MatchQueueRank;
 import com.mmrtr.lol.support.aop.TraceLogging;
 import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.stereotype.Service;
 
@@ -21,11 +24,11 @@ public class MatchListener {
     private final MessageConverter messageConverter;
     private final MatchDataProcessor matchDataProcessor;
 
-//    @RabbitListener(
-//            queues = RabbitMqBinding.Queue.MATCH_ID,
-//            containerFactory = "batchRabbitListenerContainerFactory",
-//            ackMode = "MANUAL"
-//    )
+    @RabbitListener(
+            queues = RabbitMqBinding.Queue.MATCH_ID,
+            containerFactory = "batchRabbitListenerContainerFactory",
+            ackMode = "MANUAL"
+    )
     public void receiveMessage(
             Message message,
             Channel channel
@@ -35,7 +38,9 @@ public class MatchListener {
         String platformName = message.getMessageProperties().getHeader("region");
         String matchId = messageConverter.fromMessage(message).toString();
 
-        MatchDataProcessor.Result result = matchDataProcessor.process(matchId, platformName);
+        MatchQueueRank rank = MatchQueueRank.fromAmqpPriority(message.getMessageProperties().getPriority());
+
+        MatchDataProcessor.Result result = matchDataProcessor.process(matchId, platformName, rank);
 
         switch (result) {
             case DUPLICATE, SUCCESS -> safeAck(channel, deliveryTag);

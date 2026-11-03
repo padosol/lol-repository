@@ -3,16 +3,19 @@ package com.mmrtr.lol.infra.rabbitmq.service;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
+import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.infra.redis.service.MatchRedisService;
 import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotCallScope;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.util.Pair;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -30,20 +33,28 @@ public class MatchDataProcessor {
     private final MatchRedisService matchRedisService;
     private final MatchBatchProcessor matchBatchProcessor;
     private final Executor riotApiExecutor;
+    private final MatchRepositoryPort matchRepositoryPort;
+    private final MeterRegistry meterRegistry;
     private final Duration fetchTimeout;
 
     @Autowired
     public MatchDataProcessor(MatchApiPort matchApiPort, MatchRedisService matchRedisService,
-                              MatchBatchProcessor matchBatchProcessor, Executor riotApiExecutor) {
-        this(matchApiPort, matchRedisService, matchBatchProcessor, riotApiExecutor, FETCH_TIMEOUT);
+                              MatchBatchProcessor matchBatchProcessor, Executor riotApiExecutor,
+                              MatchRepositoryPort matchRepositoryPort, MeterRegistry meterRegistry) {
+        this(matchApiPort, matchRedisService, matchBatchProcessor, riotApiExecutor,
+                matchRepositoryPort, meterRegistry, FETCH_TIMEOUT);
     }
 
     MatchDataProcessor(MatchApiPort matchApiPort, MatchRedisService matchRedisService,
-                       MatchBatchProcessor matchBatchProcessor, Executor riotApiExecutor, Duration fetchTimeout) {
+                       MatchBatchProcessor matchBatchProcessor, Executor riotApiExecutor,
+                       MatchRepositoryPort matchRepositoryPort, MeterRegistry meterRegistry,
+                       Duration fetchTimeout) {
         this.matchApiPort = matchApiPort;
         this.matchRedisService = matchRedisService;
         this.matchBatchProcessor = matchBatchProcessor;
         this.riotApiExecutor = riotApiExecutor;
+        this.matchRepositoryPort = matchRepositoryPort;
+        this.meterRegistry = meterRegistry;
         this.fetchTimeout = fetchTimeout;
     }
 
@@ -54,16 +65,30 @@ public class MatchDataProcessor {
         QUEUE_FULL
     }
 
-    public Result process(String matchId, String platformName) {
+    public Result process(String matchId, String platformName, MatchQueueRank rank) {
+        Result result = doProcess(matchId, platformName, rank);
+        meterRegistry.counter("lol.match.process",
+                "rank", rank.name().toLowerCase(Locale.ROOT),
+                "result", result == Result.QUEUE_FULL ? "requeue" : result.name().toLowerCase(Locale.ROOT))
+                .increment();
+        return result;
+    }
+
+    private Result doProcess(String matchId, String platformName, MatchQueueRank rank) {
+        List<String> existing = matchRepositoryPort.findExistingMatchIds(List.of(matchId));
+        if (existing != null && existing.contains(matchId)) {
+            log.debug("Skipping match already in DB: {}", matchId);
+            return Result.DUPLICATE;
+        }
         if (!matchRedisService.tryMarkProcessing(matchId)) {
             log.debug("Skipping duplicate matchId: {}", matchId);
             return Result.DUPLICATE;
         }
 
         // 호출은 만드는 스레드의 스코프로 우선순위가 정해진다
-        CompletableFuture<MatchDto> matchFuture = RiotCallScope.call(RiotCallPriority.BACKGROUND,
+        CompletableFuture<MatchDto> matchFuture = RiotCallScope.call(rank.riotPriority(),
                 () -> matchApiPort.fetchMatchById(matchId, platformName, riotApiExecutor));
-        CompletableFuture<TimelineDto> timelineFuture = RiotCallScope.call(RiotCallPriority.BACKGROUND,
+        CompletableFuture<TimelineDto> timelineFuture = RiotCallScope.call(rank.riotPriority(),
                 () -> matchApiPort.fetchTimelineById(matchId, platformName, riotApiExecutor));
 
         Pair<MatchDto, TimelineDto> dtoPair;
@@ -81,6 +106,7 @@ public class MatchDataProcessor {
         } catch (InterruptedException e) {
             log.warn("Interrupted while fetching match data for matchId {}", matchId);
             Thread.currentThread().interrupt();
+            matchRedisService.releaseProcessing(matchId);
             return Result.FAILURE;
         } catch (ExecutionException e) {
             if (isBudgetExceeded(e)) {
@@ -89,6 +115,7 @@ public class MatchDataProcessor {
                 return Result.QUEUE_FULL;
             }
             log.warn("Failed to fetch data for matchId {}: {}", matchId, e.getCause().getMessage());
+            matchRedisService.releaseProcessing(matchId);
             return Result.FAILURE;
         }
 

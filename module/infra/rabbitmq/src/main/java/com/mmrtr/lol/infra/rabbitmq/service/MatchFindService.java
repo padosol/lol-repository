@@ -16,8 +16,6 @@ import java.util.concurrent.Executor;
 @RequiredArgsConstructor
 public class MatchFindService {
 
-    private static final int START_OFFSET = 20;
-
     private final MatchIdCollector matchIdCollector;
     private final MatchIdPublisher matchIdPublisher;
     private final Executor matchFindExecutor;
@@ -34,7 +32,7 @@ public class MatchFindService {
         log.info("Starting renewal match ID search for puuid: {} on platform: {}", puuid, platform);
 
         List<String> allMatchIds = matchIdCollector
-                .collectAll(puuid, platform.name(), revisionDate, START_OFFSET, matchFindExecutor);
+                .collectAll(puuid, platform.name(), revisionDate, summonerRenewalMessage.startOffsetOrDefault(), matchFindExecutor);
 
         if (allMatchIds.isEmpty()) {
             log.info("No match IDs fetched for puuid: {}. Nothing to process.", puuid);
