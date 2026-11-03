@@ -24,6 +24,10 @@ public class MatchListener {
     private final MessageConverter messageConverter;
     private final MatchDataProcessor matchDataProcessor;
 
+    /**
+     * MANUAL ack 라 예외가 밖으로 나가면 컨테이너가 ack·nack 하지 않아 메시지가 un-acked 로 남고, prefetch 1 인 이 consumer 는
+     * 브로커의 consumer_timeout 까지 멈춘다. 그래서 어떤 예외든 잡아 nack(requeue=false) 해 DLX 로 보낸다.
+     */
     @RabbitListener(
             queues = RabbitMqBinding.Queue.MATCH_ID,
             containerFactory = "batchRabbitListenerContainerFactory",
@@ -32,15 +36,22 @@ public class MatchListener {
     public void receiveMessage(
             Message message,
             Channel channel
-    ) throws IOException {
+    ) {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
 
-        String platformName = message.getMessageProperties().getHeader("region");
-        String matchId = messageConverter.fromMessage(message).toString();
+        MatchDataProcessor.Result result;
+        try {
+            String platformName = message.getMessageProperties().getHeader("region");
+            String matchId = messageConverter.fromMessage(message).toString();
 
-        MatchQueueRank rank = MatchQueueRank.fromAmqpPriority(message.getMessageProperties().getPriority());
+            MatchQueueRank rank = MatchQueueRank.fromAmqpPriority(message.getMessageProperties().getPriority());
 
-        MatchDataProcessor.Result result = matchDataProcessor.process(matchId, platformName, rank);
+            result = matchDataProcessor.process(matchId, platformName, rank);
+        } catch (Exception e) {
+            log.warn("Failed to process match message, nacking to DLX. deliveryTag={}", deliveryTag, e);
+            safeNack(channel, deliveryTag);
+            return;
+        }
 
         switch (result) {
             case DUPLICATE, SUCCESS -> safeAck(channel, deliveryTag);

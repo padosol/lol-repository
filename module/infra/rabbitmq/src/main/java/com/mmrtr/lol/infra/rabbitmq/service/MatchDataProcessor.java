@@ -75,7 +75,14 @@ public class MatchDataProcessor {
     }
 
     private Result doProcess(String matchId, String platformName, MatchQueueRank rank) {
-        List<String> existing = matchRepositoryPort.findExistingMatchIds(List.of(matchId));
+        List<String> existing;
+        try {
+            existing = matchRepositoryPort.findExistingMatchIds(List.of(matchId));
+        } catch (RuntimeException e) {
+            // 처리 표시를 잡기 전이라 풀 것이 없다. FAILURE 로 nack 해 DLX 에 남긴다 (MANUAL ack 라 던지면 un-acked 로 멈춘다)
+            log.warn("DB check failed for matchId {}: {}", matchId, e.toString());
+            return Result.FAILURE;
+        }
         if (existing != null && existing.contains(matchId)) {
             log.debug("Skipping match already in DB: {}", matchId);
             return Result.DUPLICATE;

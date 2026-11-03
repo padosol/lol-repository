@@ -12,9 +12,13 @@ import org.springframework.amqp.support.converter.SimpleMessageConverter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -50,6 +54,33 @@ class MatchListenerTest {
 
         // then
         verify(processor).process("KR_1", "KR", MatchQueueRank.BACKFILL);
+    }
+
+    @Test
+    @DisplayName("처리가 예외를 던지면 밖으로 내보내지 않고 requeue 없이 nack 해 DLX 로 보낸다")
+    void receiveMessage_processThrows_nacksWithoutRequeue() throws IOException {
+        // given
+        when(processor.process(anyString(), anyString(), any())).thenThrow(new IllegalStateException("db down"));
+        when(channel.isOpen()).thenReturn(true);
+
+        // when & then
+        assertThatCode(() -> listener.receiveMessage(message(2), channel)).doesNotThrowAnyException();
+        verify(channel).basicNack(7L, false, false);
+        verify(channel, never()).basicAck(anyLong(), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("FAILURE 결과는 requeue 없이 nack 한다")
+    void receiveMessage_failure_nacksWithoutRequeue() throws IOException {
+        // given
+        when(processor.process(anyString(), anyString(), any())).thenReturn(MatchDataProcessor.Result.FAILURE);
+        when(channel.isOpen()).thenReturn(true);
+
+        // when
+        listener.receiveMessage(message(1), channel);
+
+        // then
+        verify(channel).basicNack(7L, false, false);
     }
 
     private Message message(Integer priority) {

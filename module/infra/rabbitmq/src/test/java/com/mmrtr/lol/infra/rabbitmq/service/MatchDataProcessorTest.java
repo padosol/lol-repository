@@ -111,6 +111,18 @@ class MatchDataProcessorTest {
     }
 
     @Test
+    @DisplayName("DB 확인이 던지면 Riot 호출·처리 표시 없이 FAILURE 이고 failure 로 센다")
+    void process_dbCheckThrows_failureWithoutRiotCall() {
+        when(matchRepository.findExistingMatchIds(List.of("KR_1"))).thenThrow(new IllegalStateException("db down"));
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.USER_RETRY))
+                .isEqualTo(MatchDataProcessor.Result.FAILURE);
+        assertThat(seen).isEmpty();
+        verifyNoInteractions(redis, batch);
+        assertThat(count("user_retry", "failure")).isEqualTo(1.0);
+    }
+
+    @Test
     @DisplayName("순위와 결과별로 센다")
     void process_countsByRankAndResult() {
         processor.process("KR_1", "KR", MatchQueueRank.USER_RETRY);
