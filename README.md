@@ -111,11 +111,11 @@ domain/
 
 ```
 1. 메인 서버
-   └─> RabbitMQ (mmrtr.summoner / renewal.match.find.queue / mmrtr.matchId)
+   └─> RabbitMQ (mmrtr.summoner / renewal.match.find.queue / mmrtr.matchId.priority)
 
 2. SummonerRenewalListener
    └─> Riot API: 소환사·매치 ID 목록 조회
-       └─> MatchIdPublisher → mmrtr.matchId 큐로 매치 ID 재발행
+       └─> MatchIdPublisher → mmrtr.matchId.priority 큐로 매치 ID 재발행
 
 3. MatchFindListener  (renewal.match.find.queue)
    └─> Riot API: match + timeline 조회
@@ -132,7 +132,7 @@ domain/
 |----|----------|-------------|------|
 | `mmrtr.summoner` | `mmrtr.exchange` | `mmrtr.key` | 소환사 수집/갱신 |
 | `mmrtr.summoner.dlx` | `summoner.dlx.exchange` | `deadLetter` | 소환사 DLX |
-| `mmrtr.matchId` | `mmrtr.matchId.exchange` | `mmrtr.routingkey.matchId` | 매치 ID 분배 |
+| `mmrtr.matchId.priority` | `mmrtr.matchId.priority.exchange` | `mmrtr.routingkey.matchId` | 매치 적재 (우선순위 큐, `x-max-priority: 3`) |
 | `renewal.match.find.queue` | `renewal.topic.exchange` | `renewal.match.find` | 매치 상세 수집 |
 
 ## Rate Limiting & 배치 삽입

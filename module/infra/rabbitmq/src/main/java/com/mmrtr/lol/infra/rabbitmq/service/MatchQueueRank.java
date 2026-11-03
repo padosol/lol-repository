@@ -3,7 +3,7 @@ package com.mmrtr.lol.infra.rabbitmq.service;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 
 /**
- * mmrtr.matchId 큐의 처리 순위. 순위가 낮을수록(1) 먼저 꺼내고, AMQP priority 는 반대로 클수록 먼저다.
+ * ⑥ 매치 적재 우선순위 큐 mmrtr.matchId.priority 의 처리 순위. 순위가 낮을수록(1) 먼저 꺼내고, AMQP priority 는 반대로 클수록 먼저다.
  */
 public enum MatchQueueRank {
     TIMELINE_LATER(1, 3, RiotCallPriority.DEFERRED),

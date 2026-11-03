@@ -66,7 +66,7 @@ warm 을 초당 5건으로 둔 이유: 한도를 올린 채 초당 50건으로 �
 갱신 처리 대기(seed·run)와 판정의 큐 항목은 consumer 가 있게 설계된 큐를 **이름으로** 고른다. 기본값은 위 표의 다섯 큐다.
 consumer 수(`> 0`)로 고르면 리스너가 죽어 consumer 가 0 이 됐을 때 그 큐가 빠져 적체가 숨는다. 이름으로 고르면 consumer 가 0 이어도 메시지가 그대로 세어져, 대기는 시간 초과로 실패하고 판정에는 적체가 WARN 으로 남는다.
 
-갱신 단계 큐(`mmrtr.renewal.account`·`league`·`match`)와 추가 매치 검색 큐(`renewal.match.find.queue`)에 모두 consumer 가 있다. `mmrtr.matchId` 는 갱신 완료 판정에 쓰지 않아 목록에 없다.
+갱신 단계 큐(`mmrtr.renewal.account`·`league`·`match`)와 추가 매치 검색 큐(`renewal.match.find.queue`)에 모두 consumer 가 있다. 매치 적재 우선순위 큐 `mmrtr.matchId.priority` 는 갱신 완료 판정에 쓰지 않아 목록에 없다 (Grafana "갱신 단계 큐 깊이" 패널에는 있다).
 verify.js 는 lab.sh 가 넘긴 값을 쓰므로 따로 고칠 곳이 없다.
 
 ## run — 시작 상태로 되돌리고 판정하기

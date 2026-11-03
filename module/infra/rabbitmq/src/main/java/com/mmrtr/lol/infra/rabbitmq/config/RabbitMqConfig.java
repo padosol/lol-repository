@@ -79,8 +79,13 @@ public class RabbitMqConfig {
                 .with(RabbitMqBinding.SUMMONER_DLX.getRoutingKey());
     }
 
+    /**
+     * ⑥ 매치 적재 우선순위 큐. 이미 있는 큐의 인자는 바꿀 수 없어, 옛 비우선순위 {@code mmrtr.matchId} 를 같은 이름으로
+     * 다시 선언하면 PRECONDITION_FAILED 로 거절되고 RabbitAdmin 이 뒤의 선언(갱신 단계 큐 포함)까지 멈춘다.
+     * 그래서 새 이름으로 선언하고 옛 큐·exchange 는 선언하지도 쓰지도 않는다. DLX 는 옛 큐와 같은 것을 쓴다.
+     */
     @Bean
-    public Queue matchIdQueue() {
+    public Queue matchIdPriorityQueue() {
         return QueueBuilder.durable(RabbitMqBinding.MATCH_ID.getQueue())
                 .withArgument("x-dead-letter-exchange", RabbitMqBinding.MATCH_ID_DLX.getExchange())
                 .withArgument("x-dead-letter-routing-key", RabbitMqBinding.MATCH_ID_DLX.getRoutingKey())
@@ -89,15 +94,15 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public DirectExchange matchIdExchange() {
+    public DirectExchange matchIdPriorityExchange() {
         return new DirectExchange(RabbitMqBinding.MATCH_ID.getExchange());
     }
 
     @Bean
-    public Binding matchIdBinding() {
+    public Binding matchIdPriorityBinding() {
         return BindingBuilder
-                .bind(matchIdQueue())
-                .to(matchIdExchange())
+                .bind(matchIdPriorityQueue())
+                .to(matchIdPriorityExchange())
                 .with(RabbitMqBinding.MATCH_ID.getRoutingKey());
     }
 

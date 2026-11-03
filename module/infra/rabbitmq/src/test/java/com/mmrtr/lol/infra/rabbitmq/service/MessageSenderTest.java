@@ -16,7 +16,7 @@ import static org.mockito.Mockito.verify;
 class MessageSenderTest {
 
     @Test
-    @DisplayName("순위의 AMQP priority 와 region 헤더를 메시지에 싣는다")
+    @DisplayName("새 우선순위 exchange 로 순위의 AMQP priority 와 region 헤더를 실어 보낸다")
     void sendMessageByMatchId_setsPriorityAndRegion() {
         // given
         RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
@@ -27,7 +27,7 @@ class MessageSenderTest {
         sender.sendMessageByMatchId("KR_1", "KR", MatchQueueRank.USER_RETRY);
 
         // then
-        verify(rabbitTemplate).convertAndSend(eq("mmrtr.matchId.exchange"), eq("mmrtr.routingkey.matchId"),
+        verify(rabbitTemplate).convertAndSend(eq("mmrtr.matchId.priority.exchange"), eq("mmrtr.routingkey.matchId"),
                 eq((Object) "KR_1"), captor.capture());
         Message message = new Message(new byte[0], new MessageProperties());
         captor.getValue().postProcessMessage(message);
