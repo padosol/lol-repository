@@ -26,7 +26,7 @@ import java.util.UUID;
  *
  * <p>메시지에는 플랫폼 이름(KR, NA …)을 싣는다 — 갱신 컨슈머가 이름으로 읽는다.
  *
- * <p>갱신 실행은 rabbitmq 모듈의 {@code SummonerRenewalService} 가 한다 (빈 이름이 겹치지 않게 Request 를 붙였다).
+ * <p>갱신 실행은 rabbitmq 모듈의 {@code RenewalSummonerStep} 이 시작한다 (빈 이름이 겹치지 않게 Request 를 붙였다).
  */
 @Service
 @RequiredArgsConstructor

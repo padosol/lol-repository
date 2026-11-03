@@ -15,24 +15,14 @@ class SummonerMessageTest {
     private final Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();
 
     @Test
-    @DisplayName("background 필드가 없는 메시지(lol-server·이전 발행자)는 사용자 갱신으로 읽는다")
-    void missingBackground_deserializesToFalse() {
-        String json = "{\"platformId\":\"KR\",\"puuid\":\"p\",\"revisionDate\":1}";
+    @DisplayName("옛 메시지의 background 필드는 무시하고 읽는다")
+    void deserialize_oldJsonWithBackgroundField_ignoresUnknown() {
+        String json = "{\"platformId\":\"KR\",\"puuid\":\"p1\",\"revisionDate\":0,\"background\":true}";
 
         SummonerMessage message = read(json);
 
-        assertThat(message.getPuuid()).isEqualTo("p");
-        assertThat(message.isBackground()).isFalse();
-    }
-
-    @Test
-    @DisplayName("background=true 는 직렬화·역직렬화 후에도 유지된다")
-    void background_roundTrips() {
-        Message sent = converter.toMessage(new SummonerMessage("KR", "p", 0L, true), new MessageProperties());
-
-        SummonerMessage message = read(new String(sent.getBody(), StandardCharsets.UTF_8));
-
-        assertThat(message.isBackground()).isTrue();
+        assertThat(message.getPuuid()).isEqualTo("p1");
+        assertThat(message.getRenewalId()).isNull();
     }
 
     @Test

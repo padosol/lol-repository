@@ -33,7 +33,6 @@ class SummonerCollectionPublishAdapterTest {
             assertThat(m.getPlatformId()).isEqualTo("KR");
             assertThat(m.getRenewalId()).isEqualTo("r1");
             assertThat(m.getAttempt()).isZero();
-            assertThat(m.isBackground()).isFalse();
         });
     }
 

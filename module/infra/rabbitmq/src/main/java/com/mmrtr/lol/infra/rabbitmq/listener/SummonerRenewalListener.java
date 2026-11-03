@@ -1,22 +1,14 @@
 package com.mmrtr.lol.infra.rabbitmq.listener;
 
-import com.mmrtr.lol.common.type.Platform;
-import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
-import com.mmrtr.lol.infra.rabbitmq.service.SummonerRenewalService;
-import com.mmrtr.lol.infra.redis.service.RedisLockHandler;
+import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
+import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalSummonerStep;
 import com.mmrtr.lol.support.aop.TraceLogging;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-
-import java.time.Duration;
-import java.util.Locale;
 
 @Slf4j
 @Service
@@ -24,52 +16,11 @@ import java.util.Locale;
 @TraceLogging
 public class SummonerRenewalListener {
 
-    private static final Duration LOCK_TIMEOUT = Duration.ofMinutes(3L);
-
-    private final RedisLockHandler redisLockHandler;
-    private final SummonerRenewalService summonerRenewalService;
-    private final MeterRegistry meterRegistry;
+    private final RenewalSummonerStep summonerStep;
 
     @RabbitListener(queues = RabbitMqBinding.Queue.SUMMONER, containerFactory = "simpleRabbitListenerContainerFactory")
     public void receiveSummonerMessageV2(@Payload SummonerMessage summonerMessage) {
         log.info("전적 갱신 요청 {}", summonerMessage);
-
-        // 같은 큐에 사용자 갱신과 티어 수집이 함께 온다. 티어 수집만 background 로 표시된다
-        RiotCallPriority priority = summonerMessage.isBackground()
-                ? RiotCallPriority.BACKGROUND : RiotCallPriority.USER;
-
-        Platform platform = Platform.valueOfName(summonerMessage.getPlatformId());
-        if (platform == null) {
-            log.error("유효하지 않은 platform: {}, message: {}", summonerMessage.getPlatformId(), summonerMessage);
-            recordCompleted("failed", RenewalFailureReason.OTHER, priority);
-            return;
-        }
-
-        String puuid = summonerMessage.getPuuid();
-        if (!redisLockHandler.acquireLock(puuid, LOCK_TIMEOUT)) {
-            log.info("이미 전적 갱신 진행 중 입니다. {}", puuid);
-            recordCompleted("skipped", "lock_busy", priority);
-            return;
-        }
-
-        try {
-            RiotCallScope.run(priority, () -> summonerRenewalService.renewSummoner(puuid, platform));
-            recordCompleted("success", "none", priority);
-        } catch (Exception e) {
-            log.error(e.getMessage());
-            recordCompleted("failed", RenewalFailureReason.of(e), priority);
-        } finally {
-            log.info("전적 갱신 요청 완료 {}", summonerMessage);
-            redisLockHandler.deleteSummonerRenewal(puuid);
-            redisLockHandler.releaseLock(puuid);
-        }
-    }
-
-    /** 갱신 결과를 센다. 태그는 고정된 값만 쓴다 (puuid 금지). */
-    private void recordCompleted(String result, String reason, RiotCallPriority priority) {
-        meterRegistry.counter("lol.renewal.completed",
-                "result", result,
-                "reason", reason,
-                "priority", priority.name().toLowerCase(Locale.ROOT)).increment();
+        summonerStep.run(summonerMessage);
     }
 }
