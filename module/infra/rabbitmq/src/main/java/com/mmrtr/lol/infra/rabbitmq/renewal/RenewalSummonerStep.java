@@ -13,8 +13,6 @@ import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker.RevisionCheckResult;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
@@ -114,9 +112,8 @@ public class RenewalSummonerStep {
     }
 
     private SummonerDto fetchSummoner(String puuid, Platform platform) {
-        return RiotCallScope.call(RiotCallPriority.USER, () ->
-                RiotRetryScope.callWithoutRateLimitRetry(() ->
-                        riotApiService.getSummonerByPuuid(puuid, platform, requestExecutor).join()));
+        return RiotRetryScope.callWithoutRateLimitRetry(() ->
+                riotApiService.getSummonerByPuuid(puuid, platform, requestExecutor).join());
     }
 
     private void handleFetchFailure(SummonerMessage message, Exception e) {

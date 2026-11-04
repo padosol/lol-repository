@@ -40,7 +40,6 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.SocketTimeoutException;
@@ -462,21 +461,21 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("id·매치·타임라인 호출은 모두 USER 우선순위이고 429 인라인 재시도가 꺼져 있다")
-    void run_riotCallsAreUserPriorityWithoutRateLimitRetry() {
+    @DisplayName("id·매치·타임라인 호출은 모두 429 인라인 재시도가 꺼져 있다")
+    void run_riotCallsWithoutRateLimitRetry() {
         // given
-        List<String> scopes = new ArrayList<>();
+        List<Boolean> retryEnabled = new ArrayList<>();
         given(matchApiPort.fetchMatchIdsByPuuid(eq("p1"), eq("KR"), anyLong(), eq(0), eq(20), any()))
                 .willAnswer(inv -> {
-                    scopes.add(RiotCallScope.current() + ":" + RiotRetryScope.rateLimitRetryEnabled());
+                    retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
                     return CompletableFuture.completedFuture(List.of("m1"));
                 });
         given(matchApiPort.fetchMatchById(eq("m1"), eq("KR"), any())).willAnswer(inv -> {
-            scopes.add(RiotCallScope.current() + ":" + RiotRetryScope.rateLimitRetryEnabled());
+            retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
             return CompletableFuture.completedFuture(match1);
         });
         given(matchApiPort.fetchTimelineById(eq("m1"), eq("KR"), any())).willAnswer(inv -> {
-            scopes.add(RiotCallScope.current() + ":" + RiotRetryScope.rateLimitRetryEnabled());
+            retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
             return CompletableFuture.completedFuture(timeline1);
         });
 
@@ -484,6 +483,6 @@ class RenewalMatchStepTest {
         step.run(msg("r1", 0), false);
 
         // then
-        assertThat(scopes).containsExactly("USER:false", "USER:false", "USER:false");
+        assertThat(retryEnabled).containsExactly(false, false, false);
     }
 }

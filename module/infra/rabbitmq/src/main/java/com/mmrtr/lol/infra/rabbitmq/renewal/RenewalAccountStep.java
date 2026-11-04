@@ -9,8 +9,6 @@ import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
 import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
@@ -60,9 +58,8 @@ public class RenewalAccountStep {
 
         AccountDto account;
         try {
-            account = RiotCallScope.call(RiotCallPriority.USER, () ->
-                    RiotRetryScope.callWithoutRateLimitRetry(() ->
-                            riotApiService.getAccountByPuuid(puuid, platform, requestExecutor).join()));
+            account = RiotRetryScope.callWithoutRateLimitRetry(() ->
+                    riotApiService.getAccountByPuuid(puuid, platform, requestExecutor).join());
         } catch (Exception e) {
             failures.fetchFailed(puuid, renewalId, message.attempt(), e,
                     () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_ACCOUNT, message.nextAttempt()),

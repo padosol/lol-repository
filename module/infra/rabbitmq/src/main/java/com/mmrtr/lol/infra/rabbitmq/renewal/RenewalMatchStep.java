@@ -19,8 +19,6 @@ import com.mmrtr.lol.infra.redis.service.RenewalMatchClaimService;
 import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
@@ -125,9 +123,8 @@ public class RenewalMatchStep {
     }
 
     private List<String> fetchMatchIds(String puuid, String platformName, long startTime) {
-        List<String> ids = RiotCallScope.call(RiotCallPriority.USER, () ->
-                RiotRetryScope.callWithoutRateLimitRetry(() -> matchApiPort.fetchMatchIdsByPuuid(
-                        puuid, platformName, startTime, 0, MATCH_COUNT, requestExecutor).join()));
+        List<String> ids = RiotRetryScope.callWithoutRateLimitRetry(() -> matchApiPort.fetchMatchIdsByPuuid(
+                puuid, platformName, startTime, 0, MATCH_COUNT, requestExecutor).join());
         return ids == null ? List.of() : ids;
     }
 
@@ -171,14 +168,13 @@ public class RenewalMatchStep {
         }
     }
 
-    /** 매치마다 match ∥ timeline 을 한꺼번에 시작한 뒤 모두 기다린다. 우선순위·재시도 스코프는 요청을 만드는 이 스레드에서 읽힌다. */
+    /** 매치마다 match ∥ timeline 을 한꺼번에 시작한 뒤 모두 기다린다. 재시도 스코프는 요청을 만드는 이 스레드에서 읽힌다. */
     private List<MatchFetch> fetchAll(List<String> matchIds, String platformName) {
-        List<PendingFetch> pending = RiotCallScope.call(RiotCallPriority.USER, () ->
-                RiotRetryScope.callWithoutRateLimitRetry(() -> matchIds.stream()
-                        .map(matchId -> new PendingFetch(matchId,
-                                matchApiPort.fetchMatchById(matchId, platformName, requestExecutor),
-                                matchApiPort.fetchTimelineById(matchId, platformName, requestExecutor)))
-                        .toList()));
+        List<PendingFetch> pending = RiotRetryScope.callWithoutRateLimitRetry(() -> matchIds.stream()
+                .map(matchId -> new PendingFetch(matchId,
+                        matchApiPort.fetchMatchById(matchId, platformName, requestExecutor),
+                        matchApiPort.fetchTimelineById(matchId, platformName, requestExecutor)))
+                .toList());
         return pending.stream().map(RenewalMatchStep::await).toList();
     }
 

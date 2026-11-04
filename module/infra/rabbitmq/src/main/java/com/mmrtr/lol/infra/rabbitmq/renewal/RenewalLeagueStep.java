@@ -10,8 +10,6 @@ import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
@@ -63,9 +61,8 @@ public class RenewalLeagueStep {
 
         Set<LeagueEntryDto> entries;
         try {
-            entries = RiotCallScope.call(RiotCallPriority.USER, () ->
-                    RiotRetryScope.callWithoutRateLimitRetry(() ->
-                            riotApiService.getLeagueEntriesByPuuid(puuid, platform, requestExecutor).join()));
+            entries = RiotRetryScope.callWithoutRateLimitRetry(() ->
+                    riotApiService.getLeagueEntriesByPuuid(puuid, platform, requestExecutor).join());
         } catch (Exception e) {
             failures.fetchFailed(puuid, renewalId, message.attempt(), e,
                     () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_LEAGUE, message.nextAttempt()),

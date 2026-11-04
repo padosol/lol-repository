@@ -30,7 +30,6 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
 import com.mmrtr.lol.support.riot.RiotRetryScope;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
@@ -312,13 +311,11 @@ class RenewalSummonerStepTest {
     }
 
     @Test
-    @DisplayName("Riot 호출은 USER 우선순위이고 429 인라인 재시도가 꺼져 있다")
-    void run_riotCallsAreUserPriorityWithoutRateLimitRetry() {
+    @DisplayName("Riot 호출은 429 인라인 재시도가 꺼져 있다")
+    void run_riotCallsWithoutRateLimitRetry() {
         // given
-        List<RiotCallPriority> priorities = new ArrayList<>();
         List<Boolean> retryEnabled = new ArrayList<>();
         given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any())).willAnswer(inv -> {
-            priorities.add(RiotCallScope.current());
             retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
             return CompletableFuture.completedFuture(summonerDto);
         });
@@ -327,7 +324,6 @@ class RenewalSummonerStepTest {
         step.run(message("r1"));
 
         // then
-        assertThat(priorities).containsExactly(RiotCallPriority.USER);
         assertThat(retryEnabled).containsExactly(false);
     }
 
