@@ -1,7 +1,33 @@
-# Riot API 실험실 관측 스택. docker/docker-compose.yml 위에 얹어 쓴다.
+# Riot API 실험실 (앱·가짜 서버·관측 스택). docker/docker-compose.yml 위에 얹어 쓴다.
 # 기본 서비스(postgres·rabbitmq·redis)는 건드리지 않는다. 설정을 바꾸면 기존 컨테이너가 재생성된다.
 # 상대 경로는 첫 번째 -f 파일(docker/docker-compose.yml)의 디렉터리 기준이다.
 services:
+  # 앱을 local,lab 프로파일로 띄운다. lab.sh 가 호스트에서 bootJar 를 빌드한 뒤 그 jar 로 이미지를 만든다 (riot-mock 과 같은 방식).
+  # lol_lab DB·vhost lab 이 먼저 있어야 하므로 lab.sh 가 인프라 다음에 --no-deps 로 띄운다 (depends_on 을 두지 않는다).
+  # .env 는 넣지 않는다. 주소는 compose 서비스 이름이고, 계정·키는 application-lab.yml 기본값(postgres/1234, guest, lab-key)이다.
+  app:
+    build:
+      context: ../module/app/application/build/libs
+      dockerfile_inline: |
+        FROM eclipse-temurin:21.0.11_10-jre@sha256:d2b9f8f12212cadcfdf889461531784e8fd097feade954d65b31ee7a71c473ec
+        COPY *.jar /app/app.jar
+        EXPOSE 8111 8112
+        ENTRYPOINT ["sh", "-c", "exec java $$JAVA_OPTS -jar /app/app.jar"]
+    container_name: lol-lab-app
+    environment:
+      SPRING_PROFILES_ACTIVE: local,lab
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      RABBITMQ_HOST: rabbitmq
+      RIOT_MOCK_BASE_URL: http://riot-mock:8099
+      # 앱은 TimeZoneConfig 로 KST 를 고정한다. 그 전에 찍히는 기동 로그도 같은 시각으로 보이게 한다
+      TZ: Asia/Seoul
+      # Docker Desktop VM 메모리(약 8GB)를 다른 컨테이너와 나눠 쓴다. 호스트 실행 때 힙 최대 사용량은 약 1.7GB 였다
+      JAVA_OPTS: ${LAB_APP_JAVA_OPTS:--Xmx3g}
+    ports:
+      - "127.0.0.1:8111:8111"
+      - "127.0.0.1:8112:8112"
+
   riot-mock:
     build:
       context: ../tools/riot-mock
@@ -28,9 +54,7 @@ services:
     volumes:
       - ./lab/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "127.0.0.1:9090:9090"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "127.0.0.1:${LAB_PROMETHEUS_PORT:-9090}:9090"
 
   grafana:
     image: grafana/grafana:13.2.5
@@ -45,7 +69,7 @@ services:
       - ./lab/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./lab/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${LAB_GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
 
@@ -61,5 +85,3 @@ services:
       K6_PROMETHEUS_RW_PUSH_INTERVAL: 1s
     volumes:
       - ./lab/k6:/scripts
-    extra_hosts:
-      - "host.docker.internal:host-gateway"

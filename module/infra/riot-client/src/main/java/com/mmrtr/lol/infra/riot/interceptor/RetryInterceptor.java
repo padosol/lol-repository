@@ -1,6 +1,7 @@
 package com.mmrtr.lol.infra.riot.interceptor;
 
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
+import com.mmrtr.lol.infra.riot.ratelimit.RiotRequestAttributes;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
@@ -76,6 +77,7 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
     public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution)
             throws IOException {
         String host = request.getURI().getHost();
+        boolean retryOn429 = !Boolean.FALSE.equals(request.getAttributes().get(RiotRequestAttributes.RETRY_ON_429));
 
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
@@ -86,7 +88,7 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
 
                 if (HttpStatus.TOO_MANY_REQUESTS.equals(status)) {
                     Duration retryAfter = parseRetryAfter(response.getHeaders().getFirst("Retry-After"));
-                    if (attempt == MAX_ATTEMPTS) {
+                    if (!retryOn429 || attempt == MAX_ATTEMPTS) {
                         closeQuietly(response);
                         recordExhausted();
                         throw new RiotRateLimitException(retryAfter, status, "Riot rate limit exhausted", LogLevel.WARN);
@@ -117,7 +119,7 @@ public class RetryInterceptor implements ClientHttpRequestInterceptor {
                 }
                 return response;
             } catch (RiotRateLimitException e) {
-                if (attempt == MAX_ATTEMPTS) {
+                if (!retryOn429 || attempt == MAX_ATTEMPTS) {
                     recordExhausted();
                     throw e;
                 }

@@ -134,6 +134,30 @@ export default function () {
     report(result === 'failed', `앱 갱신 결과 ${result}/${reason}`, count(Number(r.value[1])));
   }
 
+  // 갱신 단계 큐와 완료 지표 — 모두 WARN/INFO 다
+  const total = scalarOrNull(delta('lol_renewal_completed_total')) || 0;
+  const deadline = scalarOrNull(delta('lol_renewal_completed_total{result="failed",reason="deadline"}')) || 0;
+  const deadlineRatio = total > 0 ? deadline / total : 0;
+  report(deadline > 0, '갱신 기한 초과 비율 (failed/deadline ÷ 끝남)',
+    `${(deadlineRatio * 100).toFixed(2)}% (${count(deadline)}/${count(total)})`);
+
+  const durP95 = scalarOrNull(
+    `histogram_quantile(0.95, sum by (le) (increase(lol_renewal_duration_seconds_bucket{result="success"}[${R}])))`);
+  if (durP95 !== null && !Number.isNaN(durP95)) {
+    report(false, '앱 갱신 소요 p95 (success)', `${durP95.toFixed(2)}s`);
+  } else {
+    const durSum = scalarOrNull(delta('lol_renewal_duration_seconds_sum{result="success"}')) || 0;
+    const durCount = scalarOrNull(delta('lol_renewal_duration_seconds_count{result="success"}')) || 0;
+    report(false, '앱 갱신 소요 평균 (success, 히스토그램 없음)',
+      durCount > 0 ? `${(durSum / durCount).toFixed(2)}s (${count(durCount)}건)` : '없음');
+  }
+
+  const userRetry = scalarOrNull(delta('lol_match_process_total{rank="user_retry"}')) || 0;
+  report(false, '매치 처리 user_retry', count(userRetry));
+
+  const late = scalarOrNull(delta('lol_renewal_late_completed_total')) || 0;
+  report(false, '기한 뒤 늦게 끝난 갱신', count(late));
+
   const outcomes = query(k6Last('k6_lab_renewal_outcome_total', ' by (outcome)'));
   if (outcomes.length === 0) {
     report(true, 'k6 갱신 결과', '없음');

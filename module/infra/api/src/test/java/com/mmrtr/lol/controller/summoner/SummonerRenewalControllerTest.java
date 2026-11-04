@@ -44,7 +44,7 @@ class SummonerRenewalControllerTest extends RestDocsSupport {
     @Test
     void requestRenewal_accepted_returns202() throws Exception {
         // given
-        given(summonerRenewalUseCase.requestRenewal(PUUID)).willReturn(new SummonerRenewalReadModel(PUUID, "SUCCESS"));
+        given(summonerRenewalUseCase.requestRenewal(PUUID)).willReturn(new SummonerRenewalReadModel(PUUID, "SUCCESS", null));
 
         // when & then
         mockMvc.perform(post("/api/v1/summoners/{puuid}/renewal", PUUID))
@@ -62,7 +62,7 @@ class SummonerRenewalControllerTest extends RestDocsSupport {
     @Test
     void requestRenewal_rejected_returns200() throws Exception {
         // given
-        given(summonerRenewalUseCase.requestRenewal(PUUID)).willReturn(new SummonerRenewalReadModel(PUUID, "FAILED"));
+        given(summonerRenewalUseCase.requestRenewal(PUUID)).willReturn(new SummonerRenewalReadModel(PUUID, "FAILED", null));
 
         // when & then
         mockMvc.perform(post("/api/v1/summoners/{puuid}/renewal", PUUID))
@@ -74,7 +74,7 @@ class SummonerRenewalControllerTest extends RestDocsSupport {
     @Test
     void getRenewalStatus_completed_returnsSuccess() throws Exception {
         // given
-        given(summonerRenewalUseCase.getRenewalStatus(PUUID)).willReturn(new SummonerRenewalReadModel(PUUID, "SUCCESS"));
+        given(summonerRenewalUseCase.getRenewalStatus(PUUID)).willReturn(new SummonerRenewalReadModel(PUUID, "SUCCESS", null));
 
         // when & then
         mockMvc.perform(get("/api/v1/summoners/{puuid}/renewal", PUUID))
@@ -91,7 +91,7 @@ class SummonerRenewalControllerTest extends RestDocsSupport {
     @Test
     void getRenewalStatus_inProgress_returnsProgress() throws Exception {
         // given
-        given(summonerRenewalUseCase.getRenewalStatus(PUUID)).willReturn(new SummonerRenewalReadModel(PUUID, "PROGRESS"));
+        given(summonerRenewalUseCase.getRenewalStatus(PUUID)).willReturn(new SummonerRenewalReadModel(PUUID, "PROGRESS", null));
 
         // when & then
         mockMvc.perform(get("/api/v1/summoners/{puuid}/renewal", PUUID))
@@ -105,11 +105,32 @@ class SummonerRenewalControllerTest extends RestDocsSupport {
                         responseFields(renewalFields("갱신 유저 PUUID", "갱신 상태"))));
     }
 
+    @DisplayName("GET /api/v1/summoners/{puuid}/renewal — 기한 초과·실패(FAILED)면 화면 문구를 함께 준다")
+    @Test
+    void getRenewalStatus_failed_returnsFailedWithMessage() throws Exception {
+        // given
+        given(summonerRenewalUseCase.getRenewalStatus(PUUID)).willReturn(SummonerRenewalReadModel.retryLater(PUUID));
+
+        // when & then
+        mockMvc.perform(get("/api/v1/summoners/{puuid}/renewal", PUUID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("FAILED"))
+                .andExpect(jsonPath("$.data.message").value("잠시 후 다시 시도해 주세요"))
+                .andDo(document("summoner-renewal-status-failed",
+                        preprocessRequest(prettyPrint()),
+                        preprocessResponse(prettyPrint()),
+                        pathParameters(
+                                parameterWithName("puuid").description("소환사 고유 PUUID")),
+                        responseFields(renewalFields("갱신 유저 PUUID", "갱신 상태"))));
+    }
+
     private List<FieldDescriptor> renewalFields(String puuidDescription, String statusDescription) {
         return List.of(
                 fieldWithPath("result").type(JsonFieldType.STRING).description("API 성공 여부"),
                 fieldWithPath("data.puuid").type(JsonFieldType.STRING).description(puuidDescription),
                 fieldWithPath("data.status").type(JsonFieldType.STRING).description(statusDescription),
+                fieldWithPath("data.message").type(JsonFieldType.VARIES).optional()
+                        .description("FAILED 일 때 화면 문구 (그 밖에는 null)"),
                 fieldWithPath("errorMessage").type(JsonFieldType.NULL).description("에러 정보 (정상 응답 시 null)"));
     }
 }

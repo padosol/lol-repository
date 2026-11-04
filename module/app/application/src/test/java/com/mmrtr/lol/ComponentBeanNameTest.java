@@ -32,7 +32,7 @@ class ComponentBeanNameTest {
             classesByBeanName.computeIfAbsent(beanName, name -> new ArrayList<>()).add(definition.getBeanClassName());
         }
 
-        assertThat(classesByBeanName).containsKey("summonerRenewalService");
+        assertThat(classesByBeanName).containsKey("renewalCompletionJudge");
         assertThat(classesByBeanName.entrySet())
                 .filteredOn(entry -> entry.getValue().size() > 1)
                 .as("같은 빈 이름을 쓰는 컴포넌트")

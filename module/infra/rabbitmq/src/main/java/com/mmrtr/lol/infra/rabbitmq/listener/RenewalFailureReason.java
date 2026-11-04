@@ -18,20 +18,20 @@ import java.util.concurrent.TimeoutException;
  * 갱신 실패 예외를 {@code lol.renewal.completed} 의 reason 태그 값으로 바꾼다.
  * 태그 카디널리티를 막으려고 값은 고정된 집합만 돌려준다.
  */
-final class RenewalFailureReason {
+public final class RenewalFailureReason {
 
-    static final String BUDGET_EXCEEDED = "budget_exceeded";
-    static final String RIOT_404 = "riot_404";
-    static final String RIOT_429 = "riot_429";
-    static final String RIOT_4XX = "riot_4xx";
-    static final String RIOT_5XX = "riot_5xx";
-    static final String TIMEOUT = "timeout";
-    static final String OTHER = "other";
+    public static final String BUDGET_EXCEEDED = "budget_exceeded";
+    public static final String RIOT_404 = "riot_404";
+    public static final String RIOT_429 = "riot_429";
+    public static final String RIOT_4XX = "riot_4xx";
+    public static final String RIOT_5XX = "riot_5xx";
+    public static final String TIMEOUT = "timeout";
+    public static final String OTHER = "other";
 
     private RenewalFailureReason() {
     }
 
-    static String of(Throwable throwable) {
+    public static String of(Throwable throwable) {
         Throwable t = unwrap(throwable);
         // 하위 클래스를 먼저 본다
         if (t instanceof RiotBudgetExceededException) {

@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.rabbitmq.adapter;
 import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPort;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
+import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -18,24 +19,28 @@ public class SummonerCollectionPublishAdapter implements SummonerCollectionPubli
     private final RabbitTemplate rabbitTemplate;
 
     @Override
-    public void publishForRenewal(List<String> puuids, String platformName) {
-        publish(puuids, platformName, false);
+    public void publishForRenewal(String puuid, String platformName, String renewalId) {
+        send(new SummonerMessage(platformName, puuid, 0L, renewalId, 0));
+        log.debug("[MQ 발행] 사용자 갱신 발행 완료, platform={}, renewalId={}", platformName, renewalId);
     }
 
     @Override
     public void publishForCollection(List<String> puuids, String platformName) {
-        publish(puuids, platformName, true);
-    }
-
-    private void publish(List<String> puuids, String platformName, boolean background) {
         for (String puuid : puuids) {
-            SummonerMessage message = new SummonerMessage(platformName, puuid, 0L, background);
             rabbitTemplate.convertAndSend(
-                    RabbitMqBinding.SUMMONER.getExchange(),
-                    RabbitMqBinding.SUMMONER.getRoutingKey(),
-                    message
+                    RabbitMqBinding.RENEWAL_MATCH_FIND.getExchange(),
+                    RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey(),
+                    new SummonerRenewalMessage(puuid, platformName, 0L, 0)
             );
         }
-        log.debug("[MQ 발행] {}명 발행 완료, platform={}, background={}", puuids.size(), platformName, background);
+        log.debug("[MQ 발행] {}명 매치 수집 발행 완료, platform={}", puuids.size(), platformName);
+    }
+
+    private void send(SummonerMessage message) {
+        rabbitTemplate.convertAndSend(
+                RabbitMqBinding.SUMMONER.getExchange(),
+                RabbitMqBinding.SUMMONER.getRoutingKey(),
+                message
+        );
     }
 }

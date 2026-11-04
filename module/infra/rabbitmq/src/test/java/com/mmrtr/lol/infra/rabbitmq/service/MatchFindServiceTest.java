@@ -17,7 +17,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MatchFindServiceTest {
@@ -40,5 +42,20 @@ class MatchFindServiceTest {
         service.process(new SummonerRenewalMessage("puuid", "KR", 1L));
 
         assertThat(seen).hasSize(2).allMatch(p -> p == RiotCallPriority.BACKGROUND);
+    }
+
+    @Test
+    @DisplayName("startOffset 이 0 이면 0 부터 수집한다")
+    void process_startOffsetZero_collectsFromZero() {
+        // given
+        MatchIdCollector collector = mock(MatchIdCollector.class);
+        when(collector.collectAll(anyString(), anyString(), anyLong(), anyInt(), any())).thenReturn(List.of());
+        MatchFindService service = new MatchFindService(collector, mock(MatchIdPublisher.class), Runnable::run);
+
+        // when
+        service.process(new SummonerRenewalMessage("puuid", "KR", 0L, 0));
+
+        // then
+        verify(collector).collectAll(eq("puuid"), eq("KR"), anyLong(), eq(0), any());
     }
 }

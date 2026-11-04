@@ -4,10 +4,10 @@ import exec from 'k6/execution';
 import { sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 
-// 앱 주소는 lab.sh 가 자기 APP_URL 을 컨테이너에서 닿는 주소로 바꿔 넘긴다. 기본값을 두지 않아 둘이 어긋나지 않는다.
+// 앱 주소는 lab.sh 가 K6_APP_URL(compose 네트워크 안의 주소)로 넘긴다. 기본값을 두지 않아 둘이 어긋나지 않는다.
 export const APP = __ENV.APP_URL;
 if (!APP) {
-  throw new Error('APP_URL 이 없습니다. bash docker/lab/lab.sh 로 돌리세요 (직접 돌리면 -e APP_URL=http://host.docker.internal:8111)');
+  throw new Error('APP_URL 이 없습니다. bash docker/lab/lab.sh 로 돌리세요 (직접 돌리면 -e APP_URL=http://app:8111)');
 }
 export const MOCK = 'http://riot-mock:8099';
 export const PROM = 'http://prometheus:9090';
