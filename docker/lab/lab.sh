@@ -6,10 +6,15 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 MOCK_URL="${MOCK_URL:-http://localhost:8099}"
-# 호스트에서 본 앱 주소. k6 컨테이너에는 k6_app_url 이 바꾼 주소로 넘긴다 (Prometheus 수집 대상은 prometheus.yml 의 8111 고정).
+# 호스트에서 본 앱 주소(앱 확인·health). 앱은 compose 서비스 app(컨테이너 lol-lab-app)이다.
 APP_URL="${APP_URL:-http://localhost:8111}"
+# k6 컨테이너에서 본 앱 주소 (같은 compose 네트워크). Prometheus 수집 대상은 prometheus.yml 의 app:8111 고정이다.
+K6_APP_URL="${K6_APP_URL:-http://app:8111}"
 PROM_URL="${PROM_URL:-http://localhost:${LAB_PROMETHEUS_PORT:-9090}}"
+# 앱(app)을 뺀 인프라·관측 서비스. 앱은 lol_lab·vhost lab 을 만든 뒤 start_app 이 따로 띄운다.
 LAB_SERVICES=(postgres rabbitmq redis prometheus grafana riot-mock redis-exporter)
+APP_JAR_DIR=module/app/application/build/libs
+APP_START_TIMEOUT_SECONDS=180
 DRAIN_TIMEOUT_SECONDS=1800
 # 갱신 처리를 기다리고 적체를 판정할 vhost lab 큐. 갱신 단계 큐(계정·리그·매치)와 추가 매치 검색 큐를 이름으로 고른다.
 # consumer 수로 고르면 리스너가 죽었을 때 적체가 숨는다. verify.js 도 이 값을 받는다.
@@ -61,26 +66,84 @@ ensure_vhost() {
   compose exec -T rabbitmq rabbitmqctl set_permissions -p lab guest ".*" ".*" ".*" >/dev/null
 }
 
+# 앱 이미지는 build/libs 의 jar 하나를 복사한다. 버전이 바뀌어 jar 가 여럿 남으면 어느 것을 쓸지 몰라 멈춘다.
+require_single_app_jar() {
+  local jars
+  jars=("${APP_JAR_DIR}"/*.jar)
+  if [ ! -e "${jars[0]}" ]; then
+    echo "${APP_JAR_DIR} 에 앱 jar 가 없습니다. 먼저 bash docker/lab/lab.sh up 이나 app 을 하세요" >&2
+    exit 1
+  fi
+  if [ "${#jars[@]}" -ne 1 ]; then
+    echo "${APP_JAR_DIR} 에 jar 가 ${#jars[@]}개 있습니다. ./gradlew :module:app:application:clean 뒤 다시 하세요" >&2
+    exit 1
+  fi
+}
+
+# 앱 컨테이너가 떠 있는지 (멈췄으면 health 를 더 기다리지 않는다).
+app_running() {
+  [ -n "$(compose ps -q --status running app 2>/dev/null)" ]
+}
+
+# 앱 /actuator/health 가 UP 이 될 때까지 기다린다. 인자: 최대 초. 컨테이너가 멈추면 마지막 로그를 보이고 바로 실패한다.
+wait_app_healthy() {
+  local timeout="$1" i
+  for i in $(seq 1 "$timeout"); do
+    if curl -s "${APP_URL}/actuator/health" | grep -q '"status":"UP"'; then
+      return 0
+    fi
+    if ! app_running; then
+      echo "앱 컨테이너가 떠 있지 않습니다. 마지막 로그:" >&2
+      compose logs --no-log-prefix --tail 40 app >&2 || true
+      return 1
+    fi
+    sleep 1
+  done
+  echo "앱 health 가 ${timeout}초 안에 UP 이 되지 않았습니다: $(curl -s "${APP_URL}/actuator/health")" >&2
+  return 1
+}
+
+# 앱 컨테이너를 새로 만든다 (jar 가 바뀌었으면 이미지도 다시 만든다). 기동 때 Flyway 가 테이블을, RabbitAdmin 이 큐를 만든다.
+# --no-deps: 인프라 컨테이너는 건드리지 않는다. --force-recreate: 같은 이미지여도 다시 띄운다 (reset 뒤).
+start_app() {
+  local started
+  require_single_app_jar
+  started=$(date +%s)
+  compose up -d --no-deps --build --force-recreate app
+  wait_app_healthy "$APP_START_TIMEOUT_SECONDS"
+  require_lab_app
+  echo "앱 기동 $(( $(date +%s) - started ))초 (${APP_URL}, 로그: bash docker/lab/lab.sh logs)"
+}
+
 cmd_up() {
-  ./gradlew :tools:riot-mock:bootJar
+  ./gradlew :tools:riot-mock:bootJar :module:app:application:bootJar
   compose up -d --build "${LAB_SERVICES[@]}"
   wait_infra
   ensure_lab_db
   ensure_vhost
   compose exec -T rabbitmq rabbitmq-plugins enable rabbitmq_prometheus >/dev/null
+  start_app
   cmd_urls
 }
 
-# 볼륨과 컨테이너를 지우는 `compose down` 은 쓰지 않는다. 멈추기만 한다.
+# 볼륨과 컨테이너를 지우는 `compose down` 은 쓰지 않는다. 멈추기만 한다. 앱을 먼저 멈춘다.
 cmd_down() {
+  compose stop app
   compose stop "${LAB_SERVICES[@]}"
 }
 
+# 코드를 바꾼 뒤 앱만 다시 빌드해 띄운다.
 cmd_app() {
-  exec ./gradlew :module:app:application:bootRun -Dspring.profiles.active=local,lab
+  ./gradlew :module:app:application:bootJar
+  start_app
+}
+
+cmd_logs() {
+  compose logs -f --tail 200 app
 }
 
 cmd_urls() {
+  echo "앱          ${APP_URL} (내부 포트 8112, 로그: bash docker/lab/lab.sh logs)"
   echo "Grafana     http://localhost:${LAB_GRAFANA_PORT:-3000}"
   echo "Prometheus  ${PROM_URL}"
   echo "RabbitMQ    http://localhost:15672 (guest/guest, vhost lab)"
@@ -89,7 +152,7 @@ cmd_urls() {
 
 require_lab_app() {
   if ! curl -s "${APP_URL}/actuator/info" | grep -q '"lab":true'; then
-    echo "앱이 lab 프로파일로 떠 있지 않습니다 (${APP_URL})"
+    echo "앱이 lab 프로파일로 떠 있지 않습니다 (${APP_URL}). bash docker/lab/lab.sh app 으로 띄우세요"
     exit 1
   fi
 }
@@ -128,15 +191,10 @@ mock_reset() {
   fi
 }
 
-# APP_URL 을 k6 컨테이너에서 닿는 주소로 바꾼다 (localhost·127.0.0.1 → host.docker.internal).
-k6_app_url() {
-  printf '%s' "$APP_URL" | sed -E 's#^(https?://)(localhost|127\.0\.0\.1)([:/]|$)#\1host.docker.internal\3#'
-}
-
 # k6 를 compose 의 k6 컨테이너로 돌린다. 스크립트는 docker/lab/k6 이고 컨테이너의 /scripts 다.
 # 앱 주소와 판정할 큐 이름은 이 스크립트의 값을 넘긴다 (k6 스크립트에 따로 두지 않는다).
 k6_run() {
-  compose --progress quiet run --rm k6 run -e "APP_URL=$(k6_app_url)" -e "LAB_QUEUES=${LAB_QUEUES}" "$@"
+  compose --progress quiet run --rm k6 run -e "APP_URL=${K6_APP_URL}" -e "LAB_QUEUES=${LAB_QUEUES}" "$@"
 }
 
 # 부하 스크립트. 지표를 Prometheus 로 remote write 한다 (주소·전송 주기는 compose 의 K6_PROMETHEUS_RW_*).
@@ -155,7 +213,7 @@ require_scenario() {
 }
 
 # LAB_QUEUES 의 메시지(대기+처리 중) 합과 consumer 합을 "<메시지> <consumer>" 로 찍는다.
-# 큐가 하나라도 없으면(reset 뒤 앱을 다시 띄우지 않았을 때) 0 으로 넘기지 않고 실패한다.
+# 큐가 하나라도 없으면(앱이 떠 있지 않아 큐를 선언하지 못했을 때) 0 으로 넘기지 않고 실패한다.
 # $(...) 안에서 불리므로 set -e 에 기대지 않고 실패를 직접 돌려준다.
 lab_queue_pending() {
   local rows
@@ -166,7 +224,7 @@ lab_queue_pending() {
     END {
       for (q in need) {
         if (!(q in found)) {
-          print "vhost lab 에 큐 " q " 가 없습니다 (reset 뒤 앱을 다시 띄웠는지 보세요)" > "/dev/stderr"
+          print "vhost lab 에 큐 " q " 가 없습니다 (앱이 떠 있는지 보세요: bash docker/lab/lab.sh logs)" > "/dev/stderr"
           exit 1
         }
       }
@@ -230,19 +288,6 @@ restore_lab_db() {
   psql_admin -c "CREATE DATABASE lol_lab TEMPLATE lol_lab_snapshot" >/dev/null
 }
 
-# 스냅숏 복원 뒤 앱 커넥션 풀이 새 lol_lab 에 다시 붙었는지 본다.
-wait_app_healthy() {
-  local i
-  for i in $(seq 1 30); do
-    if curl -s "${APP_URL}/actuator/health" | grep -q '"status":"UP"'; then
-      return 0
-    fi
-    sleep 1
-  done
-  echo "앱 health 가 30초 안에 UP 이 되지 않았습니다: $(curl -s "${APP_URL}/actuator/health")" >&2
-  return 1
-}
-
 restore_seed_limits() {
   if ! mock_put_limits "$SEED_SAVED_LIMITS" >/dev/null; then
     echo "가짜 서버 한도를 되돌리지 못했습니다. seed 전 값: ${SEED_SAVED_LIMITS}" >&2
@@ -254,12 +299,12 @@ restore_seed_limits() {
 require_empty_lab_db() {
   local count
   if [ "$(psql_lab -c "SELECT to_regclass('riot.summoner') IS NOT NULL")" != t ]; then
-    echo "lol_lab 에 riot.summoner 가 없습니다. reset 뒤에는 앱을 다시 띄워야 Flyway 가 테이블을 만듭니다 (bash docker/lab/lab.sh app)" >&2
+    echo "lol_lab 에 riot.summoner 가 없습니다. 테이블은 앱 기동 때 Flyway 가 만듭니다. bash docker/lab/lab.sh app 으로 앱을 다시 띄우세요" >&2
     exit 1
   fi
   count="$(psql_lab -c "SELECT count(*) FROM riot.summoner")"
   if [ "$count" -ne 0 ]; then
-    echo "lol_lab 이 비어 있지 않습니다 (riot.summoner ${count}명). 먼저 bash docker/lab/lab.sh reset 을 하고 앱을 다시 띄우세요" >&2
+    echo "lol_lab 이 비어 있지 않습니다 (riot.summoner ${count}명). 먼저 bash docker/lab/lab.sh reset 을 하세요 (앱도 다시 띄운다)" >&2
     exit 1
   fi
 }
@@ -293,7 +338,7 @@ check_seed_outcome() {
   others="${others%.*}"
   echo "  결과 확인: 소환사 ${summoners}명 (기대 ${SEED_PLAYERS}), 첫 갱신 success ${success}건 (기대 ${SEED_RETURNING_COUNT}), failed·skipped ${others}건 (기대 0)"
   if [ "$summoners" -ne "$SEED_PLAYERS" ] || [ "$success" -ne "$SEED_RETURNING_COUNT" ] || [ "$others" -ne 0 ]; then
-    echo "시작 상태가 완전하지 않아 스냅숏을 뜨지 않습니다. 앱 로그를 보고 reset → 앱 재기동 → seed 를 다시 하세요" >&2
+    echo "시작 상태가 완전하지 않아 스냅숏을 뜨지 않습니다. 앱 로그(bash docker/lab/lab.sh logs)를 보고 reset → seed 를 다시 하세요" >&2
     return 1
   fi
 }
@@ -373,7 +418,8 @@ cmd_run() {
   purge_lab_queues
   restore_lab_db
   compose exec -T redis redis-cli -n 1 FLUSHDB >/dev/null
-  wait_app_healthy
+  # 커넥션 풀이 새 lol_lab 에 다시 붙었는지 본다
+  wait_app_healthy 30
   epoch="$(mock_reset)"
   # reset 전 게이지(지난 실행의 슬라이딩 피크 등) 표본이 창 안에 들지 않도록 새 값이 수집될 때까지 기다린다.
   # 게이지 갱신 1초 + 수집 1초에 여유를 둔다. 기다리지 않으면 START 뒤 2초 동안 지난 피크가 보였다
@@ -398,7 +444,9 @@ cmd_limit() {
   echo
 }
 
+# 앱을 멈추고 실험실 상태를 지운 뒤 앱을 다시 띄운다. 빈 lol_lab 의 테이블은 앱 기동 때 Flyway 가 만든다.
 cmd_reset() {
+  compose stop app
   psql_admin -c "DROP DATABASE IF EXISTS lol_lab WITH (FORCE)" >/dev/null
   psql_admin -c "DROP DATABASE IF EXISTS lol_lab_snapshot WITH (FORCE)" >/dev/null
   psql_admin -c "CREATE DATABASE lol_lab" >/dev/null
@@ -407,6 +455,8 @@ cmd_reset() {
   ensure_vhost
   mock_reset 0
   echo
+  start_app
+  echo "reset 완료. 이어서 bash docker/lab/lab.sh seed"
 }
 
 main() {
@@ -416,6 +466,7 @@ main() {
     up) cmd_up ;;
     down) cmd_down ;;
     app) cmd_app ;;
+    logs) cmd_logs ;;
     urls) cmd_urls ;;
     limit) cmd_limit "$@" ;;
     reset) cmd_reset ;;
@@ -424,7 +475,7 @@ main() {
     run) cmd_run "$@" ;;
     verify) cmd_verify "$@" ;;
     *)
-      echo "사용법: lab.sh {up|down|app|urls|limit <한도>|reset|seed|load <시나리오>|run <시나리오>|verify <시나리오> <START> <END>}"
+      echo "사용법: lab.sh {up|down|app|logs|urls|limit <한도>|reset|seed|load <시나리오>|run <시나리오>|verify <시나리오> <START> <END>}"
       exit 1
       ;;
   esac
