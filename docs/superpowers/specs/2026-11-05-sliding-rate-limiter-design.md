@@ -59,7 +59,13 @@ asia 허가 시각만 본 시뮬레이션 (첫 방문 갱신 1건 = 42회, 네�
 - 한 호출은 그 routing 의 app 규칙 전부와 그 method 의 규칙 전부를 **모두** 통과해야 나간다.
 - method 한도를 아직 배우지 않았으면 method 규칙은 없다 (지금과 같다). app 한도는 배운 값이 없으면 `riot.rate-limit.app-default` 를 쓴다.
 - 규칙의 실제 상한 = `max(1, floor(한도 × safetyRatio))`. safetyRatio 는 지금 값 0.9 그대로다. **[판단]** 응답 Count 안전망(한도의 95% 이상이면 1초 정지)과 겹치지 않으려면 0.9 가 맞다.
-- 창 길이는 헤더의 W초 그대로 센다 (여유 시간을 더하지 않는다). **[판단]** 우리가 허가한 시각과 Riot 도착 시각의 차이는 수십 ms 이고, Riot 호출 앞에 동시 호출 제한도 없다. 그래서 안전율 0.9 의 남는 10% 가 이 흔들림을 흡수한다. 실험실의 sliding peak 판정은 가짜 서버가 받은 시각으로 재므로 이 가정을 직접 확인한다.
+- 창 길이는 헤더의 W초 그대로 센다. 대신 **응답(또는 실패)을 받으면 그 호출의 기록을 그 시각으로 옮긴다** (4.4). **[판단, 계획 때 바꿈]**
+  - 처음 판단은 "허가 시각 그대로, 흔들림은 안전율 10% 가 흡수" 였다. 계획을 쓰다 이것이 틀렸음을 찾았다.
+  - 버스트는 한 순간에 몰린다. 허가 시각으로만 세면, 앞 버스트가 조금 늦게 도착하고 다음 버스트가 빨리 도착할 때 Riot 창 하나에 두 버스트가 통째로 들어간다.
+  - 예: 450건이 0ms 에 허가되고 20~60ms 에 도착한다. 다음 450건은 그 기록이 빠지는 10,000ms 에 허가되고 10,002ms 쯤 도착한다. 그러면 Riot 창 [20, 10,020) 에 최대 900건이 들어간다. 10% 로는 막지 못한다.
+  - 응답 시각은 Riot 도착 시각보다 늘 뒤다. 그래서 기록을 응답 시각으로 옮기면 기록이 빠지는 시각이 "도착 + W" 이후가 되어 겹침이 없다. eventId 가 이 갱신에 쓰인다.
+  - 대가로, 지속 처리량은 창이 응답 지연(약 0.1~0.3초)만큼 길어진 것과 같아 약 2% 준다.
+  - 실험실의 sliding peak 판정은 가짜 서버가 받은 시각으로 재므로 이것을 직접 확인한다.
 
 ### 4.2 허가
 
@@ -102,6 +108,7 @@ asia 허가 시각만 본 시뮬레이션 (첫 방문 갱신 1건 = 42회, 네�
   - 지금 소비자들이 기대는 동작이 이것이다. `MatchFindListener` 는 예외가 기다린 뒤에 오므로 재전달이 곧바로 돌지 않는다고 보고 다시 던진다. `MatchDataProcessor` 는 바로 requeue 한다.
   - 대기가 상한보다 길 때(긴 `Retry-After`, 아래 4.3 의 10분 창 회복) 바로 던지면 재전달·DB 확인·Lua 호출이 쉬지 않고 돈다. 상한까지 자면 스레드 하나당 30초에 한 번으로 줄어든다.
 - 예외를 받은 쪽의 처리는 바뀌지 않는다. 갱신 단계는 나중에 다시 시도하고, 추가 매치 찾기는 재전달받고, 백필은 requeue 한다.
+- 허가받아 보낸 요청은 응답을 받거나 예외(IO·타임아웃)로 끝나면 `complete(eventId, …)` 로 그 기록을 지금 시각으로 옮긴다 (4.1). 응답 코드(429·5xx 포함)와 관계없다. Riot 이 받았을 수 있는 호출은 모두 센다. `complete` 가 실패해도(Redis 오류) 응답 처리는 그대로 하고 로그만 남긴다. **[판단, 계획 때 바꿈]**
 - 대기가 끝나 보낼 때 `riot.ratelimit.wait{routing,priority}` 타이머에 총 대기 시간을, 포기할 때 `riot.ratelimit.rejected{routing,priority}` 를 지금처럼 남긴다.
 
 ### 4.5 정지 (그대로)
@@ -124,6 +131,8 @@ asia 허가 시각만 본 시뮬레이션 (첫 방문 갱신 1건 = 42회, 네�
 ```java
 /** 0 = 지금 보내도 된다(기록함). 0 보다 크면 그만큼 기다린 뒤 다시 물어야 한다(기록 안 함). */
 long acquire(String eventId, String routing, String method, RiotCallPriority priority);
+/** 허가된 호출의 기록을 지금 시각(응답·실패 시각)으로 옮긴다. 기록이 없으면 아무것도 하지 않는다. */
+void complete(String eventId, String routing, String method, RiotCallPriority priority);
 void learnLimits(String routing, String method, String appLimitHeader, String methodLimitHeader); // 그대로
 void pause(String routing, String methodOrNull, Duration duration);                                // 그대로
 ```
@@ -147,6 +156,8 @@ void pause(String routing, String methodOrNull, Duration duration);             
 `riot-acquire.lua` 를 새로 쓴다. 사용자 예시를 바탕으로 정지 확인, 우선순위 상한, 인덱스 계산, 유저 활동 표시를 더한다. 인자 배치는 빌더가 정하되 다음을 넘긴다.
 - **KEYS:** 정지 키 2개(app, method), 유저 활동 키, 규칙 ZSET 들. BACKGROUND 면 백필 전용 규칙 ZSET 을 규칙 목록에 더한다 (낮춘 비율을 적용하지 않도록 구분해 넘긴다).
 - **ARGV:** eventId, now(테스트용, 비면 Redis `TIME`), 우선순위, 이 우선순위의 낮춘 비율, 유저 활동 만료 ms, 규칙마다 (상한, 창 ms).
+
+`riot-complete.lua` 를 새로 둔다. 규칙 ZSET 마다 그 eventId 가 있으면 score 를 지금 시각으로 바꾸고 만료를 창 길이로 늘린다. 없으면 아무것도 하지 않는다 (`ZADD GT` 는 Redis 6.2 이상이라 쓰지 않고 `ZSCORE` 로 확인한다).
 
 `TIME` 뒤에 쓰기를 하므로 `redis.replicate_commands()` 를 지금처럼 둔다. 스크립트 로딩(`LuaScript`, NOSCRIPT 재시도)은 그대로 쓴다.
 
@@ -183,12 +194,14 @@ void pause(String routing, String methodOrNull, Duration duration);             
 - BACKGROUND 는 한가할 때도 아무 1초 구간에 40회를 넘지 않는다. USER·DEFERRED 는 이 규칙에 기록되지 않고 막히지도 않는다.
 - 정지 중이면 모든 우선순위가 남은 정지 시간을 받는다. method 정지는 다른 method 를 막지 않는다.
 - 다른 인스턴스(새 limiter 객체)가 배운 한도를 갱신 주기 뒤에 읽는다. 새 인스턴스는 ZSET 을 지우지 않는다.
+- `complete` 는 그 eventId 의 기록을 지금 시각으로 옮긴다. 그래서 그 뒤 자리가 나는 시각이 응답 지연만큼 늦어진다. 없는 eventId 는 아무것도 바꾸지 않는다.
 - 지금 있는 학습·NOSCRIPT·Redis `TIME` 테스트는 유지한다.
 
 인터셉터:
 - 0 이면 바로 보내고, 양수면 자고 다시 묻는다. 같은 요청 동안 eventId 가 같다.
 - USER 는 누적 대기가 상한을 넘을 것 같으면 자지 않고 예외를 던진다.
 - DEFERRED·BACKGROUND 는 남은 상한만큼만 자고, 상한을 다 쓴 뒤 예외를 던진다.
+- 응답을 받거나 예외로 끝나면 같은 eventId 로 `complete` 를 부른다. `complete` 가 실패해도 응답은 돌려준다.
 - 429·Count 정지·헤더 학습 테스트는 유지한다.
 
 인수 테스트(`RiotRateLimitAcceptanceTest`)는 "아무 구간에도 상한을 넘지 않는다" 를 슬라이딩 기준(아무 W초 구간)으로 바꿔 확인한다.
@@ -208,7 +221,8 @@ void pause(String routing, String methodOrNull, Duration duration);             
 - **유저끼리 순서 없음.** 기다리던 USER 들이 같은 시각에 깨어 다시 묻는다. 먼저 기다린 요청이 먼저 나간다는 보장은 없다. 갱신마다 5초 기한이 있어 문제 삼지 않는다.
 - **배포 중 섞임.** 옛 인스턴스(1초 칸 키)와 새 인스턴스(ZSET)가 함께 돌면 서로의 사용량을 모른다. 그 짧은 동안 합계가 한도를 넘을 수 있다. 운영 배포 때 옛 파드가 남는 시간을 짧게 하고, Count 안전망·429 정지가 받친다.
 - **메모리.** 운영 키 10분 창(30000:600)이면 routing 마다 ZSET 항목이 최대 약 2만 7천 개(약 수 MB)다.
-- **허가와 도착의 차이.** 4.1 의 가정(흔들림 수십 ms)이 틀리면 Riot 쪽 창에 상한보다 조금 더 들어갈 수 있다. 안전율 10% 가 받치고, 실험실 sliding peak 판정과 운영 Count 안전망이 드러낸다.
+- **허가와 도착의 차이.** 기록을 응답 시각으로 옮기므로(4.1) 끝난 호출은 Riot 도착보다 늦게 센다. 아직 응답을 기다리는 호출만 허가 시각으로 남는데, 읽기 타임아웃(5초)이 창(10초)보다 짧아 창 안에 들어 있다. `complete` 가 Redis 오류로 실패한 호출은 허가 시각으로 남아 조금 일찍 빠질 수 있다. 안전율 10% 와 Count 안전망이 받친다.
+- **새로 배운 창은 빈 채로 시작한다.** 기동 직후 기본값(`500:10`)만 알다가 첫 응답에서 `30000:600` 을 배우면, 10분 창 ZSET 은 그 뒤 호출만 센다. 기동 직후 몇 분 동안은 Riot 이 센 것보다 적게 볼 수 있다. Count 안전망이 받친다.
 
 ## 8. 빌더에게 맡기는 것
 
