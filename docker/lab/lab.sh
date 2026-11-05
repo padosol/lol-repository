@@ -202,7 +202,7 @@ k6_run() {
 k6_load() {
   local script="$1"
   shift
-  k6_run -o experimental-prometheus-rw -e "RATE=${RATE:-}" -e "DURATION=${DURATION:-}" "$@" "/scripts/${script}.js"
+  k6_run -o experimental-prometheus-rw -e "RATE=${RATE:-}" -e "DURATION=${DURATION:-}" -e "BURST_SIZE=${BURST_SIZE:-}" -e "BURST_INTERVAL=${BURST_INTERVAL:-}" -e "BURST_ROUNDS=${BURST_ROUNDS:-}" "$@" "/scripts/${script}.js"
 }
 
 require_scenario() {

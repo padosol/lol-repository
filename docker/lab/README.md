@@ -47,7 +47,9 @@ lab.sh 의 조작 API 호출이 실패하면 curl 오류나 가짜 서버의 응
 | `PROM_URL` | `http://localhost:9090` | seed 의 결과 확인 질의 |
 | `LAB_QUEUES` | `mmrtr.summoner mmrtr.renewal.account mmrtr.renewal.league mmrtr.renewal.match renewal.match.find.queue` | 갱신 처리를 기다리고 판정할 vhost `lab` 큐 이름(공백 구분). 아래 "큐 고르기" |
 
-시나리오는 `docker/lab/k6/<시나리오>.js` 다. 1단계에는 `steady` 하나다. `RATE`·`DURATION` 을 셸에서 주면 k6 로 넘긴다 (예: `RATE=10 DURATION=1m bash docker/lab/lab.sh run steady`).
+시나리오는 `docker/lab/k6/<시나리오>.js` 다. `steady`(일정한 부하)와 `burst`(주기적으로 몰려오는 부하)가 있다. `RATE`·`DURATION` 을 셸에서 주면 k6 로 넘긴다 (예: `RATE=10 DURATION=1m bash docker/lab/lab.sh run steady`).
+
+`burst` 는 `BURST_INTERVAL`(초, 기본 30)마다 `BURST_SIZE`(기본 6)건의 첫 방문 갱신을 같은 시각에 보내고 `BURST_ROUNDS`(기본 10)번 반복한다 (예: `BURST_SIZE=6 BURST_INTERVAL=30 bash docker/lab/lab.sh run burst`). 평균 수요(기본 초당 0.2건)가 처리 한계보다 낮아야 평균이 아니라 몰림 자체의 효과만 보인다.
 
 ## seed — 시작 상태 만들기
 
