@@ -18,10 +18,14 @@ import org.springframework.http.client.ClientHttpResponse;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.function.LongSupplier;
 
 /**
  * 보내기 전 {@link RiotRateLimiter} 로 허가를 받고, 응답 헤더로 한도를 배우며 429 시 버킷을 정지한다.
+ *
+ * <p>요청마다 eventId 를 하나 만들어 허가를 기다리는 동안 같은 값으로 묻는다. 보낸 요청이 응답을 받거나 예외로 끝나면
+ * 그 기록을 응답 시각으로 옮긴다({@link RiotRateLimiter#complete}).
  */
 @Slf4j
 public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
@@ -63,39 +67,47 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
         String method = request.getAttributes().get(RiotRequestAttributes.METHOD) instanceof String m
                 ? m : UNKNOWN;
 
-        awaitPermit(routing, method, priority);
+        String eventId = UUID.randomUUID().toString();
+        awaitPermit(eventId, routing, method, priority);
 
-        ClientHttpResponse response = execution.execute(request, body);
+        ClientHttpResponse response;
+        try {
+            response = execution.execute(request, body);
+        } finally {
+            // 응답 코드·예외와 관계없이 Riot 이 받았을 수 있는 호출은 응답 시각으로 센다. 실패해도 응답 처리는 그대로 한다.
+            safely("complete", routing, method, () -> limiter.complete(eventId, routing, method, priority));
+        }
         afterResponse(routing, method, response);
         return response;
     }
 
-    private void awaitPermit(String routing, String method, RiotCallPriority priority) throws IOException {
+    /**
+     * 허가받을 때까지 limiter 가 돌려준 ms 만큼 자고 같은 eventId 로 다시 묻는다. 누적 대기 + 이번 대기가 우선순위별
+     * 상한을 넘으면 자지 않고 포기한다.
+     */
+    private void awaitPermit(String eventId, String routing, String method, RiotCallPriority priority)
+            throws IOException {
         long start = clock.getAsLong();
         long maxWaitMs = maxWaitMs(priority);
         while (true) {
-            long result = limiter.acquire(routing, method, priority);
-            if (result == RiotRateLimiter.NO_CAPACITY) {
-                throw rejected(routing, priority);
-            }
-            if (result >= 0L) {
-                sleep(result);
+            long wait = limiter.acquire(eventId, routing, method, priority);
+            if (wait <= 0L) {
                 meterRegistry.timer("riot.ratelimit.wait", "routing", routing, "priority", priority.name())
                         .record(Duration.ofMillis(Math.max(0L, clock.getAsLong() - start)));
                 return;
             }
-            // YIELD: 양보 후 재시도. 누적 대기가 상한을 넘으면 포기한다.
-            if (clock.getAsLong() - start >= maxWaitMs) {
+            if (clock.getAsLong() - start + wait > maxWaitMs) {
                 throw rejected(routing, priority);
             }
-            sleep(props.getYieldBackoff().toMillis());
+            sleep(wait);
         }
     }
 
     private long maxWaitMs(RiotCallPriority priority) {
         return switch (priority) {
+            case USER -> props.getUserMaxWait().toMillis();
             case DEFERRED -> props.getDeferredMaxWait().toMillis();
-            case USER, BACKGROUND -> props.getBackgroundMaxWait().toMillis();
+            case BACKGROUND -> props.getBackgroundMaxWait().toMillis();
         };
     }
 

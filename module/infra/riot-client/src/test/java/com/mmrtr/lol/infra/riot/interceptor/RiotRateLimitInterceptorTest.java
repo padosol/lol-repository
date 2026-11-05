@@ -1,8 +1,8 @@
 package com.mmrtr.lol.infra.riot.interceptor;
 
+import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRequestAttributes;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.redisson.client.RedisConnectionException;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
@@ -44,7 +45,6 @@ class RiotRateLimitInterceptorTest {
     private FakeLimiter limiter;
     private List<Long> sleeps;
     private AtomicLong now;
-    private long clockStep;
     private SimpleMeterRegistry meterRegistry;
     private RestClient restClient;
 
@@ -54,14 +54,13 @@ class RiotRateLimitInterceptorTest {
         limiter = new FakeLimiter();
         sleeps = new ArrayList<>();
         now = new AtomicLong();
-        clockStep = 0L;
         meterRegistry = new SimpleMeterRegistry();
         build((long ms) -> sleeps.add(ms));
     }
 
     private void build(RiotRateLimitInterceptor.Sleeper sleeper) {
         RiotRateLimitInterceptor interceptor = new RiotRateLimitInterceptor(
-                limiter, new RiotAPIProperties(), meterRegistry, sleeper, () -> now.getAndAdd(clockStep));
+                limiter, new RiotAPIProperties(), meterRegistry, sleeper, now::get);
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build());
         restClient = RestClient.builder()
@@ -81,13 +80,6 @@ class RiotRateLimitInterceptorTest {
                 .retrieve().body(String.class);
     }
 
-    private void callBackground() {
-        restClient.get().uri("/x")
-                .attribute(RiotRequestAttributes.METHOD, METHOD)
-                .attribute(RiotRequestAttributes.PRIORITY, RiotCallPriority.BACKGROUND)
-                .retrieve().body(String.class);
-    }
-
     @Test
     @DisplayName("대기 시간이 주어지면 그만큼 sleep 후 보낸다")
     void grantedWait_sleepsThenSends() {
@@ -101,38 +93,54 @@ class RiotRateLimitInterceptorTest {
     }
 
     @Test
-    @DisplayName("USER 는 NO_CAPACITY 면 보내지 않고 예외")
-    void userNoCapacity_throwsWithoutSending() {
+    @DisplayName("허가(0)면 자지 않고 보내고, 같은 eventId 로 complete 한다")
+    void zeroWait_sendsAndCompletesWithSameEventId() {
         stubOk();
-        limiter.results.add(RiotRateLimiter.NO_CAPACITY);
-
-        assertThatThrownBy(this::call).isInstanceOf(RiotBudgetExceededException.class);
-        wm.verify(0, getRequestedFor(urlEqualTo("/x")));
-    }
-
-    @Test
-    @DisplayName("BACKGROUND 는 YIELD 면 yieldBackoff 만큼 쉬고 재시도")
-    void backgroundYield_retriesUntilGranted() {
-        stubOk();
-        limiter.results.add(RiotRateLimiter.YIELD);
-        limiter.results.add(RiotRateLimiter.YIELD);
         limiter.results.add(0L);
 
-        callBackground();
+        call();
 
-        assertThat(sleeps).containsExactly(200L, 200L);
-        wm.verify(1, getRequestedFor(urlEqualTo("/x")));
+        assertThat(sleeps).isEmpty();
+        assertThat(limiter.acquiredEventIds).hasSize(1);
+        assertThat(limiter.completedEventIds).isEqualTo(limiter.acquiredEventIds);
     }
 
     @Test
-    @DisplayName("BACKGROUND 는 누적 대기가 상한을 넘으면 포기")
-    void backgroundYield_givesUpAfterMaxWait() {
-        stubOk();
-        limiter.alwaysYield = true;
-        clockStep = 10_000L;
+    @DisplayName("보낸 요청이 연결 끊김으로 끝나도 complete 한다")
+    void executeFails_stillCompletes() {
+        wm.stubFor(get(urlEqualTo("/x")).willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+        limiter.results.add(0L);
 
-        assertThatThrownBy(this::callBackground).isInstanceOf(RiotBudgetExceededException.class);
-        wm.verify(0, getRequestedFor(urlEqualTo("/x")));
+        assertThatThrownBy(this::call)
+                .isInstanceOf(ResourceAccessException.class)
+                .hasCauseInstanceOf(IOException.class);
+
+        assertThat(limiter.completedEventIds).hasSize(1).isEqualTo(limiter.acquiredEventIds);
+    }
+
+    @Test
+    @DisplayName("complete 가 실패해도 응답은 반환한다")
+    void completeFails_responseStillReturned() {
+        stubOk();
+        limiter.completeFailure = new RuntimeException("redis");
+
+        assertThat(call()).isEqualTo("ok");
+        assertThat(limiter.completedEventIds).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("429 응답도 complete 하고 정지는 그대로 한다")
+    void status429_stillCompletes() {
+        wm.stubFor(get(urlEqualTo("/x")).willReturn(aResponse().withStatus(429)
+                .withHeader("Retry-After", "3")
+                .withHeader("X-Rate-Limit-Type", "application")));
+        limiter.results.add(0L);
+
+        assertThatThrownBy(this::call)
+                .isInstanceOf(org.springframework.web.client.HttpClientErrorException.TooManyRequests.class);
+
+        assertThat(limiter.completedEventIds).hasSize(1).isEqualTo(limiter.acquiredEventIds);
+        assertThat(limiter.pauses).containsExactly("localhost|null|PT3S");
     }
 
     @Test
@@ -282,22 +290,35 @@ class RiotRateLimitInterceptorTest {
         final Deque<Long> results = new ArrayDeque<>();
         final List<String> learned = new ArrayList<>();
         final List<String> pauses = new ArrayList<>();
+        final List<String> acquiredEventIds = new ArrayList<>();
+        final List<String> completedEventIds = new ArrayList<>();
         final java.util.concurrent.atomic.AtomicInteger acquireCount =
                 new java.util.concurrent.atomic.AtomicInteger();
-        boolean alwaysYield;
+        /** 0 이 아니면 acquire 가 늘 이 대기를 돌려준다. */
+        long alwaysWait;
         RuntimeException acquireFailure;
         RuntimeException learnFailure;
+        RuntimeException completeFailure;
 
         @Override
-        public long acquire(String routing, String method, RiotCallPriority priority) {
+        public long acquire(String eventId, String routing, String method, RiotCallPriority priority) {
             acquireCount.incrementAndGet();
+            acquiredEventIds.add(eventId);
             if (acquireFailure != null) {
                 throw acquireFailure;
             }
-            if (alwaysYield) {
-                return YIELD;
+            if (alwaysWait != 0L) {
+                return alwaysWait;
             }
             return results.isEmpty() ? 0L : results.poll();
+        }
+
+        @Override
+        public void complete(String eventId, String routing, String method, RiotCallPriority priority) {
+            completedEventIds.add(eventId);
+            if (completeFailure != null) {
+                throw completeFailure;
+            }
         }
 
         @Override
@@ -311,16 +332,6 @@ class RiotRateLimitInterceptorTest {
         @Override
         public void pause(String routing, String methodOrNull, Duration duration) {
             pauses.add(routing + "|" + methodOrNull + "|" + duration);
-        }
-
-        @Override
-        public long backlogMillis(String routing) {
-            return 0L;
-        }
-
-        @Override
-        public int userCallsPerSecond(String routing) {
-            return 0;
         }
     }
 }

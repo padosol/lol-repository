@@ -1,123 +1,84 @@
--- Riot 호출 한 건의 한도 확인과 증가를 원자적으로 한다. RedisRiotRateLimiter#acquire 가 부른다.
--- ARGV: routing, method, level, appDefault, safetyRatio, lookaheadSeconds, reserveRatio, nowMillis(빈 문자열이면 Redis TIME)
--- 반환: 기다릴 ms(0 이상), -1 = USER 예약 범위 초과, -2 = 낮은 우선순위 양보
+-- Riot 호출 한 건의 허가를 원자적으로 판단한다. RedisRiotRateLimiter#acquire 가 부른다.
+-- 규칙(버킷 × 창)마다 ZSET 하나다. member = eventId, score = 허가 시각(ms, riot-complete.lua 뒤엔 응답 시각).
+-- 1단계로 모든 규칙을 검사만 하고, 전부 통과했을 때만 2단계로 모든 규칙에 같은 eventId 를 기록한다.
+-- KEYS: [1] app 정지 키, [2] method 정지 키, [3] 유저 활동 키, [4..] 규칙 ZSET
+-- ARGV: [1] eventId, [2] nowMillis(빈 문자열이면 Redis TIME), [3] 우선순위 level(1 USER, 2 DEFERRED, 3 BACKGROUND),
+--       [4] 유저 활동 중 낮춤 규칙에 곱할 비율, [5] 유저 활동 표시 ms,
+--       [6..] 규칙마다 3개씩 (상한, 창 ms, 낮춤 여부 0/1). KEYS[4..] 와 같은 순서다.
+-- 반환: 0 = 허가(기록함), 양수 = 그만큼 ms 뒤 다시 물어야 한다(기록 안 함)
 -- TIME 뒤에 쓰기를 하므로 효과 복제를 켠다 (Redis 5 이상에서는 기본값이라 no-op)
 redis.replicate_commands()
-local P = 'riot:rl:'
-local routing = ARGV[1]
-local method = ARGV[2]
-local level = tonumber(ARGV[3])
-local safety = tonumber(ARGV[5])
-local lookahead = tonumber(ARGV[6])
-local reserve = tonumber(ARGV[7])
-
 local now
-if ARGV[8] ~= '' then
-  now = tonumber(ARGV[8])
+if ARGV[2] ~= '' then
+  now = tonumber(ARGV[2])
 else
   local t = redis.call('TIME')
   now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 end
-local sec = math.floor(now / 1000)
+local eventId = ARGV[1]
+local level = tonumber(ARGV[3])
+local ratio = tonumber(ARGV[4])
+local userActiveMs = tonumber(ARGV[5])
+local FIRST_RULE = 4
 
 local function fmt(n)
   return string.format('%d', n)
 end
 
-local appBucket = routing .. '|app'
-local methodBucket = routing .. '|m|' .. method
-
--- 창마다 (칸 길이 len, 칸 허용치 a). RateLimitWindow#bucketSeconds·allowance 와 같은 식이다.
-local windows = {}
-local function addWindows(bucket, header)
-  for l, w in string.gmatch(header, '(%d+):(%d+)') do
-    local limit = tonumber(l)
-    local ws = tonumber(w)
-    if limit > 0 and ws > 0 then
-      local a = math.floor(math.min(limit * safety / ws, limit / (ws + 1)))
-      local len = 1
-      if a < 1 then
-        len = ws
-        a = math.max(1, math.floor(limit * safety / 2))
-      end
-      windows[#windows + 1] = { prefix = P .. 'c:' .. bucket .. ':' .. fmt(ws) .. ':', len = len, a = a }
-    end
-  end
+local function ruleArg(i, offset)
+  return ARGV[6 + (i - FIRST_RULE) * 3 + offset]
 end
 
-addWindows(appBucket, redis.call('HGET', P .. 'limits', appBucket) or ARGV[4])
-local methodHeader = redis.call('HGET', P .. 'limits', methodBucket)
-if methodHeader then
-  addWindows(methodBucket, methodHeader)
+-- USER 요청은 허가 여부와 관계없이 유저 활동 표시를 켠다. 값은 활동이 끝나는 시각(ms)이고 만료는 정리용이다.
+if level == 1 and userActiveMs > 0 then
+  redis.call('SET', KEYS[3], fmt(now + userActiveMs), 'PX', fmt(userActiveMs))
 end
 
--- 정지 키 값은 정지가 끝나는 시각(ms)이다 (riot-pause.lua)
-local function pauseLeft(bucket)
-  local untilMs = redis.call('GET', P .. 'pause:' .. bucket)
+-- 정지 키 값은 정지가 끝나는 시각(ms)이다 (riot-pause.lua). 정지 중이면 기록하지 않고 남은 시간을 돌려준다.
+local function pauseLeft(key)
+  local untilMs = redis.call('GET', key)
   if untilMs then
     return math.max(0, tonumber(untilMs) - now)
   end
   return 0
 end
-local pauseMs = math.max(pauseLeft(appBucket), pauseLeft(methodBucket))
+local pause = math.max(pauseLeft(KEYS[1]), pauseLeft(KEYS[2]))
+if pause > 0 then
+  return pause
+end
 
-local function fits(s, capOf)
-  for _, win in ipairs(windows) do
-    local count = tonumber(redis.call('GET', win.prefix .. fmt(math.floor(s / win.len))) or '0')
-    if count >= capOf(win) then
-      return false
-    end
+-- 유저 활동 중이면 DEFERRED·BACKGROUND 는 낮춤 규칙(app·method)의 상한을 ratio 배로 낮춘다
+local factor = 1
+if level > 1 and tonumber(redis.call('GET', KEYS[3]) or '0') > now then
+  factor = ratio
+end
+
+-- 1단계: 창을 빠진 항목(score <= now - 창)을 지우고 센다. 넘으면 인덱스 n - 상한 항목이 창을 빠질 때까지 기다린다.
+-- 상한이 개수보다 작을 수 있어(한도가 줄었거나 낮춘 상한) 가장 오래된 항목이 아니라 이 항목을 본다.
+local maxWait = 0
+for i = FIRST_RULE, #KEYS do
+  local key = KEYS[i]
+  local cap = tonumber(ruleArg(i, 0))
+  local window = tonumber(ruleArg(i, 1))
+  redis.call('ZREMRANGEBYSCORE', key, '-inf', fmt(now - window))
+  local n = redis.call('ZCARD', key)
+  local eff = cap
+  if ruleArg(i, 2) == '1' then
+    eff = math.max(1, math.floor(cap * factor))
   end
-  return true
-end
-
-local function take(s)
-  for _, win in ipairs(windows) do
-    local idx = math.floor(s / win.len)
-    local key = win.prefix .. fmt(idx)
-    redis.call('INCR', key)
-    redis.call('PEXPIRE', key, fmt((idx + 1) * win.len * 1000 - now + 2000))
+  if n >= eff then
+    local entry = redis.call('ZRANGE', key, fmt(n - eff), fmt(n - eff), 'WITHSCORES')
+    local s = tonumber(entry[2])
+    maxWait = math.max(maxWait, math.max(s + window - now, 1))
   end
 end
-
-local busyKey = P .. 'busy:' .. routing
-
-if level == 1 then
-  local start = sec
-  if pauseMs > 0 then
-    start = math.floor((now + pauseMs) / 1000)
-  end
-  local fullAllowance = function(win) return win.a end
-  for s = start, sec + lookahead do
-    if fits(s, fullAllowance) then
-      take(s)
-      local wait = math.max(0, s * 1000 - now, pauseMs)
-      if wait > 0 then
-        redis.call('SET', busyKey, '1', 'PX', '1000')
-        local horizonKey = P .. 'horizon:' .. routing
-        local horizon = math.max(tonumber(redis.call('GET', horizonKey) or '0'), s)
-        redis.call('SET', horizonKey, fmt(horizon), 'PX', fmt((lookahead + 2) * 1000))
-      end
-      return wait
-    end
-  end
-  redis.call('SET', busyKey, '1', 'PX', '1000')
-  return -1
+if maxWait > 0 then
+  return maxWait
 end
 
-if pauseMs > 0 or redis.call('EXISTS', busyKey) == 1 then
-  return -2
+-- 2단계: 모든 규칙에 같은 eventId 를 기록하고 키 만료를 창 길이로 늘린다
+for i = FIRST_RULE, #KEYS do
+  redis.call('ZADD', KEYS[i], fmt(now), eventId)
+  redis.call('PEXPIRE', KEYS[i], ruleArg(i, 1))
 end
-local wantKey = P .. 'want:' .. routing
-if level == 3 and redis.call('EXISTS', wantKey) == 1 then
-  return -2
-end
-if level == 2 then
-  redis.call('SET', wantKey, '1', 'PX', '1000')
-end
-local reducedAllowance = function(win) return win.a - math.floor(win.a * reserve) end
-if fits(sec, reducedAllowance) then
-  take(sec)
-  return 0
-end
-return -2
+return 0
