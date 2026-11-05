@@ -81,7 +81,7 @@
 - **컨텍스트 경계 (ArchUnit):** summoner 도메인은 match 도메인 port 에 의존하지 않는다. 매치 존재 확인이 필요한 완료 판정은 두 도메인에 이미 의존하는 `module:infra:rabbitmq` 에 둔다. 상태 GET 은 Redis 만 읽는다.
 - **인스턴스가 여러 대일 수 있다.** 상태 전이와 단계 표시는 Redis 에서 원자적으로 한다.
 - **공개 API 규약** (`@PublicApi`, `ApiResponse<T>`, RestDocs). HTTP 코드는 바꾸지 않는다. GET `status` 값의 의미가 바뀌고 문구 필드가 더해진다.
-- **Riot 호출은 #135 한도 관리자를 그대로 쓴다.** 우선순위는 `RiotCallScope` 로 정하고, 한도 관리자가 Riot 호출을 내보낼 때만 쓴다. RabbitMQ 메시지 우선순위와는 별개다. USER 는 10초 앞까지 칸을 예약하고 못 잡으면 `RiotBudgetExceededException`. 429 를 받으면 그 routing 버킷 전체가 Retry-After 동안 멈춘다.
+- **Riot 호출은 #135 한도 관리자를 그대로 쓴다.** 우선순위는 `RiotCallScope` 로 정하고, 한도 관리자가 Riot 호출을 내보낼 때만 쓴다. RabbitMQ 메시지 우선순위와는 별개다. ZSET 슬라이딩 창 한도 관리자(`2026-11-05-sliding-rate-limiter-design.md`)가 USER 를 최대 10초 기다리게 하고 못 잡으면 `RiotBudgetExceededException`. 429 를 받으면 그 routing 버킷 전체가 Retry-After 동안 멈춘다.
 - **`MatchService.saveAll` 의 커넥션 hold-and-wait** (실험실 PR #139 의 앱 문제 1): 트랜잭션 커넥션을 쥔 채 타임라인 저장(각자 커넥션 필요)을 기다린다. 실험실에서 약 10건이 겹치자 Hikari 풀(로컬 15)이 30초 멈췄다. 운영 풀은 #129 로 10 이라 더 일찍 막힌다. G7 로 사용자 쪽 저장이 리스너 안에서 바로 일어나므로 **이번 범위에서 고친다**.
 - **매치 목록 읽기 경로:** `MatchQueryService` 는 DB 결과에 요청자 캐시(`match:ids:v1:{puuid}`, `match:v1:{matchId}`, TTL 3분)를 덮어 보여 준다.
 - **검증:** `./gradlew check` 통과, 실험실 `lab.sh run steady` 판정에 FAIL 없음.

@@ -137,23 +137,23 @@ domain/
 
 ## Rate Limiting & 배치 삽입
 
-Riot API 호출 한도는 `RiotRateLimitInterceptor` 가 `RedisRiotRateLimiter`(Redis Lua, 키 `riot:rl:*`)로 지킨다.
+Riot API 호출 한도는 `RiotRateLimitInterceptor` 가 `RedisRiotRateLimiter`(Redis ZSET, 키 `riot:rl:*`)로 지킨다.
 카운터가 Redis 에 있어 모든 인스턴스가 같은 예산을 나눠 쓰고, 재시작해도 이어서 센다.
+설계는 `docs/superpowers/specs/2026-11-05-sliding-rate-limiter-design.md` 참고.
 
 1. **호출 우선순위** — 호출 스레드의 `RiotCallScope` 로 정하고 RestClient attribute 로 실어 보낸다 (스코프 밖이면 `USER`).
 
    | 우선순위 | 호출 | 한도가 찼을 때 |
    |---|---|---|
-   | `USER` | 사용자 갱신(`mmrtr.summoner` 의 `background=false` 메시지), 공개 API 동기 조회 | 다음 빈 초를 예약(최대 `lookahead-seconds`)하고 그만큼 기다렸다 보낸다 |
-   | `DEFERRED` | (예약) 갱신 뒤 나머지 timeline | 이번 초에 자리가 있을 때만 가져가고, 아니면 양보하며 최대 60초 기다린다 |
-   | `BACKGROUND` | 매치 상세·백필, 티어 수집 갱신(`background=true`), 최상위 랭킹 계산 | `DEFERRED` 와 같되 최대 30초. 위 우선순위가 쓰는 중이면 양보한다 |
+   | `USER` | 갱신 단계(소환사·계정·리그·매치), 공개 API 동기 조회, 매치 적재의 사용자 재시도 | 창이 차면 자리가 날 때까지 기다리되 최대 `user-max-wait`(10초), 넘으면 바로 포기한다 |
+   | `DEFERRED` | (예약) 나중 타임라인 | 유저 활동 중이면 창의 80% 까지만 쓰고, 최대 60초 기다린다 |
+   | `BACKGROUND` | 추가 매치 찾기·백필, 티어 수집, 최상위 랭킹 계산 | 늘 초당 40회(`background-max-per-second`), 유저 활동 중이면 창의 50% 까지만 쓰고, 최대 30초 기다린다 |
 
-   `DEFERRED`·`BACKGROUND` 는 USER 몫(`reserve-ratio`)을 남기고 가져간다. 대기 상한을 넘으면
-   `RiotBudgetExceededException` 으로 보내지 않고 끝나며, 매치 수집은 이 경우와 fetch 시간 초과를 requeue 한다.
+   대기 상한을 넘으면 `RiotBudgetExceededException` 으로 보내지 않고 끝나며, 매치 수집은 이 경우와 fetch 시간 초과를 requeue 한다.
 2. **routing 별 app·method 버킷** — 한 호출은 그 routing(`asia`, `kr` …)의 app 버킷과 method 버킷을 모두 통과해야 나간다.
    한도는 응답 헤더(`X-App-Rate-Limit`·`X-Method-Rate-Limit`)에서 배워 Redis 에 두고, 아직 못 본 app 한도는
-   `riot.rate-limit.app-default` 를 쓴다. 초당 허용치 = `floor(한도 × 0.9 ÷ 창 길이)` 로 10% 여유를 둬
-   Riot 창이 1초 칸 경계에 걸쳐도 한도를 넘지 않는다.
+   `riot.rate-limit.app-default` 를 쓴다. 규칙(버킷 × 창)마다 Redis ZSET 으로 최근 W초의 허가 수를 세고,
+   상한 = `floor(한도 × 0.9)` 로 10% 여유를 둔다. 호출 기록은 응답 시각으로 옮겨 Riot 이 센 시각에 맞춘다.
 3. **429·근접 정지** — 429 를 받으면 `Retry-After` 동안 해당 버킷(`application` 이면 app, 그 밖은 method)을
    Redis 키로 정지시켜 모든 인스턴스가 함께 멈춘다. 응답 Count 헤더가 한도의 95% 이상이면 1초 정지한다.
    메트릭: `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별), `riot.ratelimit.near_limit{routing,scope}`,
