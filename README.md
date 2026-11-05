@@ -146,20 +146,21 @@ Riot API 호출 한도는 `RiotRateLimitInterceptor` 가 `RedisRiotRateLimiter`(
    | 우선순위 | 호출 | 한도가 찼을 때 |
    |---|---|---|
    | `USER` | 갱신 단계(소환사·계정·리그·매치), 공개 API 동기 조회, 매치 적재의 사용자 재시도 | 창이 차면 자리가 날 때까지 기다리되 최대 `user-max-wait`(10초), 넘으면 바로 포기한다 |
-   | `DEFERRED` | (예약) 나중 타임라인 | 유저 활동 중이면 창의 80% 까지만 쓰고, 최대 60초 기다린다 |
+   | `DEFERRED` | (예약) 나중 타임라인 | 유저 활동 중이면 창의 80% 까지만, 한가하면 창 전부를 쓰고, 최대 60초 기다린다 |
    | `BACKGROUND` | 추가 매치 찾기·백필, 티어 수집, 최상위 랭킹 계산 | 늘 초당 40회(`background-max-per-second`), 유저 활동 중이면 창의 50% 까지만 쓰고, 최대 30초 기다린다 |
 
+   기다릴 때는 최소 25ms(`retry-min-wait`)에 대기의 25% 까지 무작위 몫(`retry-jitter-ratio`)을 더해 자서, 같은 자리를 기다리던 요청이 한꺼번에 깨어 묻지 않는다.
    대기 상한을 넘으면 `RiotBudgetExceededException` 으로 보내지 않고 끝나며, 매치 수집은 이 경우와 fetch 시간 초과를 requeue 한다.
 2. **routing 별 app·method 버킷** — 한 호출은 그 routing(`asia`, `kr` …)의 app 버킷과 method 버킷을 모두 통과해야 나간다.
    한도는 응답 헤더(`X-App-Rate-Limit`·`X-Method-Rate-Limit`)에서 배워 Redis 에 두고, 아직 못 본 app 한도는
    `riot.rate-limit.app-default` 를 쓴다. 규칙(버킷 × 창)마다 Redis ZSET 으로 최근 W초의 허가 수를 세고,
-   상한 = `floor(한도 × 0.9)` 로 10% 여유를 둔다. 호출 기록은 응답 시각으로 옮겨 Riot 이 센 시각에 맞춘다.
+   상한 = `floor(한도 × 0.9)` 로 10% 여유를 둔다. app·method 규칙의 호출 기록은 응답 시각으로 옮겨 Riot 이 센 시각에 맞춘다.
 3. **429·근접 정지** — 429 를 받으면 `Retry-After` 동안 해당 버킷(`application` 이면 app, 그 밖은 method)을
    Redis 키로 정지시켜 모든 인스턴스가 함께 멈춘다. 응답 Count 헤더가 한도의 95% 이상이면 1초 정지한다.
    메트릭: `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별), `riot.ratelimit.near_limit{routing,scope}`,
-   `riot.ratelimit.wait`, `riot.ratelimit.rejected`.
+   `riot.ratelimit.wait`, `riot.ratelimit.rejected`, `riot.ratelimit.acquire.attempts`(limiter 에 물은 횟수).
 4. **재시도도 한도를 다시 받는다** — `RetryInterceptor`(429/5xx/IOException backoff)가 가장 바깥에서 시도마다
-   한도 → 로그 인터셉터를 새로 태운다. 허가 뒤에는 대기 단계를 두지 않는다 (허가받은 초를 넘겨 보내지 않게).
+   한도 → 로그 인터셉터를 새로 태운다. 허가 뒤에는 대기 단계를 두지 않는다 (응답 전까지 기록은 허가 시각이라, 늦게 보내면 기록이 Riot 이 센 시각보다 일찍 창을 빠진다).
 
 PostgreSQL 적재는 두 단계로 흡수:
 - **인-메모리 큐 + 1 초 flush** — `MatchBatchProcessor` 가 매치를 모아 `@Scheduled(fixedRate=1000)` 로 일괄 flush.

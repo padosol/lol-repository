@@ -81,7 +81,7 @@
 - **컨텍스트 경계 (ArchUnit):** summoner 도메인은 match 도메인 port 에 의존하지 않는다. 매치 존재 확인이 필요한 완료 판정은 두 도메인에 이미 의존하는 `module:infra:rabbitmq` 에 둔다. 상태 GET 은 Redis 만 읽는다.
 - **인스턴스가 여러 대일 수 있다.** 상태 전이와 단계 표시는 Redis 에서 원자적으로 한다.
 - **공개 API 규약** (`@PublicApi`, `ApiResponse<T>`, RestDocs). HTTP 코드는 바꾸지 않는다. GET `status` 값의 의미가 바뀌고 문구 필드가 더해진다.
-- **Riot 호출은 #135 한도 관리자를 그대로 쓴다.** 우선순위는 `RiotCallScope` 로 정하고, 한도 관리자가 Riot 호출을 내보낼 때만 쓴다. RabbitMQ 메시지 우선순위와는 별개다. ZSET 슬라이딩 창 한도 관리자(`2026-11-05-sliding-rate-limiter-design.md`)가 USER 를 최대 10초 기다리게 하고 못 잡으면 `RiotBudgetExceededException`. 429 를 받으면 그 routing 버킷 전체가 Retry-After 동안 멈춘다.
+- **Riot 호출은 ZSET 슬라이딩 창 한도 관리자(`2026-11-05-sliding-rate-limiter-design.md`)를 쓴다.** 우선순위는 `RiotCallScope` 로 정하고, 한도 관리자가 Riot 호출을 내보낼 때만 쓴다. RabbitMQ 메시지 우선순위와는 별개다. 한도 관리자는 USER 를 최대 10초 기다리게 하고 못 잡으면 `RiotBudgetExceededException`. 429 를 받으면 그 routing 버킷 전체가 Retry-After 동안 멈춘다.
 - **`MatchService.saveAll` 의 커넥션 hold-and-wait** (실험실 PR #139 의 앱 문제 1): 트랜잭션 커넥션을 쥔 채 타임라인 저장(각자 커넥션 필요)을 기다린다. 실험실에서 약 10건이 겹치자 Hikari 풀(로컬 15)이 30초 멈췄다. 운영 풀은 #129 로 10 이라 더 일찍 막힌다. G7 로 사용자 쪽 저장이 리스너 안에서 바로 일어나므로 **이번 범위에서 고친다**.
 - **매치 목록 읽기 경로:** `MatchQueryService` 는 DB 결과에 요청자 캐시(`match:ids:v1:{puuid}`, `match:v1:{matchId}`, TTL 3분)를 덮어 보여 준다.
 - **검증:** `./gradlew check` 통과, 실험실 `lab.sh run steady` 판정에 FAIL 없음.
@@ -348,6 +348,7 @@ flowchart LR
 - **배포 전 운영 작업 (환경마다, 손으로):**
   1. 티어 수집을 멈추고 `mmrtr.summoner` 를 비운다. 남아 있는 옛 메시지는 renewalId 가 없어 `stale` 로 버려지므로 틀리지는 않지만, 티어 수집분이 매치 적재로 넘어가지 않고 사라진다. 옛 표시 키(TTL 2분)는 그냥 만료되게 둔다.
   2. (손으로 할 일 없음) 우선순위 큐는 새 이름 `mmrtr.matchId.priority`·`mmrtr.matchId.priority.exchange` 로 선언되므로 배포 전에 옛 큐를 지우지 않아도 되고, 롤링 배포 중 옛 파드가 옛 큐를 다시 만들어도 새 앱의 선언이 막히지 않는다. 옛 `mmrtr.matchId`·`mmrtr.matchId.exchange` 는 비어 있는지 확인한 뒤 아무 때나 지우면 된다 (예: `rabbitmqctl delete_queue -p <vhost> mmrtr.matchId`, exchange 는 관리 UI 나 `rabbitmqadmin -V <vhost> delete exchange name=mmrtr.matchId.exchange`). DLX `mmrtr.matchId.dlx` 는 새 큐도 쓰므로 지우지 않는다.
+  3. 옛 파드와 새 파드가 함께 돌지 않게 배포한다. Recreate 전략으로 하거나, 옛 파드를 0 으로 줄인 뒤 새 파드를 띄우거나, 트래픽이 적을 때 한다. 운영 `develop` 의 한도 관리자(Redisson `RRateLimiter`, 키 `external:api:*`)는 새 ZSET 한도 관리자와 사용량·정지 키(`riot:rl:pause:*`)를 나누지 않아, 섞여 돌면 합계가 Riot 한도를 넘어 429 가 이어질 수 있다 (`2026-11-05-sliding-rate-limiter-design.md` 7장).
 - **기준선:** 이 작업 뒤의 `lab.sh run steady` 결과가 Plan 2 의 비교 기준이다.
 - **Plan 2 에 넘기는 것:** 단계 큐 ①~④, 갱신 레코드와 단계 비트(5.1), 완료 판정기(5.5), 우선순위 큐 `mmrtr.matchId.priority` 의 빈 자리(처리 순위 1).
 - **Plan 2 가 할 일:** 진행률 노출, 접수 거절, 타임라인 나중 받기(처리 순위 1, Riot 호출 우선순위 결정 포함), 기한이 지난 갱신의 우선순위 낮추기 검토, lol-ui.
