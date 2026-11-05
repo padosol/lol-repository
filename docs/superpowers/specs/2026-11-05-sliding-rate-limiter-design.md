@@ -108,6 +108,7 @@ asia 허가 시각만 본 시뮬레이션 (첫 방문 갱신 1건 = 42회, 네�
   - 대기는 "막은 항목이 창을 빠지는 시각까지" 라, 같은 항목을 기다리던 요청들이 모두 같은 시각에 깨어 하나만 허가받고 나머지는 다시 묻는다. 실험실 steady 에서 이것 때문에 허가 1건에 Lua 호출이 약 46회(1초 칸 방식은 약 3회)였고 초당 최대 7,926회였다.
   - Lua 의 "거절하면 아무것도 기록하지 않는다" 는 그대로 두고, 인터셉터가 흩어 깨운다. 최소 간격은 1ms 단위 대기(창 경계)가 곧바로 다시 묻는 것을 막는다.
   - USER 의 거절 판단은 무작위 몫을 더하기 전 대기로 한다 (`누적 + 대기 > 상한` 이면 자지 않고 거절).
+  - USER 의 무작위 몫은 `user-retry-jitter-max`(50ms)로 묶는다. **[판단, 2026-11-06]** 무작위로 더 잔 시간도 10초 상한에 들어가므로, 대기의 25% 를 그대로 더하면 오래 기다린 유저 호출이 흔들림 때문에 상한에 걸려 포기했다 (steady 유저 거절 21 → 59). 흩어지는 데는 수십 ms 면 된다. DEFERRED·BACKGROUND 는 그대로 대기의 25% 까지다.
   - limiter 에 물을 때마다 `riot.ratelimit.acquire.attempts{routing,priority}` 를 하나씩 센다.
 - 우선순위별 누적 대기 상한은 USER 10초 **[판단]**(지금 앞당김 예약 범위와 같음), DEFERRED 60초, BACKGROUND 30초(지금 값)다.
 - **USER** 는 누적 대기 + 이번 대기가 상한을 넘으면 자지 않고 바로 `RiotBudgetExceededException` 이다. 5초 기한이 있어 기다려도 소용없다. 갱신 단계는 지금처럼 잠시 뒤 다시 시도한다(`requeueLater`). **[판단]**
@@ -180,6 +181,7 @@ void pause(String routing, String methodOrNull, Duration duration);             
 | `deferred-max-wait`·`background-max-wait` | 60초·30초 | 그대로 |
 | `retry-min-wait` | 25ms | 새로. 다시 묻기 전 최소로 자는 시간 (4.4) |
 | `retry-jitter-ratio` | 0.25 | 새로. 자는 시간에 더하는 무작위 몫의 최대 비율 (대기 × 이 값, 4.4) |
+| `user-retry-jitter-max` | 50ms | 새로. USER 무작위 몫의 상한 (4.4) |
 | `user-active-window` | 10초 | 새로 |
 | `deferred-ceiling-ratio`·`background-ceiling-ratio` | 0.8·0.5 | 새로. [0, 1] 밖이면 그 끝으로 자른다 |
 | `background-max-per-second` | 40 | 새로. 백필 전용 규칙의 상한 **[사용자]** |

@@ -119,14 +119,20 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
                 // 지연·백그라운드는 상한까지 남은 만큼만 자고, 상한을 다 쓴 뒤에야 포기한다.
                 throw rejected(routing, priority);
             }
-            sleep(sleepMillis(wait, remaining));
+            sleep(sleepMillis(wait, remaining, priority));
         }
     }
 
-    /** {@code min(max(wait, retryMinWait) + uniform[0, wait × retryJitterRatio], remaining)}. */
-    private long sleepMillis(long wait, long remaining) {
+    /**
+     * {@code min(max(wait, retryMinWait) + jitter, remaining)}. jitter 는 {@code uniform[0, wait × retryJitterRatio]} 이고,
+     * USER 는 그 값을 {@code userRetryJitterMax} 로 묶는다 (흔들림이 유저 대기 상한을 갉아먹지 않게).
+     */
+    private long sleepMillis(long wait, long remaining, RiotCallPriority priority) {
         long base = Math.max(wait, props.getRetryMinWait().toMillis());
         long jitter = (long) (wait * Math.max(0.0, props.getRetryJitterRatio()) * random.getAsDouble());
+        if (priority == RiotCallPriority.USER) {
+            jitter = Math.min(jitter, props.getUserRetryJitterMax().toMillis());
+        }
         return Math.min(base + jitter, remaining);
     }
 

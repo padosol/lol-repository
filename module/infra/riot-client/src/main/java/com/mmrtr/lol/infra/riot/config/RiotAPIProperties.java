@@ -44,6 +44,11 @@ public class RiotAPIProperties {
         private Duration retryMinWait = Duration.ofMillis(25);
         /** 자는 시간에 더하는 무작위 몫의 최대 비율 (대기 × 이 비율 이하). 같은 대기를 받은 요청들이 흩어져 깬다. */
         private double retryJitterRatio = 0.25;
+        /**
+         * USER 무작위 몫의 상한. 무작위로 더 잔 시간도 {@code userMaxWait} 에 들어가므로, 오래 기다린 유저 호출이
+         * 흔들림 때문에 상한에 걸려 포기하지 않게 짧게 묶는다. 흩어지는 데는 수십 ms 면 된다.
+         */
+        private Duration userRetryJitterMax = Duration.ofMillis(50);
         /** 마지막 USER 요청 뒤 이만큼은 그 routing 을 유저 활동 중으로 본다. */
         private Duration userActiveWindow = Duration.ofSeconds(10);
         /** 유저 활동 중 DEFERRED·BACKGROUND 가 쓸 수 있는 app·method 규칙 상한의 비율. */

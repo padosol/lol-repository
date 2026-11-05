@@ -202,13 +202,13 @@ class RiotRateLimitInterceptorTest {
     }
 
     @Test
-    @DisplayName("대기에 그 대기의 25% 까지 무작위로 더해 잔다")
+    @DisplayName("백필은 대기에 그 대기의 25% 까지 무작위로 더해 잔다")
     void jitter_addsUpToQuarterOfWait() {
         stubOk();
         random = 0.999_999;
         limiter.results.addAll(List.of(400L, 0L));
 
-        call();
+        call(RiotCallPriority.BACKGROUND);
 
         assertThat(sleeps).hasSize(1);
         assertThat(sleeps.get(0)).isGreaterThan(400L).isLessThanOrEqualTo(500L);
@@ -232,14 +232,25 @@ class RiotRateLimitInterceptorTest {
     void user_decidesOnRawWaitAndSleepsWithinCap() {
         stubOk();
         random = 0.999;
-        limiter.results.addAll(List.of(4_000L, 5_000L, 0L));
+        limiter.results.addAll(List.of(4_000L, 5_940L, 0L));
 
-        // 첫 잠은 약 5,000ms 라 누적 + 5,000 이 상한(10초) 안이다. 흔들림까지 더하면 넘지만 거절하지 않는다.
+        // 첫 잠은 4,000 + 흔들림 50 = 4,050ms. 누적 4,050 + 5,940 = 9,990 이 상한(10초) 안이라 거절하지 않는다.
+        // 흔들림까지 더한 6,000ms 는 상한을 넘으므로 남은 5,950ms 만 잔다.
         assertThat(call(RiotCallPriority.USER)).isEqualTo("ok");
 
-        assertThat(sleeps).hasSize(2);
-        assertThat(sleeps.get(0)).isGreaterThan(4_000L);
-        assertThat(sleeps.get(1)).isEqualTo(10_000L - sleeps.get(0));
+        assertThat(sleeps).containsExactly(4_050L, 10_000L - 4_050L);
+    }
+
+    @Test
+    @DisplayName("USER 의 무작위 몫은 대기의 25% 가 아니라 최대 50ms 다")
+    void user_jitterIsCappedAtFiftyMillis() {
+        stubOk();
+        random = 0.999;
+        limiter.results.addAll(List.of(4_000L, 0L));
+
+        call(RiotCallPriority.USER);
+
+        assertThat(sleeps).containsExactly(4_050L);
     }
 
     @Test

@@ -149,7 +149,7 @@ Riot API 호출 한도는 `RiotRateLimitInterceptor` 가 `RedisRiotRateLimiter`(
    | `DEFERRED` | (예약) 나중 타임라인 | 유저 활동 중이면 창의 80% 까지만, 한가하면 창 전부를 쓰고, 최대 60초 기다린다 |
    | `BACKGROUND` | 추가 매치 찾기·백필, 티어 수집, 최상위 랭킹 계산 | 늘 초당 40회(`background-max-per-second`), 유저 활동 중이면 창의 50% 까지만 쓰고, 최대 30초 기다린다 |
 
-   기다릴 때는 최소 25ms(`retry-min-wait`)에 대기의 25% 까지 무작위 몫(`retry-jitter-ratio`)을 더해 자서, 같은 자리를 기다리던 요청이 한꺼번에 깨어 묻지 않는다.
+   기다릴 때는 `max(대기, 25ms)`(`retry-min-wait`)에 대기의 25% 까지 무작위 몫(`retry-jitter-ratio`)을 더해 자서, 같은 자리를 기다리던 요청이 한꺼번에 깨어 묻지 않는다. `USER` 의 무작위 몫은 최대 50ms(`user-retry-jitter-max`)다.
    대기 상한을 넘으면 `RiotBudgetExceededException` 으로 보내지 않고 끝나며, 매치 수집은 이 경우와 fetch 시간 초과를 requeue 한다.
 2. **routing 별 app·method 버킷** — 한 호출은 그 routing(`asia`, `kr` …)의 app 버킷과 method 버킷을 모두 통과해야 나간다.
    한도는 응답 헤더(`X-App-Rate-Limit`·`X-Method-Rate-Limit`)에서 배워 Redis 에 두고, 아직 못 본 app 한도는
