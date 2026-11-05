@@ -98,6 +98,19 @@ class RiotRateLimitAcceptanceTest {
         assertWithinWindow(30);
     }
 
+    @Test
+    @DisplayName("상한(18) 안의 USER 동시 호출은 기다리지 않고 바로 나간다")
+    void burstWithinCap_servedWithoutWaiting() throws Exception {
+        List<HttpStatusCode> statuses = fire(newClient(), 18);
+
+        assertThat(statuses).hasSize(18).allMatch(s -> s.value() == 200);
+        List<Long> times = wm.getAllServeEvents().stream()
+                .map(e -> e.getRequest().getLoggedDate().getTime())
+                .sorted()
+                .toList();
+        assertThat(times.get(times.size() - 1) - times.get(0)).isLessThan(1000L);
+    }
+
     private RestClient newClient() {
         RiotAPIProperties props = new RiotAPIProperties();
         props.getRateLimit().setAppDefault("20:2");

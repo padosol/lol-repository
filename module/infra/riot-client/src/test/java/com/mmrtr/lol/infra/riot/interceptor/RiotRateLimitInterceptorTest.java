@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.riot.interceptor;
 import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
+import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRequestAttributes;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
@@ -55,7 +56,15 @@ class RiotRateLimitInterceptorTest {
         sleeps = new ArrayList<>();
         now = new AtomicLong();
         meterRegistry = new SimpleMeterRegistry();
-        build((long ms) -> sleeps.add(ms));
+        build(advancingSleeper());
+    }
+
+    /** 잔 만큼 시계를 앞으로 옮기는 sleeper. */
+    private RiotRateLimitInterceptor.Sleeper advancingSleeper() {
+        return ms -> {
+            sleeps.add(ms);
+            now.addAndGet(ms);
+        };
     }
 
     private void build(RiotRateLimitInterceptor.Sleeper sleeper) {
@@ -77,6 +86,13 @@ class RiotRateLimitInterceptorTest {
     private String call() {
         return restClient.get().uri("/x")
                 .attribute(RiotRequestAttributes.METHOD, METHOD)
+                .retrieve().body(String.class);
+    }
+
+    private String call(RiotCallPriority priority) {
+        return restClient.get().uri("/x")
+                .attribute(RiotRequestAttributes.METHOD, METHOD)
+                .attribute(RiotRequestAttributes.PRIORITY, priority)
                 .retrieve().body(String.class);
     }
 
@@ -103,6 +119,72 @@ class RiotRateLimitInterceptorTest {
         assertThat(sleeps).isEmpty();
         assertThat(limiter.acquiredEventIds).hasSize(1);
         assertThat(limiter.completedEventIds).isEqualTo(limiter.acquiredEventIds);
+    }
+
+    @Test
+    @DisplayName("양수 대기면 자고 같은 eventId 로 다시 묻는다")
+    void positiveWait_sleepsAndAsksAgainWithSameEventId() {
+        stubOk();
+        limiter.results.addAll(List.of(300L, 0L));
+
+        call();
+
+        assertThat(sleeps).containsExactly(300L);
+        assertThat(limiter.acquiredEventIds).hasSize(2);
+        assertThat(limiter.acquiredEventIds.get(0)).isEqualTo(limiter.acquiredEventIds.get(1));
+        assertThat(limiter.completedEventIds).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("USER 는 상한 안이면 계속 기다린다")
+    void user_waitsWhileWithinCap() {
+        stubOk();
+        limiter.results.addAll(List.of(4_000L, 5_000L, 0L));
+
+        assertThat(call(RiotCallPriority.USER)).isEqualTo("ok");
+
+        assertThat(sleeps).containsExactly(4_000L, 5_000L);
+    }
+
+    @Test
+    @DisplayName("USER 는 이번 대기로 상한을 넘으면 자지 않고 거절한다")
+    void user_rejectsWithoutSleepingWhenCapWouldPass() {
+        stubOk();
+        limiter.results.addAll(List.of(4_000L, 7_000L));
+
+        assertThatThrownBy(() -> call(RiotCallPriority.USER))
+                .isInstanceOf(RiotBudgetExceededException.class);
+
+        assertThat(sleeps).containsExactly(4_000L);
+        wm.verify(0, getRequestedFor(urlEqualTo("/x")));
+        assertThat(meterRegistry.counter("riot.ratelimit.rejected",
+                "routing", "localhost", "priority", "USER").count()).isEqualTo(1.0);
+        assertThat(limiter.completedEventIds).isEmpty();
+    }
+
+    @Test
+    @DisplayName("BACKGROUND 는 남은 상한만큼만 자고 거절한다")
+    void background_sleepsOnlyRemainingThenRejects() {
+        stubOk();
+        limiter.alwaysWait = 20_000L;
+
+        assertThatThrownBy(() -> call(RiotCallPriority.BACKGROUND))
+                .isInstanceOf(RiotBudgetExceededException.class);
+
+        assertThat(sleeps).containsExactly(20_000L, 10_000L);
+        wm.verify(0, getRequestedFor(urlEqualTo("/x")));
+    }
+
+    @Test
+    @DisplayName("DEFERRED 의 상한은 60초다")
+    void deferred_capIsSixtySeconds() {
+        stubOk();
+        limiter.alwaysWait = 50_000L;
+
+        assertThatThrownBy(() -> call(RiotCallPriority.DEFERRED))
+                .isInstanceOf(RiotBudgetExceededException.class);
+
+        assertThat(sleeps).containsExactly(50_000L, 10_000L);
     }
 
     @Test

@@ -65,5 +65,8 @@ class InterceptorChainTest {
 
         assertThat(body).isEqualTo("ok");
         assertThat(limiter.acquireCount.get()).isEqualTo(2);
+        // 재시도는 새 요청이므로 eventId 가 다르다
+        assertThat(limiter.acquiredEventIds).hasSize(2);
+        assertThat(limiter.acquiredEventIds.get(0)).isNotEqualTo(limiter.acquiredEventIds.get(1));
     }
 }

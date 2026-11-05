@@ -82,8 +82,8 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
     }
 
     /**
-     * 허가받을 때까지 limiter 가 돌려준 ms 만큼 자고 같은 eventId 로 다시 묻는다. 누적 대기 + 이번 대기가 우선순위별
-     * 상한을 넘으면 자지 않고 포기한다.
+     * 허가받을 때까지 limiter 가 돌려준 ms 만큼 자고 같은 eventId 로 다시 묻는다. USER 는 누적 대기 + 이번 대기가
+     * 상한을 넘으면 자지 않고 포기하고, DEFERRED·BACKGROUND 는 남은 상한만큼 자고 다 쓰면 포기한다.
      */
     private void awaitPermit(String eventId, String routing, String method, RiotCallPriority priority)
             throws IOException {
@@ -96,10 +96,21 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
                         .record(Duration.ofMillis(Math.max(0L, clock.getAsLong() - start)));
                 return;
             }
-            if (clock.getAsLong() - start + wait > maxWaitMs) {
+            long elapsed = clock.getAsLong() - start;
+            if (priority == RiotCallPriority.USER) {
+                // 사용자 호출은 이번 대기로 상한을 넘을 것이 뻔하면 자지 않고 바로 거절한다.
+                if (elapsed + wait > maxWaitMs) {
+                    throw rejected(routing, priority);
+                }
+                sleep(wait);
+                continue;
+            }
+            // 지연·백그라운드는 상한까지 남은 만큼만 자고, 상한을 다 쓴 뒤에야 포기한다.
+            long remaining = maxWaitMs - elapsed;
+            if (remaining <= 0L) {
                 throw rejected(routing, priority);
             }
-            sleep(wait);
+            sleep(Math.min(wait, remaining));
         }
     }
 
