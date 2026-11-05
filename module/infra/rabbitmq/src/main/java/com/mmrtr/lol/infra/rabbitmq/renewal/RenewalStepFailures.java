@@ -47,24 +47,19 @@ final class RenewalStepFailures {
      * 레코드 조회가 던지면 WARN 과 {@code failed} 를 남기고 false 다 (메시지는 버리고, 그 갱신은 기한으로 끝난다).
      */
     boolean isCurrent(String puuid, String renewalId) {
-        return current(puuid, renewalId) != null;
-    }
-
-    /** {@link #isCurrent} 와 같되, 이 갱신의 것이면 그 레코드를, 아니면 null 을 돌려준다. */
-    RenewalRecord current(String puuid, String renewalId) {
         RenewalRecord record;
         try {
             record = recordPort.find(puuid).orElse(null);
         } catch (Exception e) {
             log.warn("갱신 레코드 조회 실패. 메시지를 버린다. step={}, puuid={}, renewalId={}", step, puuid, renewalId, e);
             count("failed");
-            return null;
+            return false;
         }
         if (record != null && record.isFor(renewalId)) {
-            return record;
+            return true;
         }
         stale(puuid, renewalId);
-        return null;
+        return false;
     }
 
     private void stale(String puuid, String renewalId) {

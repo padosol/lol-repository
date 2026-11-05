@@ -8,8 +8,6 @@ import com.mmrtr.lol.domain.match.application.usecase.SaveMatchDataUseCase;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
-import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
-import com.mmrtr.lol.domain.summoner.domain.RenewalStatus;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
@@ -41,8 +39,6 @@ import org.springframework.stereotype.Component;
  * 대상으로 둔 다른 갱신까지 match_failed 로 끝내므로, 매치 자체가 잘못된 경우에만 남긴다.
  * 계속 실패해 대상에서 뺀 매치는 버리지 않고 매치 적재 큐에 백필 순위로 넘긴다. 커서가 그 매치를 지나가도 잃지 않는다 (G8).
  * 대상이 전부 DB 에 들어가면 매치 비트를 켜고, 아니면 판정기가 DB 를 보고 켠다.
- * 이 단계가 시작될 때 갱신이 이미 FAILED 로 끝났으면(기한 초과 등) 기다리는 유저가 없으므로, 선점한 대상을 받지 않고
- * 매치 적재 큐에 백필 순위로 넘긴다. 유저 예산은 아직 기한 안에 있는 갱신이 쓴다.
  * 밖으로 던지는 예외는 첫 전달의 저장 실패뿐이다 (재전달받아 DB 에 쓴 뒤에만 ack 한다).
  */
 @Slf4j
@@ -51,7 +47,6 @@ public class RenewalMatchStep {
 
     private static final int MATCH_COUNT = 20;
     private static final String EXCLUDED_METRIC = "lol.renewal.match_excluded";
-    private static final String LATE_HANDOFF_METRIC = "lol.renewal.match_late_handoff";
 
     private final RenewalRecordPort recordPort;
     private final MatchApiPort matchApiPort;
@@ -89,11 +84,9 @@ public class RenewalMatchStep {
         String puuid = message.puuid();
         String renewalId = message.renewalId();
 
-        RenewalRecord record = failures.current(puuid, renewalId);
-        if (record == null) {
+        if (!failures.isCurrent(puuid, renewalId)) {
             return;
         }
-        boolean ended = record.status() == RenewalStatus.FAILED;
 
         Platform platform = Platform.valueOfName(message.platform());
         if (platform == null) {
@@ -117,11 +110,7 @@ public class RenewalMatchStep {
         try {
             Set<String> targets = recordTargets(puuid, renewalId, platformName, ids);
             claimed = claim(targets, renewalId);
-            if (ended) {
-                handOffToBackfill(claimed, platformName, renewalId);
-            } else {
-                completeClaimed(message, platformName, targets, claimed);
-            }
+            completeClaimed(message, platformName, targets, claimed);
             handOffRest(message, platformName, ids);
             failures.success();
         } catch (MatchSaveFailure e) {
@@ -177,22 +166,6 @@ public class RenewalMatchStep {
             finisher.finish(message.puuid(),
                     recordPort.markSteps(message.puuid(), message.renewalId(), EnumSet.of(RenewalStep.MATCH)));
         }
-    }
-
-    /**
-     * 이미 끝난 갱신의 선점한 대상을 받지 않고 매치 적재 큐에 백필 순위로 넘긴 뒤 선점을 푼다. 선점을 풀어 두면 같은 매치를
-     * 대상으로 둔 다른(기한 안의) 갱신이 사용자 순위로 받을 수 있다. 백필이 저장하면 판정기가 늦은 완료로 커서를 옮긴다.
-     */
-    private void handOffToBackfill(List<String> claimed, String platformName, String renewalId) {
-        if (claimed.isEmpty()) {
-            return;
-        }
-        log.info("이미 끝난 갱신의 매치를 백필로 넘긴다. renewalId={}, count={}", renewalId, claimed.size());
-        for (String matchId : claimed) {
-            messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.BACKFILL);
-            claimService.release(matchId, renewalId);
-        }
-        meterRegistry.counter(LATE_HANDOFF_METRIC).increment(claimed.size());
     }
 
     /** 매치마다 match ∥ timeline 을 한꺼번에 시작한 뒤 모두 기다린다. 재시도 스코프는 요청을 만드는 이 스레드에서 읽힌다. */
