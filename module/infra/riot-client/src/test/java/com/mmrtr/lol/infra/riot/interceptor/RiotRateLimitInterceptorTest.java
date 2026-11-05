@@ -48,6 +48,8 @@ class RiotRateLimitInterceptorTest {
     private AtomicLong now;
     private SimpleMeterRegistry meterRegistry;
     private RestClient restClient;
+    /** 인터셉터가 쓰는 [0, 1) 무작위 값. 기본 0 이면 흔들림이 없어 잔 시간이 대기 그대로다. */
+    private double random;
 
     @BeforeEach
     void setUp() {
@@ -56,6 +58,7 @@ class RiotRateLimitInterceptorTest {
         sleeps = new ArrayList<>();
         now = new AtomicLong();
         meterRegistry = new SimpleMeterRegistry();
+        random = 0.0;
         build(advancingSleeper());
     }
 
@@ -69,7 +72,7 @@ class RiotRateLimitInterceptorTest {
 
     private void build(RiotRateLimitInterceptor.Sleeper sleeper) {
         RiotRateLimitInterceptor interceptor = new RiotRateLimitInterceptor(
-                limiter, new RiotAPIProperties(), meterRegistry, sleeper, now::get);
+                limiter, new RiotAPIProperties(), meterRegistry, sleeper, now::get, () -> random);
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build());
         restClient = RestClient.builder()
@@ -185,6 +188,70 @@ class RiotRateLimitInterceptorTest {
                 .isInstanceOf(RiotBudgetExceededException.class);
 
         assertThat(sleeps).containsExactly(50_000L, 10_000L);
+    }
+
+    @Test
+    @DisplayName("작은 대기는 최소 재시도 간격(25ms)으로 올려 잔다")
+    void smallWait_isRaisedToRetryMinWait() {
+        stubOk();
+        limiter.results.addAll(List.of(1L, 0L));
+
+        call();
+
+        assertThat(sleeps).containsExactly(25L);
+    }
+
+    @Test
+    @DisplayName("대기에 그 대기의 25% 까지 무작위로 더해 잔다")
+    void jitter_addsUpToQuarterOfWait() {
+        stubOk();
+        random = 0.999_999;
+        limiter.results.addAll(List.of(400L, 0L));
+
+        call();
+
+        assertThat(sleeps).hasSize(1);
+        assertThat(sleeps.get(0)).isGreaterThan(400L).isLessThanOrEqualTo(500L);
+    }
+
+    @Test
+    @DisplayName("무작위로 더한 대기도 남은 상한을 넘겨 자지 않는다")
+    void jitter_isClampedToRemainingCap() {
+        stubOk();
+        random = 0.999;
+        limiter.alwaysWait = 28_000L;
+
+        assertThatThrownBy(() -> call(RiotCallPriority.BACKGROUND))
+                .isInstanceOf(RiotBudgetExceededException.class);
+
+        assertThat(sleeps).containsExactly(30_000L);
+    }
+
+    @Test
+    @DisplayName("USER 는 흔들림 전 대기로 거절을 정하고, 흔들림을 더해도 상한까지만 잔다")
+    void user_decidesOnRawWaitAndSleepsWithinCap() {
+        stubOk();
+        random = 0.999;
+        limiter.results.addAll(List.of(4_000L, 5_000L, 0L));
+
+        // 첫 잠은 약 5,000ms 라 누적 + 5,000 이 상한(10초) 안이다. 흔들림까지 더하면 넘지만 거절하지 않는다.
+        assertThat(call(RiotCallPriority.USER)).isEqualTo("ok");
+
+        assertThat(sleeps).hasSize(2);
+        assertThat(sleeps.get(0)).isGreaterThan(4_000L);
+        assertThat(sleeps.get(1)).isEqualTo(10_000L - sleeps.get(0));
+    }
+
+    @Test
+    @DisplayName("limiter 에 묻는 횟수를 모두 센다")
+    void acquireAttempts_countsEveryCall() {
+        stubOk();
+        limiter.results.addAll(List.of(300L, 0L));
+
+        call();
+
+        assertThat(meterRegistry.counter("riot.ratelimit.acquire.attempts",
+                "routing", "localhost", "priority", "USER").count()).isEqualTo(2.0);
     }
 
     @Test

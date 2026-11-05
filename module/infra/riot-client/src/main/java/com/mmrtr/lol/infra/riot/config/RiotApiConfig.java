@@ -65,7 +65,8 @@ public class RiotApiConfig {
         // 1. retryInterceptor (가장 바깥 - 429/5xx/IOException 재시도)
         // 2. rateLimitInterceptor (Redis 기반 한도 관리 — 우선순위·헤더 학습·429 정지)
         // 3. logRequest (로깅)
-        // 허가 뒤에 대기 단계를 두지 않는다. 허가받은 초를 넘겨 보내면 Riot 창에서 몰려 한도를 넘을 수 있다.
+        // 허가 뒤에 대기 단계를 두지 않는다. 응답 전까지 기록은 허가 시각에 있으므로, 허가받고 늦게 보내면
+        // 기록이 Riot 이 센 시각보다 일찍 창을 빠져 한도를 넘을 수 있다.
         return RestClient.builder()
                 .requestFactory(effectiveFactory)
                 .defaultHeader("X-Riot-Token", riotAPIProperties.getApiKey())

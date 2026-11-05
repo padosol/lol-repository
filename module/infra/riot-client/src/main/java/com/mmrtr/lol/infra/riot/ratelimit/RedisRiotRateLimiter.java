@@ -25,9 +25,9 @@ import org.springframework.stereotype.Component;
 /**
  * Redis ZSET 슬라이딩 창으로 버킷 한도를 지키는 {@link RiotRateLimiter}. 키는 모두 {@code riot:rl:} 아래에 있다.
  *
- * <p>규칙(버킷 × 창)마다 ZSET 하나에 허가된 호출의 eventId 를 허가 시각으로 기록하고, {@link #complete} 가 응답 시각으로
- * 옮긴다. 허가는 Lua 하나가 모든 규칙을 검사한 뒤 전부 통과할 때만 모든 규칙에 기록한다. 한도는 Java 가 버킷별로 알고
- * 인자로 넘긴다.
+ * <p>규칙(버킷 × 창)마다 ZSET 하나에 허가된 호출의 eventId 를 허가 시각으로 기록하고, {@link #complete} 가 Riot 한도
+ * 규칙(app·method)의 기록만 응답 시각으로 옮긴다. 허가는 Lua 하나가 모든 규칙을 검사한 뒤 전부 통과할 때만 모든 규칙에
+ * 기록한다. 한도는 Java 가 버킷별로 알고 인자로 넘긴다.
  *
  * <p>기록은 재시작해도 지우지 않는다. 기동 시 초기화를 하지 않으므로 여러 인스턴스가 같은 예산을 나눠 쓴다.
  */
@@ -92,6 +92,10 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
         return acquireScript.eval(keys, args.toArray());
     }
 
+    /**
+     * Riot 한도 규칙(낮춤 규칙 = app·method)의 기록만 응답 시각으로 옮긴다. 응답 시각으로 옮기는 것은 Riot 이 센 도착 시각에
+     * 맞추려는 것이라, 우리가 정한 백필 전용 규칙은 허가 시각에 둔다. 옮기면 백필이 초당 40 / (1 + 응답 지연) 회로 준다.
+     */
     @Override
     public void complete(String eventId, String routing, String method, RiotCallPriority priority) {
         List<Rule> rules = rules(routing, method, priority);
@@ -100,6 +104,9 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
         args.add(eventId);
         args.add(nowArg());
         for (Rule rule : rules) {
+            if (!rule.lowered()) {
+                continue;
+            }
             keys.add(rule.key());
             args.add(String.valueOf(rule.windowMs()));
         }
@@ -157,13 +164,14 @@ public class RedisRiotRateLimiter implements RiotRateLimiter {
         }
     }
 
-    /** 유저 활동 중 낮춤 규칙의 상한에 곱할 비율. */
+    /** 유저 활동 중 낮춤 규칙의 상한에 곱할 비율. 설정이 [0, 1] 밖이면 그 끝으로 자른다 (상한을 넘겨 쓰지 않게). */
     private double ceilingRatio(RiotCallPriority priority) {
-        return switch (priority) {
+        double ratio = switch (priority) {
             case USER -> 1.0;
             case DEFERRED -> config.getDeferredCeilingRatio();
             case BACKGROUND -> config.getBackgroundCeilingRatio();
         };
+        return Math.max(0.0, Math.min(1.0, ratio));
     }
 
     /**

@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.DoubleSupplier;
 import java.util.function.LongSupplier;
 
 /**
@@ -38,19 +40,24 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
     private final MeterRegistry meterRegistry;
     private final Sleeper sleeper;
     private final LongSupplier clock;
+    private final DoubleSupplier random;
 
     public RiotRateLimitInterceptor(RiotRateLimiter limiter, RiotAPIProperties properties,
                                     MeterRegistry meterRegistry) {
-        this(limiter, properties, meterRegistry, Thread::sleep, System::currentTimeMillis);
+        this(limiter, properties, meterRegistry, Thread::sleep, System::currentTimeMillis,
+                () -> ThreadLocalRandom.current().nextDouble());
     }
 
+    /** random 은 [0, 1) 값을 돌려준다. */
     RiotRateLimitInterceptor(RiotRateLimiter limiter, RiotAPIProperties properties,
-                             MeterRegistry meterRegistry, Sleeper sleeper, LongSupplier clock) {
+                             MeterRegistry meterRegistry, Sleeper sleeper, LongSupplier clock,
+                             DoubleSupplier random) {
         this.limiter = limiter;
         this.props = properties.getRateLimit();
         this.meterRegistry = meterRegistry;
         this.sleeper = sleeper;
         this.clock = clock;
+        this.random = random;
     }
 
     @FunctionalInterface
@@ -82,14 +89,19 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
     }
 
     /**
-     * 허가받을 때까지 limiter 가 돌려준 ms 만큼 자고 같은 eventId 로 다시 묻는다. USER 는 누적 대기 + 이번 대기가
+     * 허가받을 때까지 limiter 가 돌려준 ms 를 바탕으로 자고 같은 eventId 로 다시 묻는다. USER 는 누적 대기 + 이번 대기가
      * 상한을 넘으면 자지 않고 포기하고, DEFERRED·BACKGROUND 는 남은 상한만큼 자고 다 쓰면 포기한다.
+     *
+     * <p>자는 시간은 {@link #sleepMillis} 로 최소 간격과 무작위 몫을 더하되 상한까지 남은 시간을 넘지 않는다. 같은 항목이
+     * 창을 빠지기를 기다리던 요청들이 한꺼번에 깨어 Redis 에 몰려 묻지 않게 한다.
      */
     private void awaitPermit(String eventId, String routing, String method, RiotCallPriority priority)
             throws IOException {
         long start = clock.getAsLong();
         long maxWaitMs = maxWaitMs(priority);
         while (true) {
+            meterRegistry.counter("riot.ratelimit.acquire.attempts",
+                    "routing", routing, "priority", priority.name()).increment();
             long wait = limiter.acquire(eventId, routing, method, priority);
             if (wait <= 0L) {
                 meterRegistry.timer("riot.ratelimit.wait", "routing", routing, "priority", priority.name())
@@ -97,21 +109,25 @@ public class RiotRateLimitInterceptor implements ClientHttpRequestInterceptor {
                 return;
             }
             long elapsed = clock.getAsLong() - start;
+            long remaining = maxWaitMs - elapsed;
             if (priority == RiotCallPriority.USER) {
-                // 사용자 호출은 이번 대기로 상한을 넘을 것이 뻔하면 자지 않고 바로 거절한다.
+                // 사용자 호출은 이번 대기(무작위 몫 전)로 상한을 넘을 것이 뻔하면 자지 않고 바로 거절한다.
                 if (elapsed + wait > maxWaitMs) {
                     throw rejected(routing, priority);
                 }
-                sleep(wait);
-                continue;
-            }
-            // 지연·백그라운드는 상한까지 남은 만큼만 자고, 상한을 다 쓴 뒤에야 포기한다.
-            long remaining = maxWaitMs - elapsed;
-            if (remaining <= 0L) {
+            } else if (remaining <= 0L) {
+                // 지연·백그라운드는 상한까지 남은 만큼만 자고, 상한을 다 쓴 뒤에야 포기한다.
                 throw rejected(routing, priority);
             }
-            sleep(Math.min(wait, remaining));
+            sleep(sleepMillis(wait, remaining));
         }
+    }
+
+    /** {@code min(max(wait, retryMinWait) + uniform[0, wait × retryJitterRatio], remaining)}. */
+    private long sleepMillis(long wait, long remaining) {
+        long base = Math.max(wait, props.getRetryMinWait().toMillis());
+        long jitter = (long) (wait * Math.max(0.0, props.getRetryJitterRatio()) * random.getAsDouble());
+        return Math.min(base + jitter, remaining);
     }
 
     private long maxWaitMs(RiotCallPriority priority) {

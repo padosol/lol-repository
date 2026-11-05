@@ -37,12 +37,17 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-/** 실제 Redis limiter + 인터셉터 체인으로 고정 창(20:2) 대역을 지키는지 확인한다. */
+/**
+ * 실제 Redis limiter + 인터셉터 체인으로 한도 20:2 의 상한 18(floor(20 × 0.9))을 지키는지 확인한다.
+ * 가짜 응답에 200ms 지연을 두어, 기록을 응답 시각으로 옮겨도(complete) 어느 2초 구간에도 18건을 넘지 않는지 본다.
+ */
 @Testcontainers
 class RiotRateLimitAcceptanceTest {
 
-    private static final int LIMIT = 20;
+    /** 한도 20:2 의 상한 = floor(20 × 0.9). */
+    private static final int CAP = 18;
     private static final long WINDOW_MS = 2000;
+    private static final int RESPONSE_DELAY_MS = 200;
 
     @Container
     private static final GenericContainer<?> REDIS =
@@ -73,11 +78,12 @@ class RiotRateLimitAcceptanceTest {
         wm.resetAll();
         wm.stubFor(get(urlEqualTo("/ok")).willReturn(aResponse()
                 .withStatus(200)
+                .withFixedDelay(RESPONSE_DELAY_MS)
                 .withHeader("X-App-Rate-Limit", "20:2")));
     }
 
     @Test
-    @DisplayName("USER 호출 30건을 동시에 보내도 어느 2초 구간에도 20건을 넘지 않는다")
+    @DisplayName("USER 호출 30건을 동시에 보내도 어느 2초 구간에도 상한(18)을 넘지 않는다")
     void concurrentUserCalls_neverExceedFixedWindow() throws Exception {
         RestClient client = newClient();
 
@@ -143,7 +149,7 @@ class RiotRateLimitAcceptanceTest {
         }
     }
 
-    /** 요청 시각 기준 슬라이딩 2초 구간(고정 창보다 엄격)마다 20건 이하인지 본다. */
+    /** 가짜 서버가 받은 시각 기준 슬라이딩 2초 구간(고정 창보다 엄격)마다 상한 이하인지 본다. */
     private void assertWithinWindow(int expectedTotal) {
         List<Long> times = wm.getAllServeEvents().stream()
                 .map(ServeEvent::getRequest)
@@ -162,6 +168,6 @@ class RiotRateLimitAcceptanceTest {
             }
             max = Math.max(max, count);
         }
-        assertThat(max).isLessThanOrEqualTo(LIMIT);
+        assertThat(max).isLessThanOrEqualTo(CAP);
     }
 }

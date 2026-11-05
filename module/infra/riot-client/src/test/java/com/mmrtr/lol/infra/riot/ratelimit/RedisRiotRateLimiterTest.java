@@ -147,6 +147,34 @@ class RedisRiotRateLimiterTest {
     }
 
     @Test
+    @DisplayName("낮춘 상한만 막으면 유저 활동 표시가 끝나는 시각까지만 기다린다")
+    void loweredCapWait_endsAtUserMarkerExpiry() {
+        RedisRiotRateLimiter limiter = limiter(rateLimit -> {
+            rateLimit.setUserActiveWindow(Duration.ofSeconds(2));
+            rateLimit.setBackgroundMaxPerSecond(1000);
+        });
+        assertGranted(limiter, USER, 1);
+        assertGranted(limiter, BACKGROUND, 224);
+
+        // 낮춘 상한(225)의 자리는 10초 뒤에 나지만, 2초 뒤 활동 표시가 끝나면 상한이 450 으로 돌아온다
+        assertThat(acquire(limiter, BACKGROUND)).isEqualTo(2_000);
+    }
+
+    @Test
+    @DisplayName("낮춤 비율이 1 을 넘으면 1 로 잘라 BACKGROUND 도 상한(450)에서 멈춘다")
+    void ceilingRatioAboveOne_isClampedToFullCap() {
+        RedisRiotRateLimiter limiter = limiter(rateLimit -> {
+            rateLimit.setBackgroundCeilingRatio(2.0);
+            rateLimit.setBackgroundMaxPerSecond(1000);
+        });
+        assertGranted(limiter, USER, 1);
+
+        assertGranted(limiter, BACKGROUND, 449);
+        assertThat(acquire(limiter, BACKGROUND)).isPositive();
+        assertThat(zset(APP_10).size()).isEqualTo(450);
+    }
+
+    @Test
     @DisplayName("유저 활동 중 DEFERRED 는 상한의 80%(360) 에서 멈춘다")
     void deferred_stopsAtEightyPercentWhenUserActive() {
         RedisRiotRateLimiter limiter = limiter();
@@ -267,15 +295,16 @@ class RedisRiotRateLimiterTest {
     }
 
     @Test
-    @DisplayName("BACKGROUND 의 complete 는 백필 규칙의 기록도 옮긴다")
-    void complete_backgroundMovesBgRuleToo() {
+    @DisplayName("BACKGROUND 의 complete 는 app 규칙 기록만 옮기고 백필 규칙 기록은 허가 시각에 둔다")
+    void complete_doesNotMoveBackgroundRule() {
         RedisRiotRateLimiter limiter = limiter();
         assertThat(limiter.acquire("b1", ROUTING, METHOD, BACKGROUND)).isZero();
 
         clock.addAndGet(300);
         limiter.complete("b1", ROUTING, METHOD, BACKGROUND);
 
-        assertThat(zset(BG_1).getScore("b1")).isEqualTo((double) (NOW + 300));
+        assertThat(zset(BG_1).getScore("b1")).isEqualTo((double) NOW);
+        assertThat(zset(APP_10).getScore("b1")).isEqualTo((double) (NOW + 300));
     }
 
     @Test

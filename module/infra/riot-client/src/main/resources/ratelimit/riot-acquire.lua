@@ -5,7 +5,8 @@
 -- ARGV: [1] eventId, [2] nowMillis(빈 문자열이면 Redis TIME), [3] 우선순위 level(1 USER, 2 DEFERRED, 3 BACKGROUND),
 --       [4] 유저 활동 중 낮춤 규칙에 곱할 비율, [5] 유저 활동 표시 ms,
 --       [6..] 규칙마다 3개씩 (상한, 창 ms, 낮춤 여부 0/1). KEYS[4..] 와 같은 순서다.
--- 반환: 0 = 허가(기록함), 양수 = 그만큼 ms 뒤 다시 물어야 한다(기록 안 함)
+-- 반환: 0 = 허가(기록함), 양수 = 그만큼 ms 뒤 다시 물어야 한다(기록 안 함).
+--       낮춘 상한만 막았으면(모든 규칙이 원래 상한으로는 통과) 유저 활동 표시가 끝나는 시각보다 늦게 돌려주지 않는다.
 -- TIME 뒤에 쓰기를 하므로 효과 복제를 켠다 (Redis 5 이상에서는 기본값이라 no-op)
 redis.replicate_commands()
 local now
@@ -49,13 +50,16 @@ end
 
 -- 유저 활동 중이면 DEFERRED·BACKGROUND 는 낮춤 규칙(app·method)의 상한을 ratio 배로 낮춘다
 local factor = 1
-if level > 1 and tonumber(redis.call('GET', KEYS[3]) or '0') > now then
+local userUntil = tonumber(redis.call('GET', KEYS[3]) or '0')
+if level > 1 and userUntil > now then
   factor = ratio
 end
 
 -- 1단계: 창을 빠진 항목(score <= now - 창)을 지우고 센다. 넘으면 인덱스 n - 상한 항목이 창을 빠질 때까지 기다린다.
 -- 상한이 개수보다 작을 수 있어(한도가 줄었거나 낮춘 상한) 가장 오래된 항목이 아니라 이 항목을 본다.
 local maxWait = 0
+-- 원래 상한(cap)으로도 막힌 규칙이 있는지. 없으면 낮춘 상한만 막은 것이다.
+local fullCapBlocked = false
 for i = FIRST_RULE, #KEYS do
   local key = KEYS[i]
   local cap = tonumber(ruleArg(i, 0))
@@ -70,9 +74,16 @@ for i = FIRST_RULE, #KEYS do
     local entry = redis.call('ZRANGE', key, fmt(n - eff), fmt(n - eff), 'WITHSCORES')
     local s = tonumber(entry[2])
     maxWait = math.max(maxWait, math.max(s + window - now, 1))
+    if n >= cap then
+      fullCapBlocked = true
+    end
   end
 end
 if maxWait > 0 then
+  -- 낮춘 상한만 막았으면 유저 활동 표시가 끝나는 시각에 상한이 원래대로 돌아오므로 그때 다시 묻게 한다
+  if not fullCapBlocked and factor < 1 then
+    return math.max(1, math.min(maxWait, userUntil - now))
+  end
   return maxWait
 end
 

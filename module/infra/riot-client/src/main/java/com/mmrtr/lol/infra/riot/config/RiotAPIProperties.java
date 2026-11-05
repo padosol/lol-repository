@@ -40,6 +40,10 @@ public class RiotAPIProperties {
         private Duration userMaxWait = Duration.ofSeconds(10);
         private Duration deferredMaxWait = Duration.ofSeconds(60);
         private Duration backgroundMaxWait = Duration.ofSeconds(30);
+        /** 다시 묻기 전 최소로 자는 시간. 기다린 요청들이 1ms 단위로 깨어 같은 자리를 두고 다시 묻지 않게 한다. */
+        private Duration retryMinWait = Duration.ofMillis(25);
+        /** 자는 시간에 더하는 무작위 몫의 최대 비율 (대기 × 이 비율 이하). 같은 대기를 받은 요청들이 흩어져 깬다. */
+        private double retryJitterRatio = 0.25;
         /** 마지막 USER 요청 뒤 이만큼은 그 routing 을 유저 활동 중으로 본다. */
         private Duration userActiveWindow = Duration.ofSeconds(10);
         /** 유저 활동 중 DEFERRED·BACKGROUND 가 쓸 수 있는 app·method 규칙 상한의 비율. */
