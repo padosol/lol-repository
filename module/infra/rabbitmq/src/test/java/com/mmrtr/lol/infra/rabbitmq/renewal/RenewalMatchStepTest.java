@@ -149,6 +149,67 @@ class RenewalMatchStepTest {
     }
 
     @Test
+    @DisplayName("이미 FAILED 로 끝난 갱신이면 대상을 받지 않고 매치 적재 큐에 백필 순위로 넘긴 뒤 선점을 푼다")
+    void run_failedRenewal_handsTargetsToBackfillWithoutFetching() {
+        // given
+        givenFailedRecord();
+
+        // when
+        step.run(msg("r1", START_TIME), false);
+
+        // then
+        verify(recordPort).recordTargets("p1", "r1", Set.of("m1", "m2"));
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.BACKFILL);
+        verify(messageSender).sendMessageByMatchId("m2", "KR", MatchQueueRank.BACKFILL);
+        verify(matchApiPort, never()).fetchMatchById(anyString(), anyString(), any());
+        verify(matchApiPort, never()).fetchTimelineById(anyString(), anyString(), any());
+        verify(saveMatchDataUseCase, never()).execute(anyList(), anyList());
+        verify(claimService).release("m1", "r1");
+        verify(claimService).release("m2", "r1");
+        verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
+        assertThat(count("lol.renewal.match_late_handoff")).isEqualTo(2);
+        assertThat(count("lol.renewal.step", "step", "match", "result", "success")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("이미 FAILED 로 끝난 갱신도 다른 갱신이 쥔 매치는 넘기지 않는다")
+    void run_failedRenewal_skipsMatchClaimedByOtherRenewal() {
+        // given
+        givenFailedRecord();
+        given(claimService.claim("m2", "r1")).willReturn(false);
+
+        // when
+        step.run(msg("r1", START_TIME), false);
+
+        // then
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.BACKFILL);
+        verify(messageSender, never()).sendMessageByMatchId(eq("m2"), anyString(), any());
+        verify(claimService, never()).release(eq("m2"), anyString());
+    }
+
+    @Test
+    @DisplayName("이미 FAILED 로 끝난 갱신도 20개가 꽉 차면 21번째부터는 추가 매치 찾기로 넘긴다")
+    void run_failedRenewal_stillHandsRestToMatchFind() {
+        // given
+        givenFailedRecord();
+        List<String> twenty = java.util.stream.IntStream.rangeClosed(1, 20).mapToObj(i -> "m" + i).toList();
+        givenIds(twenty);
+
+        // when
+        step.run(msg("r1", START_TIME), false);
+
+        // then
+        verify(stepPublisher).publishMatchFind(any());
+        verify(matchApiPort, never()).fetchMatchById(anyString(), anyString(), any());
+        assertThat(count("lol.renewal.match_late_handoff")).isEqualTo(20);
+    }
+
+    private void givenFailedRecord() {
+        given(recordPort.find("p1")).willReturn(Optional.of(
+                new RenewalRecord("r1", RenewalStatus.FAILED, "deadline", 2, false, 1_000L, 6_000L, null, "KR")));
+    }
+
+    @Test
     @DisplayName("매치 id 는 메시지의 startTime 부터 0번째 20개를 받는다")
     void run_idsUseStartTimeFromMessage() {
         // when
