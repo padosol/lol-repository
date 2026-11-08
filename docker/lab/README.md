@@ -3,10 +3,20 @@
 실제 Riot 서버 대신 가짜 서버(`:tools:riot-mock`)로 호출을 보내고, 호출량·429·큐 적체를 Grafana 로 본다.
 앱은 `lab` 프로파일로 뜨며, 평소 local DB·Redis·RabbitMQ 와 섞이지 않도록 격리를 강제한다.
 앱·가짜 서버·인프라·관측 스택이 모두 Docker 컨테이너다 (앱은 compose 서비스 `app`, 컨테이너 `lol-lab-app`).
+`docker/lab` 에서 `docker compose up -d --build` 하나로 모두 뜬다. jar 는 이미지 안에서 소스로 빌드하므로 호스트에 JDK 가 없어도 된다.
+
+```bash
+cd docker/lab
+docker compose up -d --build   # 처음엔 이미지 안 Gradle 빌드로 몇 분 걸린다
+docker compose ps              # app 이 (healthy) 가 되면 준비 끝
+```
+
+기동 순서는 compose 가 정한다: postgres·rabbitmq healthy → `init-db`(`lol_lab` 생성)·`init-vhost`(vhost `lab` 생성, guest 권한) 완료 후 종료 → `app`.
+두 init 은 이미 있으면 그대로 두므로 몇 번을 다시 올려도 된다.
 
 ## 개발 모드 절차
 
-1. `bash docker/lab/lab.sh up` — 앱·가짜 서버 jar 를 빌드하고 인프라·관측 스택을 띄운 뒤, `lol_lab` DB 와 vhost `lab` 을 만들고 앱 컨테이너를 띄운다 (포트 8111). 앱 로그에 "Riot 요청을 가짜 서버" WARN 이 한 줄 나온다.
+1. `bash docker/lab/lab.sh up` (또는 위의 `docker compose up -d --build`) — 이미지를 소스에서 빌드하고 모든 서비스를 띄운 뒤, 앱 health 가 UP 이 될 때까지 기다린다 (포트 8111). 앱 로그에 "Riot 요청을 가짜 서버" WARN 이 한 줄 나온다.
 2. `http://localhost:3000` — 실험실 대시보드가 홈이다.
 3. `bash docker/lab/lab.sh seed` — 시작 상태(소환사 4000명, 재방문 풀 첫 갱신)를 만들고 `lol_lab_snapshot` 으로 떠 둔다. 한 번만 하면 된다.
 4. `bash docker/lab/lab.sh run steady` — 시작 상태로 되돌리고 부하를 건 뒤 판정한다. 몇 번이고 다시 돌릴 수 있다.
@@ -14,15 +24,16 @@
 
 - 앱은 seed·run 사이에 다시 띄우지 않는다. run 이 DB 를 스냅숏으로 바꿔도 커넥션 풀이 새 `lol_lab` 에 다시 붙는다.
 - 코드를 바꾸면 `bash docker/lab/lab.sh app` 으로 앱만 다시 빌드해 띄운다. 앱 로그는 `bash docker/lab/lab.sh logs` 로 본다.
-- compose 프로젝트 이름이 `lol-repository` 로 고정이라, `up`·`app`·`reset` 을 돌린 체크아웃(worktree)의 jar 가 컨테이너에 들어간다.
+- compose 프로젝트 이름이 `lol-repository` 로 고정이라, `up`·`app`·`reset` 을 돌린 체크아웃(worktree)의 소스로 이미지가 만들어진다.
+- postgres 데이터는 이름 있는 볼륨 `lol-postgres-data` 에 있어 `docker compose down` 뒤에도 seed·스냅숏이 남는다. `down -v` 를 하면 지워진다.
 
 ## 명령
 
 | 명령 | 동작 |
 |---|---|
-| `up` | 앱·`riot-mock` bootJar 빌드, 7개 서비스 기동, `lol_lab` 생성, vhost `lab` 생성, `rabbitmq_prometheus` 활성화, 앱 컨테이너 기동(health UP 까지 최대 180초) |
-| `down` | 앱과 7개 서비스를 `stop` 한다. `compose down` 이 아니므로 컨테이너·볼륨(기존 postgres·rabbitmq·redis 데이터)이 그대로다 |
-| `app` | 앱 bootJar 를 다시 빌드하고 앱 컨테이너를 새로 만들어 띄운다 (`--no-deps`: 인프라는 건드리지 않는다). 코드를 바꾼 뒤 쓴다 |
+| `up` | `docker compose up -d --build` (이미지 빌드, 모든 서비스 기동, `init-db`·`init-vhost` 뒤 앱 기동) 다음 앱 health UP 까지 기다린다 (최대 180초) |
+| `down` | 모든 서비스를 `stop` 한다. `compose down` 이 아니므로 컨테이너가 그대로다 |
+| `app` | 앱 이미지를 소스에서 다시 빌드하고 앱 컨테이너를 새로 만들어 띄운다 (`--no-deps`: 인프라는 건드리지 않는다). 코드를 바꾼 뒤 쓴다 |
 | `logs` | 앱 컨테이너 로그를 따라간다 (`compose logs -f --tail 200 app`) |
 | `urls` | 앱·Grafana·Prometheus·RabbitMQ·riot-mock 주소 출력 |
 | `limit <한도>` | 가짜 서버의 application 한도를 바꾼다. 예: `limit 100:10` |
@@ -68,6 +79,11 @@ lab.sh 의 조작 API 호출이 실패하면 curl 오류나 가짜 서버의 응
 
 warm 을 초당 5건으로 둔 이유: 한도를 올린 채 초당 50건으로 요청하면 consumer 20개가 막힘 없이 돌아 매치 저장(`MatchService.saveAll`)이 10건 넘게 겹친다.
 `saveAll` 은 트랜잭션 커넥션을 쥔 채 다른 스레드(`timelineSaveExecutor`)의 저장을 기다리고 그 저장도 커넥션을 하나씩 쓰므로, Hikari 풀(15)이 다 잡혀 앱 전체가 30초 멈췄다 (`Connection is not available, request timed out after 30000ms (total=15, active=15, idle=0, waiting=213)`). 앱 쪽 결함이며 이 실험실이 처음 드러냈다.
+
+create 가 `lab27#LAB 조회 실패: status=500` 처럼 몇 초 만에 멈출 때가 있다 (2026-11-08, 앱 컨테이너에서 두 번 중 한 번).
+- **원인:** 빈 DB 에서 같은 리그(`lab-league-0..6`)의 소환사 둘이 동시에 저장됐다. 앱 로그에는 `duplicate key value violates unique constraint "pk_league"` 가 남는다.
+- **앱 결함인 이유:** `LeagueRepositoryImpl.saveIfAbsent` 는 Redis 락 안에서 "조회 → 없으면 저장" 을 한다. 그런데 바깥 `@Transactional`(`SaveSummonerDataUseCase.saveLeagues`)이 커밋하기 전에 락이 풀린다. 그래서 다음 요청도 행을 보지 못하고 같은 리그를 INSERT 한다.
+- **대처:** `reset` 뒤 `seed` 를 다시 돌린다. 리그가 한 번 생기면 더는 나지 않는다.
 
 ### 큐 고르기 (`LAB_QUEUES`)
 
@@ -282,7 +298,9 @@ FAIL
 
 | 단계 | 시간 |
 |---|---|
+| `docker compose up -d --build` (2026-11-08, 컨테이너·이미지 없는 상태) | 104초 (이미지 안 Gradle 빌드 70초 포함). 이미지가 있으면 `down` 뒤 `up -d` 16초 |
 | seed 전체 | 약 330초 (create 12~13초, warm 요청 300초, 큐 비우기 10~11초, 결과 확인 1초 미만, 스냅숏 4초) |
+| seed 전체 (2026-11-08, 앱 컨테이너 · ZSET 리미터) | 1170초 (create 12초, warm 요청 301초, 큐 비우기 846초, 스냅숏 11초). 큐 비우기가 길어진 것은 추가 매치 찾기(`renewal.match.find.queue`)가 백필 상한 초당 40회로 빠지기 때문이다. seed 가 가짜 서버 한도를 올려도 이 상한은 앱 쪽 고정값이다 |
 | run steady (기본값) | 약 7분 (복원·대기 20~40초 + 부하 5분 + 60초 + 판정) |
 | run steady (`RATE=10 DURATION=1m`) | 약 3분 |
 | run burst (기본값, 2026-11-05) | 약 6.5분 (391·397초. 복원·대기 + 부하 약 4.5분 + 60초 + 판정) |
@@ -303,7 +321,7 @@ FAIL
 
 앱·Grafana·Prometheus·riot-mock·redis_exporter 는 인증이 없어 `127.0.0.1` 에만 공개한다.
 
-기본 서비스(postgres·rabbitmq·redis)의 설정을 `docker/lab/compose.yml` 에서 바꾸면 compose 가 기존 컨테이너를 재생성해 데이터가 사라질 수 있다. 그래서 15692 를 공개하지 않는다.
+postgres·rabbitmq·redis 는 `docker/docker-compose.yml` 의 정의를 `extends` 로 가져오고(kafka 는 빼고), 실험실 compose 가 healthcheck 와 postgres 볼륨만 더한다. 컨테이너 이름(`lol-postgres` 등)과 프로젝트가 같아서, 기본 compose 로 같은 서비스를 다시 올리면 설정이 달라 컨테이너가 재생성된다. postgres 데이터는 이름 있는 볼륨이라 실험실 compose 로 돌아오면 다시 붙는다. 15692 는 공개하지 않는다.
 
 ## 확인된 동작
 
@@ -344,11 +362,13 @@ trend 는 실행 시작부터의 누적 값이다 (마지막 값이 k6 요약의
 | `oliver006/redis_exporter` | v1.96.0 |
 | `grafana/k6` | 2.3.0 |
 | `eclipse-temurin` (앱·riot-mock) | `21.0.11_10-jre@sha256:d2b9f8f12212cadcfdf889461531784e8fd097feade954d65b31ee7a71c473ec` (JRE 21.0.11+10. 같은 버전 태그도 OS 패치로 다시 빌드되므로 검증한 이미지를 다이제스트로 고정) |
-| `postgres` / `rabbitmq` / `redis` | 기본 `docker/docker-compose.yml` 그대로 |
+| `eclipse-temurin` (이미지 안 빌드) | `21.0.11_10-jdk@sha256:98155457fcdbeb0987472e8abf721657b698ede407aad52ac24ae42618c0931c` |
+| `postgres` / `rabbitmq` / `redis` | 기본 `docker/docker-compose.yml` 그대로 (`init-db` 는 postgres, `init-vhost` 는 rabbitmq 이미지를 같이 쓴다) |
 
 ## 앱 컨테이너 설정
 
-- 이미지는 `module/app/application/build/libs` 의 jar 하나를 복사한다 (`compose.yml` 의 `dockerfile_inline`). jar 가 없거나 여럿이면 `lab.sh` 가 멈춘다.
+- 이미지는 `docker/lab/Dockerfile` 이 저장소 루트를 context 로 소스에서 빌드한다 (target `app`·`riot-mock` 이 build 단계를 같이 쓴다). Gradle 캐시는 BuildKit 캐시에 남아, 두 번째부터는 바뀐 모듈만 다시 컴파일한다. context 에서 빠지는 파일은 루트 `.dockerignore` 를 따른다.
+- 앱 healthcheck 는 `/actuator/health` 다 (`docker compose ps` 의 `healthy`). run 이 `lol_lab` 을 바꾸는 동안 잠깐 unhealthy 가 될 수 있다.
 - 환경변수는 `compose.yml` 의 `app.environment` 뿐이다: `SPRING_PROFILES_ACTIVE=local,lab`, `DB_HOST=postgres`, `REDIS_HOST=redis`, `RABBITMQ_HOST=rabbitmq`, `RIOT_MOCK_BASE_URL=http://riot-mock:8099`, `TZ=Asia/Seoul`, `JAVA_OPTS`. 계정·키는 `application-lab.yml` 기본값(postgres/1234, guest/guest, `lab-key`)이다.
 - 루트 `.env` 는 컨테이너에 들어가지 않는다. 그래서 아래 "`.env` 키 충돌" 은 `bootRun` 으로 직접 띄울 때만 해당한다.
 - 호스트에서 `bootRun` 으로 띄우던 때와 다른 점: JIT 가 C1 만이 아니고(`bootRun` 은 `-XX:TieredStopAtLevel=1`), 힙 상한이 `-Xmx3g` 이며, 네트워크가 compose 네트워크 안이다. 이전 실행의 수치와 그대로 비교하지 않는다.

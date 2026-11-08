@@ -176,6 +176,14 @@ docker compose -f docker/docker-compose.yml up -d postgres rabbitmq redis
 
 기본 포트: PostgreSQL `5432`, RabbitMQ `5672` (관리 UI `15672`), Redis `6379`.
 
+### Riot API 실험실 (가짜 Riot 서버로 부하 시험)
+
+```bash
+cd docker/lab && docker compose up -d --build   # 인프라·앱·가짜 서버·관측 스택이 모두 뜬다
+```
+
+seed·run 절차와 판정은 [docker/lab/README.md](docker/lab/README.md) 를 본다.
+
 ### 빌드
 
 ```bash

@@ -1,19 +1,91 @@
-# Riot API 실험실 (앱·가짜 서버·관측 스택). docker/docker-compose.yml 위에 얹어 쓴다.
-# 기본 서비스(postgres·rabbitmq·redis)는 건드리지 않는다. 설정을 바꾸면 기존 컨테이너가 재생성된다.
-# 상대 경로는 첫 번째 -f 파일(docker/docker-compose.yml)의 디렉터리 기준이다.
+# Riot API 실험실. docker/lab 에서 `docker compose up -d --build` 하나로 인프라·앱·가짜 서버·관측 스택이 모두 뜬다.
+# 순서: postgres·rabbitmq healthy → init-db(lol_lab)·init-vhost(vhost lab) 완료 → app. jar 는 이미지 안에서 소스로 빌드한다 (Dockerfile).
+# 프로젝트 이름을 기본 compose(docker/docker-compose.yml)와 같게 두고, postgres·rabbitmq·redis 는 그 정의를 extends 로 가져온다 (kafka 는 뺀다).
+# 상대 경로는 이 파일(docker/lab)의 디렉터리 기준이다.
+name: lol-repository
+
 services:
-  # 앱을 local,lab 프로파일로 띄운다. lab.sh 가 호스트에서 bootJar 를 빌드한 뒤 그 jar 로 이미지를 만든다 (riot-mock 과 같은 방식).
-  # lol_lab DB·vhost lab 이 먼저 있어야 하므로 lab.sh 가 인프라 다음에 --no-deps 로 띄운다 (depends_on 을 두지 않는다).
+  postgres:
+    extends:
+      file: ../docker-compose.yml
+      service: postgres
+    # 실험실 DB(lol_lab·lol_lab_snapshot, 합쳐 약 15GB)가 compose down 뒤에도 남게 이름 있는 볼륨에 둔다.
+    # postgres 18 이미지의 VOLUME 은 /var/lib/postgresql 이다 (PGDATA 는 그 아래 18/docker)
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    # 첫 기동의 initdb 임시 서버는 TCP 를 열지 않으므로, TCP 로 물어야 진짜 서버가 뜬 뒤에 healthy 가 된다
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  rabbitmq:
+    extends:
+      file: ../docker-compose.yml
+      service: rabbitmq
+    # AMQP·관리 API(15672)·지표(15692) 리스너가 모두 열려야 healthy 다. rabbitmq_prometheus 는 이미지가 기본으로 켠다
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      start_period: 20s
+      retries: 24
+
+  redis:
+    extends:
+      file: ../docker-compose.yml
+      service: redis
+
+  # lol_lab DB 를 만든다 (있으면 그대로 둔다). 테이블은 앱 기동 때 Flyway 가 만든다. 끝나면 종료한다.
+  init-db:
+    image: postgres:18-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: "1234"
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        if psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'lol_lab'" | grep -q 1; then
+          echo "lol_lab 있음"
+        else
+          psql -q -c "CREATE DATABASE lol_lab"
+          echo "lol_lab 생성"
+        fi
+
+  # vhost lab 을 만들고 guest 에 권한을 준다 (있으면 그대로 둔다). 큐는 앱 기동 때 RabbitAdmin 이 만든다. 끝나면 종료한다.
+  init-vhost:
+    image: rabbitmq:3.13-management
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        rabbitmqadmin -H rabbitmq -u guest -p guest declare vhost name=lab
+        rabbitmqadmin -H rabbitmq -u guest -p guest declare permission vhost=lab user=guest 'configure=.*' 'write=.*' 'read=.*'
+
+  # 앱을 local,lab 프로파일로 띄운다. lol_lab·vhost lab 이 준비된 뒤에 뜬다.
   # .env 는 넣지 않는다. 주소는 compose 서비스 이름이고, 계정·키는 application-lab.yml 기본값(postgres/1234, guest, lab-key)이다.
   app:
     build:
-      context: ../module/app/application/build/libs
-      dockerfile_inline: |
-        FROM eclipse-temurin:21.0.11_10-jre@sha256:d2b9f8f12212cadcfdf889461531784e8fd097feade954d65b31ee7a71c473ec
-        COPY *.jar /app/app.jar
-        EXPOSE 8111 8112
-        ENTRYPOINT ["sh", "-c", "exec java $$JAVA_OPTS -jar /app/app.jar"]
+      context: ../..
+      dockerfile: docker/lab/Dockerfile
+      target: app
     container_name: lol-lab-app
+    depends_on:
+      init-db:
+        condition: service_completed_successfully
+      init-vhost:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      riot-mock:
+        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: local,lab
       DB_HOST: postgres
@@ -24,13 +96,21 @@ services:
       TZ: Asia/Seoul
       # Docker Desktop VM 메모리(약 8GB)를 다른 컨테이너와 나눠 쓴다. 호스트 실행 때 힙 최대 사용량은 약 1.7GB 였다
       JAVA_OPTS: ${LAB_APP_JAVA_OPTS:--Xmx3g}
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "-o", "/dev/null", "http://localhost:8111/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 180s
+      retries: 3
     ports:
       - "127.0.0.1:8111:8111"
       - "127.0.0.1:8112:8112"
 
   riot-mock:
     build:
-      context: ../tools/riot-mock
+      context: ../..
+      dockerfile: docker/lab/Dockerfile
+      target: riot-mock
     container_name: lol-lab-riot-mock
     ports:
       - "127.0.0.1:8099:8099"
@@ -52,7 +132,7 @@ services:
       - --web.enable-remote-write-receiver
       - --storage.tsdb.retention.time=2d
     volumes:
-      - ./lab/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "127.0.0.1:${LAB_PROMETHEUS_PORT:-9090}:9090"
 
@@ -66,8 +146,8 @@ services:
       GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/riot-api-lab.json
     volumes:
-      - ./lab/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./lab/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "127.0.0.1:${LAB_GRAFANA_PORT:-3000}:3000"
     depends_on:
@@ -84,4 +164,9 @@ services:
       # 기본 5초면 대시보드의 rate(...[5s]) 창에 표본이 하나뿐이라 값이 비어 보인다
       K6_PROMETHEUS_RW_PUSH_INTERVAL: 1s
     volumes:
-      - ./lab/k6:/scripts
+      - ./k6:/scripts
+
+volumes:
+  # compose down 으로는 지워지지 않는다 (down -v 를 하면 지워진다)
+  postgres-data:
+    name: lol-postgres-data

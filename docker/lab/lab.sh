@@ -11,9 +11,6 @@ APP_URL="${APP_URL:-http://localhost:8111}"
 # k6 컨테이너에서 본 앱 주소 (같은 compose 네트워크). Prometheus 수집 대상은 prometheus.yml 의 app:8111 고정이다.
 K6_APP_URL="${K6_APP_URL:-http://app:8111}"
 PROM_URL="${PROM_URL:-http://localhost:${LAB_PROMETHEUS_PORT:-9090}}"
-# 앱(app)을 뺀 인프라·관측 서비스. 앱은 lol_lab·vhost lab 을 만든 뒤 start_app 이 따로 띄운다.
-LAB_SERVICES=(postgres rabbitmq redis prometheus grafana riot-mock redis-exporter)
-APP_JAR_DIR=module/app/application/build/libs
 APP_START_TIMEOUT_SECONDS=180
 DRAIN_TIMEOUT_SECONDS=1800
 # 갱신 처리를 기다리고 적체를 판정할 vhost lab 큐. 갱신 단계 큐(계정·리그·매치)와 추가 매치 검색 큐를 이름으로 고른다.
@@ -28,8 +25,9 @@ SEED_LIMITS='{"app":"100000:10","methods":{"account-v1.by-riot-id":"100000:10","
 '"match-v5.match":"100000:10","match-v5.timeline":"100000:10"}}'
 SEED_SAVED_LIMITS=""
 
+# 실험실 compose 하나로 인프라·앱·가짜 서버·관측 스택을 다룬다 (프로젝트 이름은 파일의 name: lol-repository).
 compose() {
-  docker compose -p lol-repository -f docker/docker-compose.yml -f docker/lab/compose.yml "$@"
+  docker compose -f docker/lab/compose.yml "$@"
 }
 
 psql_admin() {
@@ -40,44 +38,10 @@ psql_lab() {
   compose exec -T postgres psql -U postgres -d lol_lab -v ON_ERROR_STOP=1 -tA "$@"
 }
 
-wait_infra() {
-  local i
-  for i in $(seq 1 60); do
-    compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1 && break
-    sleep 1
-  done
-  compose exec -T postgres pg_isready -U postgres >/dev/null
-  for i in $(seq 1 90); do
-    compose exec -T rabbitmq rabbitmq-diagnostics -q check_running >/dev/null 2>&1 && break
-    sleep 1
-  done
-  compose exec -T rabbitmq rabbitmq-diagnostics -q check_running >/dev/null
-}
-
-ensure_lab_db() {
-  if [ -z "$(psql_admin -c "SELECT 1 FROM pg_database WHERE datname = 'lol_lab'")" ]; then
-    psql_admin -c "CREATE DATABASE lol_lab" >/dev/null
-    echo "lol_lab 생성"
-  fi
-}
-
-ensure_vhost() {
-  compose exec -T rabbitmq rabbitmqctl add_vhost lab >/dev/null 2>&1 || true
-  compose exec -T rabbitmq rabbitmqctl set_permissions -p lab guest ".*" ".*" ".*" >/dev/null
-}
-
-# 앱 이미지는 build/libs 의 jar 하나를 복사한다. 버전이 바뀌어 jar 가 여럿 남으면 어느 것을 쓸지 몰라 멈춘다.
-require_single_app_jar() {
-  local jars
-  jars=("${APP_JAR_DIR}"/*.jar)
-  if [ ! -e "${jars[0]}" ]; then
-    echo "${APP_JAR_DIR} 에 앱 jar 가 없습니다. 먼저 bash docker/lab/lab.sh up 이나 app 을 하세요" >&2
-    exit 1
-  fi
-  if [ "${#jars[@]}" -ne 1 ]; then
-    echo "${APP_JAR_DIR} 에 jar 가 ${#jars[@]}개 있습니다. ./gradlew :module:app:application:clean 뒤 다시 하세요" >&2
-    exit 1
-  fi
+# lol_lab DB 와 vhost lab 을 compose 의 init-db·init-vhost 로 만든다 (있으면 그대로 둔다). reset 이 지운 뒤 쓴다.
+ensure_lab_db_and_vhost() {
+  compose run --rm --no-deps init-db
+  compose run --rm --no-deps init-vhost
 }
 
 # 앱 컨테이너가 떠 있는지 (멈췄으면 health 를 더 기다리지 않는다).
@@ -103,11 +67,10 @@ wait_app_healthy() {
   return 1
 }
 
-# 앱 컨테이너를 새로 만든다 (jar 가 바뀌었으면 이미지도 다시 만든다). 기동 때 Flyway 가 테이블을, RabbitAdmin 이 큐를 만든다.
+# 앱 이미지를 소스에서 다시 빌드하고 앱 컨테이너를 새로 만든다. 기동 때 Flyway 가 테이블을, RabbitAdmin 이 큐를 만든다.
 # --no-deps: 인프라 컨테이너는 건드리지 않는다. --force-recreate: 같은 이미지여도 다시 띄운다 (reset 뒤).
 start_app() {
   local started
-  require_single_app_jar
   started=$(date +%s)
   compose up -d --no-deps --build --force-recreate app
   wait_app_healthy "$APP_START_TIMEOUT_SECONDS"
@@ -115,26 +78,24 @@ start_app() {
   echo "앱 기동 $(( $(date +%s) - started ))초 (${APP_URL}, 로그: bash docker/lab/lab.sh logs)"
 }
 
+# `docker compose up -d --build` 와 같다. compose 가 init-db·init-vhost 를 끝낸 뒤 앱을 띄우고, 여기서 health UP 까지 기다린다.
 cmd_up() {
-  ./gradlew :tools:riot-mock:bootJar :module:app:application:bootJar
-  compose up -d --build "${LAB_SERVICES[@]}"
-  wait_infra
-  ensure_lab_db
-  ensure_vhost
-  compose exec -T rabbitmq rabbitmq-plugins enable rabbitmq_prometheus >/dev/null
-  start_app
+  local started
+  started=$(date +%s)
+  compose up -d --build
+  wait_app_healthy "$APP_START_TIMEOUT_SECONDS"
+  require_lab_app
+  echo "기동 $(( $(date +%s) - started ))초 (이미지 빌드 포함)"
   cmd_urls
 }
 
-# 볼륨과 컨테이너를 지우는 `compose down` 은 쓰지 않는다. 멈추기만 한다. 앱을 먼저 멈춘다.
+# 볼륨과 컨테이너를 지우는 `compose down` 은 쓰지 않는다. 멈추기만 한다 (compose 가 앱을 먼저 멈춘다).
 cmd_down() {
-  compose stop app
-  compose stop "${LAB_SERVICES[@]}"
+  compose stop
 }
 
 # 코드를 바꾼 뒤 앱만 다시 빌드해 띄운다.
 cmd_app() {
-  ./gradlew :module:app:application:bootJar
   start_app
 }
 
@@ -449,10 +410,9 @@ cmd_reset() {
   compose stop app
   psql_admin -c "DROP DATABASE IF EXISTS lol_lab WITH (FORCE)" >/dev/null
   psql_admin -c "DROP DATABASE IF EXISTS lol_lab_snapshot WITH (FORCE)" >/dev/null
-  psql_admin -c "CREATE DATABASE lol_lab" >/dev/null
   compose exec -T redis redis-cli -n 1 FLUSHDB
   compose exec -T rabbitmq rabbitmqctl delete_vhost lab >/dev/null 2>&1 || true
-  ensure_vhost
+  ensure_lab_db_and_vhost
   mock_reset 0
   echo
   start_app

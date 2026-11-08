@@ -88,7 +88,7 @@ flowchart TB
 
 ## 도구 프로젝트 (`tools/`)
 
-- **`tools:riot-mock`** — Riot API 실험실(`docker/lab/`)이 쓰는 가짜 Riot 서버. 한도 판정·429·심판 지표(`riot_mock_*`)를 낸다. 자체 Spring Boot 앱이고 `riot-mock.jar` 로 따로 빌드돼 실험실 컨테이너(`tools/riot-mock/Dockerfile`)로만 뜬다.
+- **`tools:riot-mock`** — Riot API 실험실(`docker/lab/`)이 쓰는 가짜 Riot 서버. 한도 판정·429·심판 지표(`riot_mock_*`)를 낸다. 자체 Spring Boot 앱이고 `riot-mock.jar` 로 따로 빌드돼 실험실 컨테이너(`docker/lab/Dockerfile` 의 target `riot-mock`)로만 뜬다.
 - 의존: `module:domain:match` 의 readmodel(MatchDto·TimelineDto)만 쓴다. 테스트는 헤더 계약 확인용으로 `module:infra:riot-client` 의 `RateLimitWindow` 파서를 전이 의존 없이 쓴다.
 - `module:app:application` 은 이 프로젝트에 의존하지 않는다. 운영 jar·이미지에 들어가지 않는다.
 - 단 `settings.gradle` 이 include 하므로 Gradle 빌드에는 `tools/` 디렉터리가 있어야 한다 (운영 `docker/Dockerfile` 도 빌드 단계에 복사한다. 없으면 설정 단계에서 실패).
