@@ -181,21 +181,44 @@ class RenewalMatchFetcherTest {
     }
 
     @Test
-    @DisplayName("타임라인만 받는 항목이 실패하면 나중 타임라인으로 넘긴다 (4xx 여도)")
+    @DisplayName("타임라인만 받는 항목이 429·5xx·IO 로 실패하거나 본문이 비면 나중 타임라인으로 넘긴다")
     void timelineOnlyFailureGoesToTimelineLater() {
         // given
         matchApi.timelines.put("m1", CompletableFuture.failedFuture(serverError()));
-        matchApi.timelines.put("m2", CompletableFuture.failedFuture(
+        matchApi.timelines.put("m2", CompletableFuture.failedFuture(rateLimit()));
+        matchApi.timelines.put("m3", CompletableFuture.failedFuture(
+                new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out"))));
+        matchApi.timelines.put("m4", CompletableFuture.completedFuture(null));
+
+        // when
+        Result result = fetcher.fetch("KR", List.of(new Item("m1", false, true), new Item("m2", false, true),
+                new Item("m3", false, true), new Item("m4", false, true)));
+
+        // then
+        assertThat(result.timelineLater()).containsExactly("m1", "m2", "m3", "m4");
+        assertThat(result.fetched()).isEmpty();
+        assertThat(result.clientError()).isEmpty();
+        assertThat(result.userRetry()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("타임라인만 받는 항목이 4xx(429 제외)로 실패하면 나중 타임라인으로 넘기지 않고 버린다")
+    void timelineOnlyClientErrorIsDropped() {
+        // given
+        matchApi.timelines.put("m1", CompletableFuture.failedFuture(
                 new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
+        matchApi.timelines.put("m2", CompletableFuture.failedFuture(
+                new RiotClientException(HttpStatus.BAD_REQUEST, "", null)));
 
         // when
         Result result = fetcher.fetch("KR", List.of(new Item("m1", false, true), new Item("m2", false, true)));
 
         // then
-        assertThat(result.timelineLater()).containsExactly("m1", "m2");
+        assertThat(result.timelineLater()).isEmpty();
         assertThat(result.fetched()).isEmpty();
         assertThat(result.clientError()).isEmpty();
         assertThat(result.userRetry()).isEmpty();
+        assertThat(result.denied()).isEmpty();
     }
 
     @Test

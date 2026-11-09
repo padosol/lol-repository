@@ -81,7 +81,8 @@ public class RenewalMatchFetcher {
     /**
      * match 를 받으면 fetched 다 (timeline 을 받지 못하면 null 로 두고 timelineLater 에도 넣는다).
      * match 가 4xx(429 제외)면 clientError, 그 밖의 실패면 userRetry 이고 timeline 결과는 버린다.
-     * 타임라인만 받는 항목은 받으면 fetched, 못 받으면 timelineLater 다. 빈 본문은 받지 못한 것으로 본다.
+     * 타임라인만 받는 항목은 받으면 fetched, 4xx(429 제외)면 버리고, 그 밖에 못 받으면 timelineLater 다.
+     * 빈 본문은 받지 못한 것으로 본다.
      */
     private static void classify(Pending pending, Result collected) {
         String matchId = pending.item().matchId();
@@ -90,6 +91,10 @@ public class RenewalMatchFetcher {
         if (!pending.item().match()) {
             if (timeline != null) {
                 collected.fetched().add(new Fetched(matchId, null, timeline));
+            } else if (isClientError(timelineFailure)) {
+                // 다시 받아도 같은 4xx 라 나중 타임라인으로 넘기지 않는다
+                log.warn("갱신 타임라인 조회 4xx. 나중 타임라인으로 넘기지 않고 버린다. matchId={}, timeline={}",
+                        matchId, describe(timelineFailure));
             } else {
                 log.warn("갱신 타임라인 조회 실패. 나중 타임라인으로 넘긴다. matchId={}, timeline={}",
                         matchId, describe(timelineFailure));
@@ -159,7 +164,7 @@ public class RenewalMatchFetcher {
     /**
      * @param fetched       받은 것 (저장한다)
      * @param userRetry     match 가 429·5xx·IO·시간 초과 등으로 실패한 매치
-     * @param timelineLater 타임라인을 받지 못한 id (match 는 받았거나, 타임라인만 받는 항목)
+     * @param timelineLater 타임라인을 받지 못한 id (match 는 받았거나, 타임라인만 받는 항목 — 그 4xx 는 빠진다)
      * @param clientError   match 가 4xx(429 제외)로 실패한 매치
      * @param denied        세 번 모두 허가가 거절된 항목 (허가 조회 예외로 시작하지 못한 것 포함)
      */
