@@ -7,6 +7,7 @@ import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRequestAttributes;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotPermit;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -471,6 +472,10 @@ class RiotRateLimitInterceptorTest {
                 return alwaysWait;
             }
             return results.isEmpty() ? 0L : results.poll();
+        }
+
+        @Override
+        public void complete(RiotPermit permit) {
         }
 
         @Override

@@ -1,6 +1,7 @@
 package com.mmrtr.lol.infra.riot.ratelimit;
 
 import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotPermit;
 import java.time.Duration;
 
 /**
@@ -17,6 +18,9 @@ public interface RiotRateLimiter {
 
     /** 허가된 호출의 기록을 지금 시각(응답·실패 시각)으로 옮긴다. 기록이 없으면 아무것도 하지 않는다. */
     void complete(String eventId, String routing, String method, RiotCallPriority priority);
+
+    /** 허가된 permit 의 기록을 지금 시각(응답·실패 시각)으로 옮긴다. */
+    void complete(RiotPermit permit);
 
     /** 응답 헤더로 한도를 배운다. 빈 헤더·잘못된 헤더는 무시한다. */
     void learnLimits(String routing, String method, String appLimitHeader, String methodLimitHeader);
