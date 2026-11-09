@@ -47,6 +47,7 @@ import org.springframework.stereotype.Component;
  * 다른 갱신까지 match_failed 로 끝내므로, 매치 자체가 잘못된 경우에만 남긴다.
  * 계속 실패해 대상에서 뺀 매치는 버리지 않고 매치 적재 큐에 백필 순위로 넘긴다. 커서가 그 매치를 지나가도 잃지 않는다 (G8).
  * 매치 대상이 전부 저장되면 매치 비트를 켜고(최신 3게임 타임라인은 조건이 아니다), 아니면 판정기가 DB 를 보고 켠다.
+ * 나중 타임라인 발행은 매치 비트 판단 뒤에 하고, 실패해도 갱신을 실패시키지 않는다.
  * 밖으로 던지는 예외는 첫 전달의 저장 실패뿐이다 (재전달받아 DB 에 쓴 뒤에만 ack 한다).
  */
 @Slf4j
@@ -55,6 +56,7 @@ public class RenewalMatchStep {
 
     private static final int MATCH_COUNT = 20;
     private static final String EXCLUDED_METRIC = "lol.renewal.match_excluded";
+    private static final String TIMELINE_LATER_PUBLISH_FAILED_METRIC = "lol.renewal.timeline_later.publish_failed";
 
     private final RenewalRecordPort recordPort;
     private final MatchApiPort matchApiPort;
@@ -132,11 +134,12 @@ public class RenewalMatchStep {
             List<Item> items = claim(plan.items(), renewalId, claimed);
             Result result = fetcher.fetch(platformName, items);
             int savedMatches = save(puuid, result.fetched());
-            handOff(platformName, result);
+            handOffForRetry(platformName, result);
             releaseQuietly(claimed, renewalId);
             if (savedMatches == plan.matchTargets().size()) {
                 finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.of(RenewalStep.MATCH)));
             }
+            handOffTimelineLater(platformName, result);
             handOffRest(message, platformName, ids);
             failures.success();
         } catch (MatchSaveFailure e) {
@@ -220,29 +223,43 @@ public class RenewalMatchStep {
     }
 
     /**
-     * 못 받은 것을 매치 적재 큐에 id 로 넘긴다. 허가가 거절된 매치와 match 가 429·5xx·IO·시간 초과로 실패한 매치는
-     * 사용자 재시도 순위로(그 길은 match·timeline 을 둘 다 받는다), 타임라인을 받지 못한 것 — 거절된 타임라인만 항목,
-     * 타임라인 없이 저장한 매치, 실패한 타임라인 — 은 id 마다 한 번 나중 타임라인 순위로 넘긴다. 타임라인만 필요한 항목을
-     * 사용자 재시도로 넘기면 DB 에 있는 매치라 DUPLICATE 로 버려지기 때문이다. match 가 4xx 면 실패 표시만 남긴다.
+     * 다시 받아야 할 매치를 매치 적재 큐에 id 로 넘긴다. 허가가 거절된 매치와 match 가 429·5xx·IO·시간 초과로 실패한 매치는
+     * 사용자 재시도 순위로 넘긴다(그 길은 match·timeline 을 둘 다 받는다). match 가 4xx 면 실패 표시만 남긴다.
+     * 이 매치들은 갱신 완료에 필요하므로 발행이 던지면 run 까지 올려 갱신을 실패시킨다.
      */
-    private void handOff(String platformName, Result result) {
+    private void handOffForRetry(String platformName, Result result) {
+        result.denied().stream()
+                .filter(Item::match)
+                .forEach(item -> messageSender.sendMessageByMatchId(item.matchId(), platformName,
+                        MatchQueueRank.USER_RETRY));
+        result.userRetry().forEach(matchId ->
+                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.USER_RETRY));
+        result.clientError().forEach(claimService::markFailed);
+    }
+
+    /**
+     * 타임라인을 받지 못한 것 — 거절된 타임라인만 항목, 타임라인 없이 저장한 매치, 실패한 타임라인 — 을 id 마다 한 번
+     * 나중 타임라인 순위로 넘긴다. 타임라인만 필요한 항목을 사용자 재시도로 넘기면 DB 에 있는 매치라 DUPLICATE 로 버려지기
+     * 때문이다. 타임라인은 갱신 성공 조건이 아니라서 발행 실패는 경고 로그와
+     * {@code lol.renewal.timeline_later.publish_failed} 로 남기고 다음 id 로 간다.
+     */
+    private void handOffTimelineLater(String platformName, Result result) {
         Set<String> timelineLater = new LinkedHashSet<>();
-        for (Item item : result.denied()) {
-            if (item.match()) {
-                messageSender.sendMessageByMatchId(item.matchId(), platformName, MatchQueueRank.USER_RETRY);
-            } else {
-                timelineLater.add(item.matchId());
-            }
-        }
+        result.denied().stream()
+                .filter(item -> !item.match())
+                .forEach(item -> timelineLater.add(item.matchId()));
         result.fetched().stream()
                 .filter(fetched -> fetched.match() != null && fetched.timeline() == null)
                 .forEach(fetched -> timelineLater.add(fetched.matchId()));
         timelineLater.addAll(result.timelineLater());
-        timelineLater.forEach(matchId ->
-                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.TIMELINE_LATER));
-        result.userRetry().forEach(matchId ->
-                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.USER_RETRY));
-        result.clientError().forEach(claimService::markFailed);
+        for (String matchId : timelineLater) {
+            try {
+                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.TIMELINE_LATER);
+            } catch (RuntimeException e) {
+                log.warn("나중 타임라인 발행 실패. 그 타임라인은 채워지지 않는다. matchId={}, cause={}", matchId, e.toString());
+                meterRegistry.counter(TIMELINE_LATER_PUBLISH_FAILED_METRIC).increment();
+            }
+        }
     }
 
     /** 20개를 꽉 채웠으면 21번째부터는 백그라운드 매치 검색이 찾는다. */

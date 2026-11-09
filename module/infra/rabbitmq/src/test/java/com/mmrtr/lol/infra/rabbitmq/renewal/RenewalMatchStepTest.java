@@ -486,12 +486,72 @@ class RenewalMatchStepTest {
         // given
         givenMatch("m1", CompletableFuture.failedFuture(rateLimit()));
         doThrow(new IllegalStateException("mq down"))
-                .when(messageSender).sendMessageByMatchId(anyString(), anyString(), any());
+                .when(messageSender).sendMessageByMatchId(anyString(), anyString(), eq(MatchQueueRank.USER_RETRY));
 
         // when // then
         assertThatCode(() -> step.run(msg("r1", 0), false)).doesNotThrowAnyException();
         verify(finisher).fail("p1", "r1", "other");
         verify(claimService).release("m1", "r1");
+    }
+
+    @Test
+    @DisplayName("나중 타임라인 발행이 실패해도 매치 대상을 모두 저장했으면 매치 비트를 켜고 갱신을 실패시키지 않는다")
+    void timelineLaterPublishFailure_doesNotFailRenewal() {
+        // given: m4·m5 는 타임라인 없이 저장돼 나중 타임라인으로 간다. m4 발행이 실패한다
+        givenIds(List.of("m1", "m2", "m3", "m4", "m5"));
+        doThrow(new IllegalStateException("mq down"))
+                .when(messageSender).sendMessageByMatchId("m4", "KR", MatchQueueRank.TIMELINE_LATER);
+
+        // when // then
+        assertThatCode(() -> step.run(msg("r1", 0), false)).doesNotThrowAnyException();
+        verify(recordPort).markSteps("p1", "r1", MATCH);
+        verify(finisher).finish("p1", RenewalTransition.NONE);
+        verify(finisher, never()).fail(anyString(), anyString(), anyString());
+        verify(messageSender).sendMessageByMatchId("m5", "KR", MatchQueueRank.TIMELINE_LATER);
+        assertThat(count("lol.renewal.timeline_later.publish_failed")).isEqualTo(1);
+        assertThat(count("lol.renewal.step", "step", "match", "result", "success")).isEqualTo(1);
+        assertThat(count("lol.renewal.step", "step", "match", "result", "failed")).isZero();
+    }
+
+    @Test
+    @DisplayName("사용자 재시도 발행과 실패 표시는 나중 타임라인 발행보다 먼저 하고, 나중 타임라인 발행 실패가 이를 건너뛰게 하지 않는다")
+    void userRetryAndMarkFailedRunBeforeTimelineLater() {
+        // given: m1 은 429 → 사용자 재시도, m2 는 400 → 실패 표시, m3 는 타임라인만 실패, m4 는 타임라인 대상 밖
+        givenIds(List.of("m1", "m2", "m3", "m4"));
+        givenMatch("m1", CompletableFuture.failedFuture(rateLimit()));
+        givenMatch("m2", CompletableFuture.failedFuture(new RiotClientException(HttpStatus.BAD_REQUEST, "", null)));
+        givenTimeline("m3", CompletableFuture.failedFuture(
+                new RiotServerException(HttpStatus.SERVICE_UNAVAILABLE, "")));
+        doThrow(new IllegalStateException("mq down"))
+                .when(messageSender).sendMessageByMatchId(anyString(), anyString(), eq(MatchQueueRank.TIMELINE_LATER));
+
+        // when // then
+        assertThatCode(() -> step.run(msg("r1", 0), false)).doesNotThrowAnyException();
+        InOrder order = inOrder(messageSender, claimService);
+        order.verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
+        order.verify(claimService).markFailed("m2");
+        order.verify(messageSender).sendMessageByMatchId("m3", "KR", MatchQueueRank.TIMELINE_LATER);
+        order.verify(messageSender).sendMessageByMatchId("m4", "KR", MatchQueueRank.TIMELINE_LATER);
+        verify(finisher, never()).fail(anyString(), anyString(), anyString());
+        verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
+        assertThat(count("lol.renewal.timeline_later.publish_failed")).isEqualTo(2);
+        assertThat(count("lol.renewal.step", "step", "match", "result", "success")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("거절된 매치 항목은 타임라인 대상이어도 사용자 재시도로만 넘기고 나중 타임라인으로는 넘기지 않는다")
+    void deniedTimelineMatchItemsAreNotAlsoSentTimelineLater() {
+        // given: m1·m2 는 새 매치이자 최신 3게임이라 match·timeline 을 함께 받는 항목이다
+        denyMatchBatches();
+
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
+        verify(messageSender).sendMessageByMatchId("m2", "KR", MatchQueueRank.USER_RETRY);
+        verify(messageSender, never())
+                .sendMessageByMatchId(anyString(), anyString(), eq(MatchQueueRank.TIMELINE_LATER));
     }
 
     @Test
