@@ -14,6 +14,9 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -35,18 +38,22 @@ public class SummonerApiAdapter implements SummonerApiPort {
 
     @Override
     public CompletableFuture<Summoner> fetchSummonerByRiotId(
-            String gameName, String tagLine, String platformName, Executor executor) {
+            String gameName, String tagLine, String platformName, RiotPermits permits, Executor executor) {
         Platform platform = Platform.valueOfName(platformName);
+        // summoner·league 는 thenCompose 안(다른 스레드)에서 부르므로 세 허가 모두 이 스레드에서 미리 꺼낸다
+        RiotPermit accountPermit = permits.take(RiotMethod.ACCOUNT_BY_RIOT_ID);
+        RiotPermit summonerPermit = permits.take(RiotMethod.SUMMONER_BY_PUUID);
+        RiotPermit leaguePermit = permits.take(RiotMethod.LEAGUE_ENTRIES_BY_PUUID);
 
-        return riotApiService.getAccountByRiotId(gameName, tagLine, platform, executor)
+        return riotApiService.getAccountByRiotId(gameName, tagLine, platform, accountPermit, executor)
                 .thenCompose(accountDto -> {
                     log.debug("fetchSummonerByRiotId platform {} gameName {}", platformName, gameName);
                     String puuid = accountDto.getPuuid();
 
                     CompletableFuture<SummonerDto> summonerDtoFuture = riotApiService
-                            .getSummonerByPuuid(puuid, platform, executor);
+                            .getSummonerByPuuid(puuid, platform, summonerPermit, executor);
                     CompletableFuture<Set<LeagueEntryDto>> leagueEntriesFuture = riotApiService
-                            .getLeagueEntriesByPuuid(puuid, platform, executor);
+                            .getLeagueEntriesByPuuid(puuid, platform, leaguePermit, executor);
 
                     return summonerDtoFuture.thenCombine(
                             leagueEntriesFuture,
@@ -74,15 +81,15 @@ public class SummonerApiAdapter implements SummonerApiPort {
 
     @Override
     public CompletableFuture<Summoner> fetchSummonerByPuuid(
-            String puuid, String platformName, Executor executor) {
+            String puuid, String platformName, RiotPermits permits, Executor executor) {
         Platform platform = Platform.valueOfName(platformName);
 
         CompletableFuture<AccountDto> accountDtoFuture = riotApiService
-                .getAccountByPuuid(puuid, platform, executor);
+                .getAccountByPuuid(puuid, platform, permits.take(RiotMethod.ACCOUNT_BY_PUUID), executor);
         CompletableFuture<SummonerDto> summonerDtoFuture = riotApiService
-                .getSummonerByPuuid(puuid, platform, executor);
+                .getSummonerByPuuid(puuid, platform, permits.take(RiotMethod.SUMMONER_BY_PUUID), executor);
         CompletableFuture<Set<LeagueEntryDto>> leagueEntriesFuture = riotApiService
-                .getLeagueEntriesByPuuid(puuid, platform, executor);
+                .getLeagueEntriesByPuuid(puuid, platform, permits.take(RiotMethod.LEAGUE_ENTRIES_BY_PUUID), executor);
 
         return accountDtoFuture.thenCombine(summonerDtoFuture, (accountDto, summonerDto) ->
                 new Object[]{accountDto, summonerDto}

@@ -1,0 +1,99 @@
+package com.mmrtr.lol.domain.summoner.application;
+
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
+import com.mmrtr.lol.domain.summoner.application.usecase.SaveSummonerDataUseCase;
+import com.mmrtr.lol.domain.summoner.domain.Summoner;
+import com.mmrtr.lol.support.error.CoreException;
+import com.mmrtr.lol.support.error.ErrorType;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
+class SummonerServiceTest {
+
+    private final SummonerApiPort summonerApiPort = mock(SummonerApiPort.class);
+    private final SaveSummonerDataUseCase saveSummonerDataUseCase = mock(SaveSummonerDataUseCase.class);
+    private final RiotPermitPort riotPermitPort = mock(RiotPermitPort.class);
+    private final SummonerService service =
+            new SummonerService(summonerApiPort, saveSummonerDataUseCase, riotPermitPort, Runnable::run);
+
+    @BeforeEach
+    void setUp() {
+        given(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).willAnswer(invocation -> {
+            String platform = invocation.getArgument(0);
+            RiotCallPriority priority = invocation.getArgument(1);
+            Map<RiotMethod, Integer> counts = invocation.getArgument(2);
+            List<RiotPermit> permits = new ArrayList<>();
+            counts.forEach((method, count) -> {
+                for (int k = 1; k <= count; k++) {
+                    permits.add(new RiotPermit("t-" + method + "-" + k, platform, method, priority));
+                }
+            });
+            return Optional.of(RiotPermits.of(permits));
+        });
+        given(summonerApiPort.fetchSummonerByRiotId(anyString(), anyString(), anyString(), any(), any()))
+                .willReturn(CompletableFuture.completedFuture(Summoner.builder().puuid("p1").build()));
+        given(summonerApiPort.fetchSummonerByPuuid(anyString(), anyString(), any(), any()))
+                .willReturn(CompletableFuture.completedFuture(Summoner.builder().puuid("p1").build()));
+    }
+
+    @Test
+    @DisplayName("Riot ID 조회는 USER 로 Riot ID 조회 비용의 허가를 받아 그 허가로 부른다")
+    void getSummonerInfoV2_acquiresUserPermitsForRiotIdLookup() {
+        // when
+        service.getSummonerInfoV2("kr", "hide on bush", "KR1");
+
+        // then
+        verify(riotPermitPort).tryAcquire("kr", RiotCallPriority.USER, SummonerApiPort.BY_RIOT_ID_COST);
+        verify(summonerApiPort).fetchSummonerByRiotId(eq("hide on bush"), eq("KR1"), eq("kr"),
+                argThat(permits -> permits.remaining(RiotMethod.ACCOUNT_BY_RIOT_ID) == 1), any());
+    }
+
+    @Test
+    @DisplayName("puuid 조회는 넘겨받은 우선순위로 puuid 조회 비용의 허가를 받는다")
+    void getSummonerByPuuid_acquiresWithGivenPriority() {
+        // when
+        service.getSummonerByPuuid("KR", "p1", RiotCallPriority.BACKGROUND);
+
+        // then
+        verify(riotPermitPort).tryAcquire("KR", RiotCallPriority.BACKGROUND, SummonerApiPort.BY_PUUID_COST);
+        verify(summonerApiPort).fetchSummonerByPuuid(eq("p1"), eq("KR"),
+                argThat(permits -> permits.remaining(RiotMethod.ACCOUNT_BY_PUUID) == 1), any());
+    }
+
+    @Test
+    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 DEFAULT_ERROR 다 (지금 예약 실패가 이 경로에서 그렇다)")
+    void getSummonerByPuuid_permitDenied_throwsDefaultErrorWithoutRiotCall() {
+        // given
+        given(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).willReturn(Optional.empty());
+
+        // when // then
+        assertThatThrownBy(() -> service.getSummonerByPuuid("KR", "p1", RiotCallPriority.USER))
+                .isInstanceOfSatisfying(CoreException.class,
+                        e -> assertThat(e.getErrorType()).isEqualTo(ErrorType.DEFAULT_ERROR));
+        verifyNoInteractions(summonerApiPort, saveSummonerDataUseCase);
+    }
+}

@@ -13,7 +13,9 @@ import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.infra.persistence.league.repository.MostChampionProjection;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,23 +40,19 @@ public class SummonerRankingCalculationService {
     private final TierCutoffRepositoryPort tierCutoffRepositoryPort;
     private final SummonerRepositoryPort summonerRepositoryPort;
     private final SummonerService summonerService;
+    private final RiotPermitPort riotPermitPort;
 
     private static final String PLATFORM_KR = "KR";
     private static final long UNKNOWN_SUMMONER_FETCH_DELAY_MS = 500;
 
     /**
-     * 큐 랭킹을 갱신한다.
+     * 큐 랭킹을 갱신한다. 스케줄 작업이라 Riot 호출은 BACKGROUND 허가로 받아 사용자 요청보다 뒤로 미룬다.
      *
      * @param queue            대상 큐 타입
      * @param updateTierCutoff 티어 커트라인(챌린저/그랜드마스터 컷)까지 함께 갱신할지 여부.
      *                         false 면 랭킹만 교체하고 기존 커트라인은 그대로 유지한다.
      */
     public void processQueueRanking(String queue, boolean updateTierCutoff) {
-        // 스케줄 작업이라 Riot 호출을 사용자 요청보다 뒤로 미룬다
-        RiotCallScope.run(RiotCallPriority.BACKGROUND, () -> calculateQueueRanking(queue, updateTierCutoff));
-    }
-
-    private void calculateQueueRanking(String queue, boolean updateTierCutoff) {
         try {
             // 잔존 백업 데이터 방어적 정리
             summonerRankingRepositoryPort.clearBackup(queue);
@@ -70,7 +68,10 @@ public class SummonerRankingCalculationService {
             // Riot API에서 챌린저/그랜드마스터 데이터 조회 (KR만)
             log.info("큐 {} 챌린저/그랜드마스터 데이터 조회 시작 (KR)", queue);
 
-            Map<Tier, List<LeagueEntry>> apexEntries = leagueApiPort.getApexEntries(queue, PLATFORM_KR);
+            RiotPermits apexPermits = riotPermitPort
+                    .tryAcquire(PLATFORM_KR, RiotCallPriority.BACKGROUND, LeagueApiPort.APEX_COST)
+                    .orElseThrow(() -> new RiotPermitDeniedException(PLATFORM_KR, RiotCallPriority.BACKGROUND));
+            Map<Tier, List<LeagueEntry>> apexEntries = leagueApiPort.getApexEntries(queue, PLATFORM_KR, apexPermits);
             List<LeagueEntry> challengerEntries = apexEntries.getOrDefault(Tier.CHALLENGER, List.of());
             List<LeagueEntry> grandmasterEntries = apexEntries.getOrDefault(Tier.GRANDMASTER, List.of());
 
@@ -246,7 +247,7 @@ public class SummonerRankingCalculationService {
         int fetched = 0;
         for (String puuid : unknownPuuids) {
             try {
-                Summoner summoner = summonerService.getSummonerByPuuid(PLATFORM_KR, puuid);
+                Summoner summoner = summonerService.getSummonerByPuuid(PLATFORM_KR, puuid, RiotCallPriority.BACKGROUND);
                 summonerMap.put(puuid, summoner);
                 fetched++;
                 if (fetched % 50 == 0) {

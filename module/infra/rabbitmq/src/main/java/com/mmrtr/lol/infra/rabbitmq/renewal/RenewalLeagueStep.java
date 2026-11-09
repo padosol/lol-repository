@@ -10,9 +10,14 @@ import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
-import com.mmrtr.lol.support.riot.RiotRetryScope;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
@@ -27,17 +32,20 @@ public class RenewalLeagueStep {
     private final RenewalRecordPort recordPort;
     private final SaveSummonerDataUseCase saveSummonerDataUseCase;
     private final RiotApiService riotApiService;
+    private final RiotPermitPort permitPort;
     private final RenewalStepPublisher stepPublisher;
     private final RenewalFinisher finisher;
     private final Executor requestExecutor;
     private final RenewalStepFailures failures;
 
     public RenewalLeagueStep(RenewalRecordPort recordPort, SaveSummonerDataUseCase saveSummonerDataUseCase,
-                             RiotApiService riotApiService, RenewalStepPublisher stepPublisher,
-                             RenewalFinisher finisher, MeterRegistry meterRegistry, Executor requestExecutor) {
+                             RiotApiService riotApiService, RiotPermitPort permitPort,
+                             RenewalStepPublisher stepPublisher, RenewalFinisher finisher,
+                             MeterRegistry meterRegistry, Executor requestExecutor) {
         this.recordPort = recordPort;
         this.saveSummonerDataUseCase = saveSummonerDataUseCase;
         this.riotApiService = riotApiService;
+        this.permitPort = permitPort;
         this.stepPublisher = stepPublisher;
         this.finisher = finisher;
         this.requestExecutor = requestExecutor;
@@ -61,8 +69,12 @@ public class RenewalLeagueStep {
 
         Set<LeagueEntryDto> entries;
         try {
-            entries = RiotRetryScope.callWithoutRateLimitRetry(() ->
-                    riotApiService.getLeagueEntriesByPuuid(puuid, platform, requestExecutor).join());
+            // 거절은 RiotPermitDeniedException 으로 예약 실패와 같게 다룬다
+            RiotPermit permit = permitPort
+                    .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.LEAGUE_ENTRIES_BY_PUUID, 1))
+                    .orElseThrow(() -> new RiotPermitDeniedException(platform.name(), RiotCallPriority.USER))
+                    .take(RiotMethod.LEAGUE_ENTRIES_BY_PUUID);
+            entries = riotApiService.getLeagueEntriesByPuuid(puuid, platform, permit, requestExecutor).join();
         } catch (Exception e) {
             failures.fetchFailed(puuid, renewalId, message.attempt(), e,
                     () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_LEAGUE, message.nextAttempt()),

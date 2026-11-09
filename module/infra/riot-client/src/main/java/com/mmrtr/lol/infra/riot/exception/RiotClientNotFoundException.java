@@ -1,6 +1,7 @@
 package com.mmrtr.lol.infra.riot.exception;
 
 import org.springframework.boot.logging.LogLevel;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 
 /**
@@ -11,5 +12,10 @@ public class RiotClientNotFoundException extends RiotClientException {
 
     public RiotClientNotFoundException(HttpStatusCode status, String errorBody, LogLevel logLevel) {
         super(status, errorBody, logLevel);
+    }
+
+    public RiotClientNotFoundException(HttpStatusCode status, String errorBody, LogLevel logLevel,
+                                       HttpHeaders headers) {
+        super(status, errorBody, logLevel, headers);
     }
 }

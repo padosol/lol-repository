@@ -3,9 +3,9 @@ package com.mmrtr.lol.infra.rabbitmq.renewal;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
 import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -90,14 +90,14 @@ final class RenewalStepFailures {
 
     /**
      * Riot 조회 실패를 분류한다. 404 는 not_found, 429 는 두 번까지 시도 수를 올려 다시 넣고 그 뒤엔 riot_429,
-     * 예약 실패는 시도 수를 올리지 않고 잠시 뒤 다시 넣고, 그 밖은 예외에서 reason 을 뽑는다.
+     * 허가 거절(예약 실패)은 시도 수를 올리지 않고 잠시 뒤 다시 넣고, 그 밖은 예외에서 reason 을 뽑는다.
      */
     void fetchFailed(String puuid, String renewalId, int attempt, Exception e,
                      Runnable requeueNextAttempt, Runnable requeueLater) {
         try {
             if (causedBy(e, RiotClientNotFoundException.class)) {
                 fail(puuid, renewalId, "not_found");
-            } else if (causedBy(e, RiotBudgetExceededException.class)) {
+            } else if (causedBy(e, RiotPermitDeniedException.class)) {
                 count("requeue");
                 requeueLater.run();
             } else if (causedBy(e, RiotRateLimitException.class)) {

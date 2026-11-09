@@ -5,6 +5,8 @@ import static org.mockito.Mockito.mock;
 
 import com.mmrtr.lol.infra.riot.ratelimit.RedisRiotRateLimiter;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
+import com.mmrtr.lol.infra.riot.service.RiotCallRecorder;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
@@ -30,6 +32,8 @@ class RiotClientWiringTest {
             assertThat(context).hasSingleBean(RiotAPIProperties.class);
             assertThat(context).hasSingleBean(RedisRiotRateLimiter.class);
             assertThat(context).hasSingleBean(RiotApiService.class);
+            assertThat(context).hasSingleBean(RiotCallRecorder.class);
+            assertThat(context).hasSingleBean(RiotPermitPort.class);
             assertThat(context).hasBean("riotRestClient");
             assertThat(context.getBean("riotRestClient")).isInstanceOf(RestClient.class);
         });

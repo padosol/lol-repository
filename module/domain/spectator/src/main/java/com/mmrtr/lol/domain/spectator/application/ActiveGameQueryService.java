@@ -10,10 +10,16 @@ import com.mmrtr.lol.domain.spectator.domain.SpectatorTarget;
 import com.mmrtr.lol.domain.spectator.readmodel.ActiveGameReadModel;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 
@@ -30,6 +36,7 @@ public class ActiveGameQueryService implements ActiveGameQueryUseCase {
     private final SpectatorTargetPort spectatorTargetPort;
     private final ActiveGameCachePort activeGameCachePort;
     private final SpectatorApiPort spectatorApiPort;
+    private final RiotPermitPort riotPermitPort;
     private final Executor requestExecutor;
 
     @Override
@@ -55,9 +62,12 @@ public class ActiveGameQueryService implements ActiveGameQueryUseCase {
 
         Optional<ActiveGame> game;
         try {
-            game = spectatorApiPort.fetchActiveGameByPuuid(puuid, platform.name(), requestExecutor).join();
+            RiotPermits permits = riotPermitPort
+                    .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.ACTIVE_GAME, 1))
+                    .orElseThrow(() -> new RiotPermitDeniedException(platform.name(), RiotCallPriority.USER));
+            game = spectatorApiPort.fetchActiveGameByPuuid(puuid, platform.name(), permits, requestExecutor).join();
         } catch (RuntimeException e) {
-            // lol-server 와 같이 "게임 없음"으로 응답하되 캐싱하지 않는다 — 다음 조회가 다시 Riot 을 본다
+            // 허가 거절도 포함해 lol-server 와 같이 "게임 없음"으로 응답하되 캐싱하지 않는다 — 다음 조회가 다시 Riot 을 본다
             log.warn("관전 조회 실패: {}", e.getMessage());
             return Optional.empty();
         }

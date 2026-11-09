@@ -12,13 +12,13 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-aop'
 
-    // Metrics (RetryInterceptor 메트릭용)
+    // Metrics (RiotCallRecorder·한도 관리자 지표)
     implementation 'io.micrometer:micrometer-core'
 
     // Redisson (for rate limiting)
     implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
 
-    // WireMock (RetryInterceptor 단위 테스트용)
+    // WireMock (RiotApiService·한도 인수 테스트용)
     testImplementation 'org.wiremock:wiremock-standalone:3.9.2'
 
     // Testcontainers Redis (RedisRiotRateLimiter 테스트용)

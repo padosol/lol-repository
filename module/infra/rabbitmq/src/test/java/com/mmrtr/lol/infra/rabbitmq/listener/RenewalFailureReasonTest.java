@@ -1,10 +1,10 @@
 package com.mmrtr.lol.infra.rabbitmq.listener;
 
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.logging.LogLevel;
@@ -23,10 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RenewalFailureReasonTest {
 
     @Test
-    @DisplayName("예산 초과는 budget_exceeded 다 (429 인 상위 클래스보다 먼저 본다)")
-    void of_예산초과_budget_exceeded() {
+    @DisplayName("허가 거절은 budget_exceeded 다")
+    void of_허가거절_budget_exceeded() {
         // given
-        Throwable t = new RiotBudgetExceededException("asia", RiotCallPriority.USER);
+        Throwable t = new RiotPermitDeniedException("KR", RiotCallPriority.USER);
 
         // when
         String reason = RenewalFailureReason.of(t);

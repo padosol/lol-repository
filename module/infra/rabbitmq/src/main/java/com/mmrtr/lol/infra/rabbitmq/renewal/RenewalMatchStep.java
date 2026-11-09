@@ -16,14 +16,18 @@ import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchQueueRank;
 import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;
 import com.mmrtr.lol.infra.redis.service.RenewalMatchClaimService;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
-import com.mmrtr.lol.support.riot.RiotRetryScope;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -34,8 +38,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * 갱신 ④ 매치 단계. 최근 매치 id 20개 중 DB 에 없는 것을 대상으로 기록하고, 선점한 대상의 match ∥ timeline 을
- * 한꺼번에 병렬로 받아 한 번에 저장한다. 4xx(429 제외)로 실패한 매치만 실패 표시를 남기고(스펙 5.4), 그 밖의 실패
- * (429·예약 실패·5xx·시간 초과·IO 등)는 매치 적재 큐에 사용자 재시도 순위로 넘긴다. 실패 표시는 매치 단위라 그 매치를
+ * 한꺼번에 병렬로 받아 한 번에 저장한다. Riot 호출은 id 목록 1건, 매치마다 match·timeline 1건씩 USER 허가를 받는다.
+ * 4xx(429 제외)로 실패한 매치만 실패 표시를 남기고(스펙 5.4), 그 밖의 실패
+ * (429·허가 거절·5xx·시간 초과·IO 등)는 매치 적재 큐에 사용자 재시도 순위로 넘긴다. 실패 표시는 매치 단위라 그 매치를
  * 대상으로 둔 다른 갱신까지 match_failed 로 끝내므로, 매치 자체가 잘못된 경우에만 남긴다.
  * 계속 실패해 대상에서 뺀 매치는 버리지 않고 매치 적재 큐에 백필 순위로 넘긴다. 커서가 그 매치를 지나가도 잃지 않는다 (G8).
  * 대상이 전부 DB 에 들어가면 매치 비트를 켜고, 아니면 판정기가 DB 를 보고 켠다.
@@ -47,9 +52,12 @@ public class RenewalMatchStep {
 
     private static final int MATCH_COUNT = 20;
     private static final String EXCLUDED_METRIC = "lol.renewal.match_excluded";
+    /** 매치 하나에 받는 허가. */
+    private static final Map<RiotMethod, Integer> MATCH_COST = Map.of(RiotMethod.MATCH, 1, RiotMethod.MATCH_TIMELINE, 1);
 
     private final RenewalRecordPort recordPort;
     private final MatchApiPort matchApiPort;
+    private final RiotPermitPort permitPort;
     private final MatchRepositoryPort matchRepositoryPort;
     private final SaveMatchDataUseCase saveMatchDataUseCase;
     private final MatchCacheWritePort matchCacheWritePort;
@@ -61,13 +69,14 @@ public class RenewalMatchStep {
     private final Executor requestExecutor;
     private final RenewalStepFailures failures;
 
-    public RenewalMatchStep(RenewalRecordPort recordPort, MatchApiPort matchApiPort,
+    public RenewalMatchStep(RenewalRecordPort recordPort, MatchApiPort matchApiPort, RiotPermitPort permitPort,
                             MatchRepositoryPort matchRepositoryPort, SaveMatchDataUseCase saveMatchDataUseCase,
                             MatchCacheWritePort matchCacheWritePort, RenewalMatchClaimService claimService,
                             MessageSender messageSender, RenewalStepPublisher stepPublisher,
                             RenewalFinisher finisher, MeterRegistry meterRegistry, Executor requestExecutor) {
         this.recordPort = recordPort;
         this.matchApiPort = matchApiPort;
+        this.permitPort = permitPort;
         this.matchRepositoryPort = matchRepositoryPort;
         this.saveMatchDataUseCase = saveMatchDataUseCase;
         this.matchCacheWritePort = matchCacheWritePort;
@@ -122,9 +131,13 @@ public class RenewalMatchStep {
         }
     }
 
+    /** USER 허가 1건을 받아 부른다. 거절은 {@link RiotPermitDeniedException} 으로 예약 실패와 같게 다룬다. */
     private List<String> fetchMatchIds(String puuid, String platformName, long startTime) {
-        List<String> ids = RiotRetryScope.callWithoutRateLimitRetry(() -> matchApiPort.fetchMatchIdsByPuuid(
-                puuid, platformName, startTime, 0, MATCH_COUNT, requestExecutor).join());
+        RiotPermits permits = permitPort
+                .tryAcquire(platformName, RiotCallPriority.USER, Map.of(RiotMethod.MATCH_IDS_BY_PUUID, 1))
+                .orElseThrow(() -> new RiotPermitDeniedException(platformName, RiotCallPriority.USER));
+        List<String> ids = matchApiPort.fetchMatchIdsByPuuid(
+                puuid, platformName, startTime, 0, MATCH_COUNT, permits, requestExecutor).join();
         return ids == null ? List.of() : ids;
     }
 
@@ -168,19 +181,32 @@ public class RenewalMatchStep {
         }
     }
 
-    /** 매치마다 match ∥ timeline 을 한꺼번에 시작한 뒤 모두 기다린다. 재시도 스코프는 요청을 만드는 이 스레드에서 읽힌다. */
+    /** 매치마다 match ∥ timeline 을 한꺼번에 시작한 뒤 모두 기다린다. */
     private List<MatchFetch> fetchAll(List<String> matchIds, String platformName) {
-        List<PendingFetch> pending = RiotRetryScope.callWithoutRateLimitRetry(() -> matchIds.stream()
-                .map(matchId -> new PendingFetch(matchId,
-                        matchApiPort.fetchMatchById(matchId, platformName, requestExecutor),
-                        matchApiPort.fetchTimelineById(matchId, platformName, requestExecutor)))
-                .toList());
+        List<PendingFetch> pending = matchIds.stream().map(matchId -> start(matchId, platformName)).toList();
         return pending.stream().map(RenewalMatchStep::await).toList();
     }
 
     /**
-     * 둘 다 받으면 FETCHED. 하나라도 4xx(429·예약 실패 제외)면 CLIENT_ERROR — 다시 불러도 같으니 넘기지 않는다.
-     * 그 밖의 실패(429·예약 실패·인라인 재시도 뒤 5xx·시간 초과·IO·역직렬화 등)는 HAND_OFF.
+     * 매치마다 따로 USER 허가(match·timeline 1건씩)를 받아 둘을 시작한다. 거절되거나 허가를 묻지 못하면 부르지 않고
+     * 그 예외로 실패한 것으로 둔다 — {@link #await} 가 HAND_OFF 로 넘긴다.
+     */
+    private PendingFetch start(String matchId, String platformName) {
+        RiotPermits permits;
+        try {
+            permits = permitPort.tryAcquire(platformName, RiotCallPriority.USER, MATCH_COST)
+                    .orElseThrow(() -> new RiotPermitDeniedException(platformName, RiotCallPriority.USER));
+        } catch (RuntimeException e) {
+            return new PendingFetch(matchId, CompletableFuture.failedFuture(e), CompletableFuture.failedFuture(e));
+        }
+        return new PendingFetch(matchId,
+                matchApiPort.fetchMatchById(matchId, platformName, permits, requestExecutor),
+                matchApiPort.fetchTimelineById(matchId, platformName, permits, requestExecutor));
+    }
+
+    /**
+     * 둘 다 받으면 FETCHED. 하나라도 4xx(429 제외)면 CLIENT_ERROR — 다시 불러도 같으니 넘기지 않는다.
+     * 그 밖의 실패(429·허가 거절·5xx·시간 초과·IO·역직렬화 등)는 HAND_OFF.
      */
     private static MatchFetch await(PendingFetch pending) {
         Throwable matchFailure = failureOf(pending.match());
@@ -263,12 +289,11 @@ public class RenewalMatchStep {
         }
     }
 
-    /** cause 사슬의 Riot 예외가 429·예약 실패가 아닌 4xx({@link RiotClientException}, 404 포함)면 true. */
+    /** cause 사슬의 Riot 예외가 429 가 아닌 4xx({@link RiotClientException}, 404 포함)면 true. 허가 거절은 Riot 예외가 아니다. */
     private static boolean isClientError(Throwable failure) {
         RiotClientException client = RenewalStepFailures.findCause(failure, RiotClientException.class);
         return client != null
                 && !(client instanceof RiotRateLimitException)
-                && !(client instanceof RiotBudgetExceededException)
                 && (client.getStatus() == null || client.getStatus().value() != 429);
     }
 

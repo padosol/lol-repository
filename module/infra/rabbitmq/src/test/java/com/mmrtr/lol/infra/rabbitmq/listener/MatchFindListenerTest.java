@@ -2,9 +2,9 @@ package com.mmrtr.lol.infra.rabbitmq.listener;
 
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchFindService;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,10 +40,21 @@ class MatchFindListenerTest {
     }
 
     @Test
-    @DisplayName("예산 초과는 CompletionException 에 싸여도 다시 던져 재전달되게 한다")
-    void findMatchIds_budgetExceeded_propagates() {
+    @DisplayName("허가 거절은 다시 던져 재전달되게 한다")
+    void findMatchIds_permitDenied_propagates() {
         // given
-        doThrow(new CompletionException(new RiotBudgetExceededException("asia", RiotCallPriority.BACKGROUND)))
+        doThrow(new RiotPermitDeniedException("KR", RiotCallPriority.BACKGROUND)).when(service).process(any());
+
+        // when // then
+        assertThatThrownBy(() -> listener.findMatchIdsListener(message)).isInstanceOf(RiotPermitDeniedException.class);
+        assertThat(meters.find("lol.match.find.dropped").counter()).isNull();
+    }
+
+    @Test
+    @DisplayName("허가 거절은 CompletionException 에 싸여도 다시 던진다")
+    void findMatchIds_wrappedPermitDenied_propagates() {
+        // given
+        doThrow(new CompletionException(new RiotPermitDeniedException("KR", RiotCallPriority.BACKGROUND)))
                 .when(service).process(any());
 
         // when // then

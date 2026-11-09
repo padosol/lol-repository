@@ -7,8 +7,8 @@ import org.springframework.http.client.ClientHttpRequest;
 import org.springframework.http.client.ClientHttpRequestFactory;
 
 /**
- * lab 프로파일에서 Riot 요청의 목적지만 가짜 서버로 바꾸는 팩토리. 인터셉터 체인은 이 팩토리 위에 있어
- * 원래 URL(호스트)을 그대로 보므로 한도 키·메트릭 라벨이 바뀌지 않는다.
+ * lab 프로파일에서 Riot 요청의 목적지만 가짜 서버로 바꾸는 팩토리. 호출 기록({@code RiotCallRecorder})은
+ * {@code RiotApiService} 가 넘긴 원래 Riot 호스트를 보므로 한도 키·메트릭 라벨이 바뀌지 않는다.
  *
  * <p>{@code https://{routing}.api.riotgames.com/path?q} 를 {@code {base}/{routing}/path?q} 로 옮긴다.
  * 이미 인코딩된 경로와 쿼리는 raw 그대로 붙여 이중 인코딩이 생기지 않는다.

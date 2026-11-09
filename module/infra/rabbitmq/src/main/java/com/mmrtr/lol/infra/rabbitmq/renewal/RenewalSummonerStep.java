@@ -13,9 +13,14 @@ import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker.RevisionCheckResult;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
-import com.mmrtr.lol.support.riot.RiotRetryScope;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -32,6 +37,7 @@ public class RenewalSummonerStep {
     private final SummonerRepositoryPort summonerRepositoryPort;
     private final SummonerRevisionChecker revisionChecker;
     private final RiotApiService riotApiService;
+    private final RiotPermitPort permitPort;
     private final RenewalStepPublisher stepPublisher;
     private final RenewalFinisher finisher;
     private final Executor requestExecutor;
@@ -39,12 +45,13 @@ public class RenewalSummonerStep {
 
     public RenewalSummonerStep(RenewalRecordPort recordPort, SummonerRepositoryPort summonerRepositoryPort,
                                SummonerRevisionChecker revisionChecker, RiotApiService riotApiService,
-                               RenewalStepPublisher stepPublisher, RenewalFinisher finisher,
-                               MeterRegistry meterRegistry, Executor requestExecutor) {
+                               RiotPermitPort permitPort, RenewalStepPublisher stepPublisher,
+                               RenewalFinisher finisher, MeterRegistry meterRegistry, Executor requestExecutor) {
         this.recordPort = recordPort;
         this.summonerRepositoryPort = summonerRepositoryPort;
         this.revisionChecker = revisionChecker;
         this.riotApiService = riotApiService;
+        this.permitPort = permitPort;
         this.stepPublisher = stepPublisher;
         this.finisher = finisher;
         this.requestExecutor = requestExecutor;
@@ -111,9 +118,13 @@ public class RenewalSummonerStep {
         failures.success();
     }
 
+    /** USER 허가 1건을 받아 부른다. 거절은 {@link RiotPermitDeniedException} 으로 예약 실패와 같게 다룬다. */
     private SummonerDto fetchSummoner(String puuid, Platform platform) {
-        return RiotRetryScope.callWithoutRateLimitRetry(() ->
-                riotApiService.getSummonerByPuuid(puuid, platform, requestExecutor).join());
+        RiotPermit permit = permitPort
+                .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.SUMMONER_BY_PUUID, 1))
+                .orElseThrow(() -> new RiotPermitDeniedException(platform.name(), RiotCallPriority.USER))
+                .take(RiotMethod.SUMMONER_BY_PUUID);
+        return riotApiService.getSummonerByPuuid(puuid, platform, permit, requestExecutor).join();
     }
 
     private void handleFetchFailure(SummonerMessage message, Exception e) {

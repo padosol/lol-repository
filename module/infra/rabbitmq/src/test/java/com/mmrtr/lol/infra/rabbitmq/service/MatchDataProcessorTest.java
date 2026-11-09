@@ -4,11 +4,13 @@ import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
+import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import com.mmrtr.lol.infra.redis.service.MatchRedisService;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,11 +20,13 @@ import org.springframework.http.HttpStatus;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -33,7 +37,12 @@ import static org.mockito.Mockito.when;
 
 class MatchDataProcessorTest {
 
-    private final List<RiotCallPriority> seen = new ArrayList<>();
+    private static final Map<RiotMethod, Integer> MATCH_COST =
+            Map.of(RiotMethod.MATCH, 1, RiotMethod.MATCH_TIMELINE, 1);
+
+    /** match·timeline 호출이 받은 허가 묶음 (부른 순서). */
+    private final List<RiotPermits> seen = new ArrayList<>();
+    private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private MatchRedisService redis;
     private MatchBatchProcessor batch;
     private CompletableFuture<MatchDto> matchResult;
@@ -56,46 +65,44 @@ class MatchDataProcessorTest {
 
         port = new MatchApiPort() {
             @Override
-            public CompletableFuture<List<String>> fetchMatchIdsByPuuid(String p, String pl, Executor e) {
-                return CompletableFuture.completedFuture(List.of());
-            }
-
-            @Override
             public CompletableFuture<List<String>> fetchMatchIdsByPuuid(
-                    String p, String pl, long s, int st, int c, Executor e) {
+                    String p, String pl, long s, int st, int c, RiotPermits permits, Executor e) {
                 return CompletableFuture.completedFuture(List.of());
             }
 
             @Override
-            public CompletableFuture<MatchDto> fetchMatchById(String id, String pl, Executor e) {
-                seen.add(RiotCallScope.current());
+            public CompletableFuture<MatchDto> fetchMatchById(String id, String pl, RiotPermits permits, Executor e) {
+                seen.add(permits);
                 return matchResult;
             }
 
             @Override
-            public CompletableFuture<TimelineDto> fetchTimelineById(String id, String pl, Executor e) {
-                seen.add(RiotCallScope.current());
+            public CompletableFuture<TimelineDto> fetchTimelineById(
+                    String id, String pl, RiotPermits permits, Executor e) {
+                seen.add(permits);
                 return timelineResult;
             }
         };
-        processor = new MatchDataProcessor(port, redis, batch, Runnable::run, matchRepository, meters);
+        processor = new MatchDataProcessor(port, permitPort, redis, batch, Runnable::run, matchRepository, meters);
     }
 
     @Test
-    @DisplayName("백필 순위는 매치·타임라인 호출을 BACKGROUND 스코프에서 만든다")
+    @DisplayName("백필 순위는 BACKGROUND 로 match·timeline 허가를 함께 받아 그 허가로 부른다")
     void process_backfill_callsWithBackgroundPriority() {
         processor.process("KR_1", "KR", MatchQueueRank.BACKFILL);
 
-        assertThat(seen).containsExactly(RiotCallPriority.BACKGROUND, RiotCallPriority.BACKGROUND);
-        assertThat(RiotCallScope.current()).isEqualTo(RiotCallPriority.USER);
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.BACKGROUND, MATCH_COST);
+        assertThat(seen).hasSize(2);
+        assertThat(seen.get(0)).isSameAs(seen.get(1));
     }
 
     @Test
-    @DisplayName("사용자 재시도 순위는 USER 스코프에서 호출을 만든다")
+    @DisplayName("사용자 재시도 순위는 USER 로 허가를 받는다")
     void process_userRetry_callsWithUserPriority() {
         processor.process("KR_1", "KR", MatchQueueRank.USER_RETRY);
 
-        assertThat(seen).containsExactly(RiotCallPriority.USER, RiotCallPriority.USER);
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, MATCH_COST);
+        assertThat(seen).hasSize(2);
     }
 
     @Test
@@ -106,7 +113,7 @@ class MatchDataProcessorTest {
         assertThat(processor.process("KR_1", "KR", MatchQueueRank.USER_RETRY))
                 .isEqualTo(MatchDataProcessor.Result.DUPLICATE);
         assertThat(seen).isEmpty();
-        verifyNoInteractions(redis);
+        verifyNoInteractions(redis, permitPort);
         assertThat(count("user_retry", "duplicate")).isEqualTo(1.0);
     }
 
@@ -140,21 +147,33 @@ class MatchDataProcessorTest {
     }
 
     @Test
-    @DisplayName("예산 초과면 QUEUE_FULL 로 requeue 하고 처리 표시를 푼다")
-    void budgetExceeded_requeuesAndReleasesMark() {
-        matchResult = CompletableFuture.failedFuture(
-                new RiotBudgetExceededException("asia", RiotCallPriority.BACKGROUND));
+    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 QUEUE_FULL 로 requeue 하고 처리 표시를 푼다")
+    void permitDenied_requeuesAndReleasesMark() {
+        RiotPermitFixtures.denyAll(permitPort);
 
         assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL)).isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
         verify(redis, times(1)).releaseProcessing("KR_1");
+        assertThat(seen).isEmpty();
+        assertThat(count("backfill", "requeue")).isEqualTo(1.0);
     }
 
     @Test
-    @DisplayName("fetch 가 시간 안에 끝나지 않으면(한도 대기 등) QUEUE_FULL 로 requeue 하고 표시를 풀고 호출을 취소한다")
+    @DisplayName("허가를 묻다 예외가 나면 Riot 을 부르지 않고 FAILURE 이고 처리 표시를 푼다")
+    void permitCheckThrows_failureAndReleasesMark() {
+        when(permitPort.tryAcquire(anyString(), any(), anyMap())).thenThrow(new IllegalStateException("redis down"));
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL)).isEqualTo(MatchDataProcessor.Result.FAILURE);
+        verify(redis, times(1)).releaseProcessing("KR_1");
+        assertThat(seen).isEmpty();
+    }
+
+    @Test
+    @DisplayName("fetch 가 시간 안에 끝나지 않으면 QUEUE_FULL 로 requeue 하고 표시를 풀고 호출을 취소한다")
     void fetchTimeout_requeuesReleasesMarkAndCancels() {
         matchResult = new CompletableFuture<>();
         timelineResult = new CompletableFuture<>();
-        processor = new MatchDataProcessor(port, redis, batch, Runnable::run, matchRepository, meters, Duration.ofMillis(50));
+        processor = new MatchDataProcessor(port, permitPort, redis, batch, Runnable::run, matchRepository, meters,
+                Duration.ofMillis(50));
 
         assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL)).isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
         verify(redis, times(1)).releaseProcessing("KR_1");

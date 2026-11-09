@@ -1,12 +1,18 @@
 package com.mmrtr.lol.infra.rabbitmq.service;
 
 import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 
 @Slf4j
@@ -18,22 +24,28 @@ public class MatchIdCollector {
     private static final int DEFAULT_MAX_PAGES = 10;
 
     private final MatchApiPort matchApiPort;
+    private final RiotPermitPort permitPort;
 
-    public List<String> collectAll(
-            String puuid, String platformName, long startTime, int startOffset, Executor executor) {
-        return collectAll(puuid, platformName, startTime, startOffset, DEFAULT_COUNT, DEFAULT_MAX_PAGES, executor);
+    public List<String> collectAll(String puuid, String platformName, long startTime, int startOffset,
+                                   RiotCallPriority priority, Executor executor) {
+        return collectAll(puuid, platformName, startTime, startOffset, DEFAULT_COUNT, DEFAULT_MAX_PAGES, priority,
+                executor);
     }
 
+    /** 페이지마다 priority 로 허가 1건을 받는다. 거절되면 {@link RiotPermitDeniedException} 으로 멈춘다. */
     public List<String> collectAll(
             String puuid, String platformName, long startTime,
-            int startOffset, int count, int maxPages, Executor executor) {
+            int startOffset, int count, int maxPages, RiotCallPriority priority, Executor executor) {
 
         List<String> allMatchIds = new ArrayList<>();
         int offset = startOffset;
 
         for (int i = 0; i < maxPages; i++) {
+            RiotPermits permits = permitPort
+                    .tryAcquire(platformName, priority, Map.of(RiotMethod.MATCH_IDS_BY_PUUID, 1))
+                    .orElseThrow(() -> new RiotPermitDeniedException(platformName, priority));
             List<String> fetched = matchApiPort.fetchMatchIdsByPuuid(
-                    puuid, platformName, startTime, offset, count, executor
+                    puuid, platformName, startTime, offset, count, permits, executor
             ).join();
 
             if (fetched == null || fetched.isEmpty()) {

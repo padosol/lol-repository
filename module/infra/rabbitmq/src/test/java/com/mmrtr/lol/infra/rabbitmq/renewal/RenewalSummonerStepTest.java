@@ -25,17 +25,17 @@ import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker.RevisionCheckResult;
 import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotRetryScope;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -56,12 +56,13 @@ class RenewalSummonerStepTest {
     private final SummonerRepositoryPort summonerRepositoryPort = mock(SummonerRepositoryPort.class);
     private final SummonerRevisionChecker revisionChecker = mock(SummonerRevisionChecker.class);
     private final RiotApiService riotApiService = mock(RiotApiService.class);
+    private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private final RenewalStepPublisher stepPublisher = mock(RenewalStepPublisher.class);
     private final RenewalFinisher finisher = mock(RenewalFinisher.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalSummonerStep step = new RenewalSummonerStep(
-            recordPort, summonerRepositoryPort, revisionChecker, riotApiService, stepPublisher, finisher,
+            recordPort, summonerRepositoryPort, revisionChecker, riotApiService, permitPort, stepPublisher, finisher,
             meterRegistry, executor);
 
     private SummonerDto summonerDto;
@@ -74,7 +75,7 @@ class RenewalSummonerStepTest {
         summonerDto.setSummonerLevel(LEVEL);
         summonerDto.setRevisionDate(RIOT_REVISION);
         givenRecord("r1", RenewalStatus.PROGRESS, null);
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(summonerDto));
         given(revisionChecker.check("p1", summonerDto)).willReturn(new RevisionCheckResult(true, DB_REVISION_SECONDS));
         given(summonerRepositoryPort.updateStatusInfo("p1", ICON, LEVEL)).willReturn(true);
@@ -90,12 +91,12 @@ class RenewalSummonerStepTest {
     }
 
     private void givenRiotFails(Throwable cause) {
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.failedFuture(cause));
     }
 
     private RiotRateLimitException rateLimit() {
-        return new RiotRateLimitException(Duration.ofSeconds(1), HttpStatus.TOO_MANY_REQUESTS, "", null);
+        return new RiotRateLimitException(Duration.ofSeconds(1), null, HttpStatus.TOO_MANY_REQUESTS, "", null);
     }
 
     @Test
@@ -143,7 +144,7 @@ class RenewalSummonerStepTest {
 
         // then
         verify(finisher).skipped("stale");
-        verifyNoInteractions(riotApiService, stepPublisher);
+        verifyNoInteractions(riotApiService, permitPort, stepPublisher);
     }
 
     @Test
@@ -156,7 +157,7 @@ class RenewalSummonerStepTest {
         step.run(message("r1"));
 
         // then
-        verify(riotApiService).getSummonerByPuuid(eq("p1"), eq(Platform.KR), any());
+        verify(riotApiService).getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any());
         verify(finisher, never()).skipped(anyString());
     }
 
@@ -268,10 +269,10 @@ class RenewalSummonerStepTest {
     }
 
     @Test
-    @DisplayName("예약 실패는 같은 메시지를 잠시 뒤 다시 넣는다")
-    void run_budgetExceeded_requeuesLater() {
+    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 같은 메시지를 잠시 뒤 다시 넣는다")
+    void run_permitDenied_requeuesLater() {
         // given
-        givenRiotFails(new RiotBudgetExceededException("asia", RiotCallPriority.USER));
+        RiotPermitFixtures.denyAll(permitPort);
         SummonerMessage message = message("r1");
 
         // when
@@ -280,13 +281,14 @@ class RenewalSummonerStepTest {
         // then
         verify(stepPublisher).republishSummonerLater(message);
         verify(finisher, never()).fail(anyString(), anyString(), anyString());
+        verifyNoInteractions(riotApiService);
     }
 
     @Test
     @DisplayName("그 밖의 예외는 분류한 reason 으로 실패시킨다")
     void run_otherException_failsWithClassifiedReason() {
         // given
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willThrow(new IllegalStateException("boom"));
 
         // when
@@ -300,7 +302,7 @@ class RenewalSummonerStepTest {
     @DisplayName("CompletionException 으로 감싸인 404 도 not_found 로 본다")
     void run_wrappedNotFound_failsNotFound() {
         // given
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willThrow(new CompletionException(new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
 
         // when
@@ -311,20 +313,16 @@ class RenewalSummonerStepTest {
     }
 
     @Test
-    @DisplayName("Riot 호출은 429 인라인 재시도가 꺼져 있다")
-    void run_riotCallsWithoutRateLimitRetry() {
-        // given
-        List<Boolean> retryEnabled = new ArrayList<>();
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any())).willAnswer(inv -> {
-            retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
-            return CompletableFuture.completedFuture(summonerDto);
-        });
-
+    @DisplayName("USER 로 SUMMONER_BY_PUUID 허가 1건을 받아 그 허가로 부른다")
+    void run_callsRiotWithUserPermit() {
         // when
         step.run(message("r1"));
 
         // then
-        assertThat(retryEnabled).containsExactly(false);
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, Map.of(RiotMethod.SUMMONER_BY_PUUID, 1));
+        verify(riotApiService).getSummonerByPuuid(eq("p1"), eq(Platform.KR),
+                org.mockito.ArgumentMatchers.argThat(permit -> permit.method() == RiotMethod.SUMMONER_BY_PUUID
+                        && permit.priority() == RiotCallPriority.USER), any());
     }
 
     @Test

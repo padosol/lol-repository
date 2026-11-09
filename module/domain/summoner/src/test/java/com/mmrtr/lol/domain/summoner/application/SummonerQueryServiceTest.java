@@ -15,6 +15,11 @@ import com.mmrtr.lol.domain.summoner.readmodel.SummonerLeagueReadModel.LeagueRec
 import com.mmrtr.lol.domain.summoner.readmodel.SummonerReadModel;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,7 +28,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -33,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -59,12 +67,15 @@ class SummonerQueryServiceTest {
     @Mock
     private SummonerLookupLockPort summonerLookupLockPort;
 
+    @Mock
+    private RiotPermitPort riotPermitPort;
+
     private SummonerQueryService service;
 
     @BeforeEach
     void setUp() {
         service = new SummonerQueryService(summonerQueryPort, summonerApiPort, saveSummonerDataUseCase,
-                summonerLookupLockPort, Runnable::run);
+                summonerLookupLockPort, riotPermitPort, Runnable::run);
     }
 
     @DisplayName("puuid 조회는 저장된 소환사를 lol-server 날짜 형식으로, platform 은 null 로 돌려준다")
@@ -126,7 +137,8 @@ class SummonerQueryServiceTest {
         given(summonerQueryPort.findSummonersBySearchName("KR", "hideonbush#kr1", 2)).willReturn(List.of());
         runLockedActions();
         Summoner fetched = summoner(PUUID, "hide on bush", "KR1");
-        given(summonerApiPort.fetchSummonerByRiotId(eq("hide on bush"), eq("KR1"), eq("KR"), any()))
+        givenPermitsGranted();
+        given(summonerApiPort.fetchSummonerByRiotId(eq("hide on bush"), eq("KR1"), eq("KR"), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(fetched));
 
         // when
@@ -176,7 +188,8 @@ class SummonerQueryServiceTest {
         // given
         given(summonerQueryPort.findSummonersBySearchName(anyString(), anyString(), anyInt())).willReturn(List.of());
         runLockedActions();
-        given(summonerApiPort.fetchSummonerByRiotId(anyString(), anyString(), anyString(), any()))
+        givenPermitsGranted();
+        given(summonerApiPort.fetchSummonerByRiotId(anyString(), anyString(), anyString(), any(), any()))
                 .willReturn(CompletableFuture.failedFuture(new CoreException(ErrorType.NOT_FOUND_USER)));
 
         // when & then
@@ -193,7 +206,8 @@ class SummonerQueryServiceTest {
         given(summonerQueryPort.findSummonersBySearchName("KR", "hideonbush#kr1", 2))
                 .willReturn(List.of(summoner("old", "hide on bush", "KR1"), summoner(PUUID, "hide on bush", "KR1")));
         runLockedActions();
-        given(summonerApiPort.fetchSummonerByRiotId(anyString(), anyString(), anyString(), any()))
+        givenPermitsGranted();
+        given(summonerApiPort.fetchSummonerByRiotId(anyString(), anyString(), anyString(), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(summoner(PUUID, "hide on bush", "KR1")));
 
         // when
@@ -263,6 +277,60 @@ class SummonerQueryServiceTest {
         assertThat(result.soloLeagueHistory()).extracting(SummonerLeagueReadModel.LeagueEntry::oow)
                 .containsExactly("0.50");
         assertThat(result.flexLeagueHistory()).isEmpty();
+    }
+
+    @DisplayName("Riot 조회는 USER 로 Riot ID 조회 비용(3건)의 허가를 받아 그 허가로 부른다")
+    @Test
+    void getSummonerByRiotId_notStored_acquiresUserPermitsForRiotIdLookup() {
+        // given
+        given(summonerQueryPort.findSummonersBySearchName(anyString(), anyString(), anyInt())).willReturn(List.of());
+        runLockedActions();
+        givenPermitsGranted();
+        given(summonerApiPort.fetchSummonerByRiotId(anyString(), anyString(), anyString(), any(), any()))
+                .willReturn(CompletableFuture.completedFuture(summoner(PUUID, "hide on bush", "KR1")));
+
+        // when
+        service.getSummonerByRiotId("hide on bush-KR1", "kr");
+
+        // then
+        verify(riotPermitPort).tryAcquire("KR", RiotCallPriority.USER, SummonerApiPort.BY_RIOT_ID_COST);
+        verify(summonerApiPort).fetchSummonerByRiotId(eq("hide on bush"), eq("KR1"), eq("KR"),
+                org.mockito.ArgumentMatchers.argThat(permits ->
+                        permits.remaining(RiotMethod.ACCOUNT_BY_RIOT_ID) == 1
+                                && permits.remaining(RiotMethod.SUMMONER_BY_PUUID) == 1
+                                && permits.remaining(RiotMethod.LEAGUE_ENTRIES_BY_PUUID) == 1),
+                any());
+    }
+
+    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 TOO_MANY_REQUESTS (어댑터가 429 를 바꾸는 것과 같다)")
+    @Test
+    void getSummonerByRiotId_permitDenied_throwsTooManyRequests() {
+        // given
+        given(summonerQueryPort.findSummonersBySearchName(anyString(), anyString(), anyInt())).willReturn(List.of());
+        runLockedActions();
+        given(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> service.getSummonerByRiotId("hide on bush-KR1", "kr"))
+                .isInstanceOfSatisfying(CoreException.class,
+                        e -> assertThat(e.getErrorType()).isEqualTo(ErrorType.TOO_MANY_REQUESTS));
+        verifyNoInteractions(summonerApiPort, saveSummonerDataUseCase);
+    }
+
+    /** 요청한 건수만큼 허가를 준다. */
+    private void givenPermitsGranted() {
+        given(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).willAnswer(invocation -> {
+            String platform = invocation.getArgument(0);
+            RiotCallPriority priority = invocation.getArgument(1);
+            Map<RiotMethod, Integer> counts = invocation.getArgument(2);
+            List<RiotPermit> permits = new ArrayList<>();
+            counts.forEach((method, count) -> {
+                for (int k = 1; k <= count; k++) {
+                    permits.add(new RiotPermit("t-" + method + "-" + k, platform, method, priority));
+                }
+            });
+            return Optional.of(RiotPermits.of(permits));
+        });
     }
 
     @SuppressWarnings("unchecked")

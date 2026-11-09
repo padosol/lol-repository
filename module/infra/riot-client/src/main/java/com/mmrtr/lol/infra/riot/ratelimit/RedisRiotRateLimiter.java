@@ -15,6 +15,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,11 +35,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Redis ZSET 슬라이딩 창으로 버킷 한도를 지키는 {@link RiotRateLimiter}. 키는 모두 {@code riot:rl:} 아래에 있다.
+ * Redis ZSET 슬라이딩 창으로 버킷 한도를 지키는 {@link RiotPermitPort}·{@link RiotRateLimiter}. 키는 모두 {@code riot:rl:}
+ * 아래에 있다.
  *
- * <p>규칙(버킷 × 창)마다 ZSET 하나에 허가된 호출의 eventId 를 허가 시각으로 기록하고, {@link #complete} 가 Riot 한도
- * 규칙(app·method)의 기록만 응답 시각으로 옮긴다. 허가는 Lua 하나가 모든 규칙을 검사한 뒤 전부 통과할 때만 모든 규칙에
- * 기록한다. 한도는 Java 가 버킷별로 알고 인자로 넘긴다.
+ * <p>규칙(버킷 × 창)마다 ZSET 하나에 허가된 호출의 토큰을 허가 시각으로 기록하고, {@link #complete} 가 Riot 한도
+ * 규칙(app·method)의 기록만 응답 시각으로 옮긴다. 허가는 routing 마다 Lua 하나가 모든 규칙을 검사한 뒤 전부 통과할 때만
+ * 모든 규칙에 기록한다. 한도는 Java 가 버킷별로 알고 인자로 넘긴다.
  *
  * <p>기록은 재시작해도 지우지 않는다. 기동 시 초기화를 하지 않으므로 여러 인스턴스가 같은 예산을 나눠 쓴다.
  */
@@ -58,7 +60,6 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
     private final LongSupplier nowMillisOverride;
     private final MeterRegistry meterRegistry;
     private final String appDefault;
-    private final LuaScript acquireScript = new LuaScript("ratelimit/riot-acquire.lua");
     private final LuaScript permitScript = new LuaScript("ratelimit/riot-permit.lua");
     private final LuaScript completeScript = new LuaScript("ratelimit/riot-complete.lua");
     private final LuaScript pauseScript = new LuaScript("ratelimit/riot-pause.lua");
@@ -94,49 +95,6 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         }
     }
 
-    @Override
-    public long acquire(String eventId, String routing, String method, RiotCallPriority priority) {
-        List<Rule> rules = rules(routing, method, priority);
-        List<Object> keys = new ArrayList<>(3 + rules.size());
-        keys.add(pauseKey(appBucket(routing)));
-        keys.add(pauseKey(methodBucket(routing, method)));
-        keys.add(PREFIX + "user:" + routing);
-        List<Object> args = new ArrayList<>(5 + rules.size() * 3);
-        args.add(eventId);
-        args.add(nowArg());
-        args.add(String.valueOf(priority.level()));
-        args.add(String.valueOf(ceilingRatio(priority)));
-        args.add(String.valueOf(config.getUserActiveWindow().toMillis()));
-        for (Rule rule : rules) {
-            keys.add(rule.key());
-            args.add(String.valueOf(rule.cap()));
-            args.add(String.valueOf(rule.windowMs()));
-            args.add(rule.lowered() ? "1" : "0");
-        }
-        return acquireScript.eval(keys, args.toArray());
-    }
-
-    /**
-     * Riot 한도 규칙(낮춤 규칙 = app·method)의 기록만 응답 시각으로 옮긴다. 응답 시각으로 옮기는 것은 Riot 이 센 도착 시각에
-     * 맞추려는 것이라, 우리가 정한 백필 전용 규칙은 허가 시각에 둔다. 옮기면 백필이 초당 40 / (1 + 응답 지연) 회로 준다.
-     */
-    @Override
-    public void complete(String eventId, String routing, String method, RiotCallPriority priority) {
-        List<Rule> rules = rules(routing, method, priority);
-        List<Object> keys = new ArrayList<>(rules.size());
-        List<Object> args = new ArrayList<>(2 + rules.size());
-        args.add(eventId);
-        args.add(nowArg());
-        for (Rule rule : rules) {
-            if (!rule.lowered()) {
-                continue;
-            }
-            keys.add(rule.key());
-            args.add(String.valueOf(rule.windowMs()));
-        }
-        completeScript.eval(keys, args.toArray());
-    }
-
     /**
      * counts 를 routing 별로 묶어 묶음마다 Lua 하나로 허가를 판단한다. REGIONAL 묶음이 먼저다. 한 묶음이라도 거절이면
      * 빈 값이고, 앞서 허가돼 기록된 묶음의 토큰은 지우지 않는다 (창을 빠질 때까지 예산을 쓴 것으로 센다).
@@ -152,10 +110,7 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
                 throw new IllegalArgumentException("건수는 1 이상이어야 합니다: " + method + "=" + count);
             }
         });
-        Platform target = Platform.valueOfName(platform);
-        if (target == null) {
-            throw new IllegalArgumentException("알 수 없는 platform: " + platform);
-        }
+        Platform target = platformOf(platform);
         // routing 별 묶음. REGIONAL → PLATFORM 순서, 같은 routing 안에서는 RiotMethod 순서
         Map<String, Map<RiotMethod, Integer>> groups = new LinkedHashMap<>();
         for (RiotMethod.Routing kind : RiotMethod.Routing.values()) {
@@ -173,7 +128,7 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         for (Map.Entry<String, Map<RiotMethod, Integer>> group : groups.entrySet()) {
             String routing = group.getKey();
             String batchId = UUID.randomUUID().toString();
-            List<PermitRule> rules = permitRules(routing, group.getValue(), priority);
+            List<PermitRule> rules = permitRules(routing, group.getValue().keySet(), priority);
             boolean ok = permitScript.eval(permitKeys(routing, group.getValue(), rules),
                     permitArgs(batchId, group.getValue(), priority, rules)) == 1;
             meterRegistry.counter("riot.permit.requests", "routing", routing,
@@ -191,22 +146,38 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return Optional.of(RiotPermits.of(granted));
     }
 
-    /** 허가된 token 의 기록을 app 규칙과 그 method 의 학습된 규칙에서 지금 시각으로 옮긴다. 백필 규칙은 건드리지 않는다. */
+    /**
+     * 허가된 token 의 기록을 허가 때와 같은 규칙 중 Riot 한도 규칙(낮춤 규칙 = app·method)에서만 지금 시각으로 옮긴다.
+     * 응답 시각으로 옮기는 것은 Riot 이 센 도착 시각에 맞추려는 것이라, 우리가 정한 백필 전용 규칙은 허가 시각에 둔다.
+     * 옮기면 백필이 초당 40 / (1 + 응답 지연) 회로 준다. 그 토큰이 없는 규칙은 Lua 가 건너뛴다.
+     */
     @Override
     public void complete(RiotPermit permit) {
-        String routing = routingOf(Platform.valueOfName(permit.platform()), permit.method().routing());
+        String routing = routingOf(platformOf(permit.platform()), permit.method().routing());
         List<Object> keys = new ArrayList<>();
         List<Object> args = new ArrayList<>();
         args.add(permit.token());
         args.add(nowArg());
-        for (Rule rule : rules(routing, permit.method().methodName(), RiotCallPriority.USER)) {
-            keys.add(rule.key());
-            args.add(String.valueOf(rule.windowMs()));
+        for (PermitRule pr : permitRules(routing, List.of(permit.method()), permit.priority())) {
+            if (!pr.rule().lowered()) {
+                continue;
+            }
+            keys.add(pr.rule().key());
+            args.add(String.valueOf(pr.rule().windowMs()));
         }
         completeScript.eval(keys, args.toArray());
     }
 
-    /** 호스트({@code https://asia.api.riotgames.com})의 첫 {@code .} 앞. 인터셉터가 보는 routing 과 같은 값이다. */
+    /** platform 이름(대소문자 무관). 모르는 이름이면 IllegalArgumentException. */
+    private static Platform platformOf(String platform) {
+        Platform target = Platform.valueOfName(platform);
+        if (target == null) {
+            throw new IllegalArgumentException("알 수 없는 platform: " + platform);
+        }
+        return target;
+    }
+
+    /** 호스트({@code https://asia.api.riotgames.com})의 첫 {@code .} 앞. {@code RiotCallRecorder} 가 보는 routing 과 같은 값이다. */
     static String routingOf(Platform platform, RiotMethod.Routing routing) {
         String host = routing == RiotMethod.Routing.REGIONAL ? platform.getRegionalHost() : platform.getPlatformHost();
         int scheme = host.indexOf("://");
@@ -247,15 +218,18 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return args.toArray();
     }
 
-    /** 묶음에 적용할 규칙. app 규칙, 학습된 method 규칙, BACKGROUND 면 백필 규칙 순서. */
-    private List<PermitRule> permitRules(String routing, Map<RiotMethod, Integer> group, RiotCallPriority priority) {
+    /**
+     * 묶음에 적용할 규칙. app 한도(배운 값, 없으면 app-default)와 method 한도(배운 값이 있을 때만)의 창마다 낮춤 규칙 하나씩이고,
+     * BACKGROUND 면 백필 전용 1초 규칙을 더한다. 허가({@link #tryAcquire})와 기록 옮기기({@link #complete})가 같이 쓴다.
+     */
+    private List<PermitRule> permitRules(String routing, Collection<RiotMethod> methods, RiotCallPriority priority) {
         List<PermitRule> result = new ArrayList<>();
         String app = appBucket(routing);
         String appLimits = knownLimits(app);
         List<Rule> appRules = new ArrayList<>();
         addRules(appRules, app, appLimits != null ? appLimits : appDefault);
         appRules.forEach(r -> result.add(new PermitRule(r, "")));
-        for (RiotMethod method : group.keySet()) {
+        for (RiotMethod method : methods) {
             String bucket = methodBucket(routing, method.methodName());
             String limits = knownLimits(bucket);
             if (limits != null) {
@@ -291,28 +265,6 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
     /** 규칙 ZSET 키. bucket 은 {@code {routing}|app}, {@code {routing}|m|{method}}, {@code {routing}|bg} 다. */
     static String ruleKey(String bucket, int windowSeconds) {
         return PREFIX + "w:" + bucket + ":" + windowSeconds;
-    }
-
-    /**
-     * 이 호출이 모두 통과해야 하는 규칙. app 한도(배운 값, 없으면 app-default)와 method 한도(배운 값이 있을 때만)의
-     * 창마다 낮춤 규칙 하나씩이고, BACKGROUND 면 백필 전용 1초 규칙을 더한다.
-     */
-    private List<Rule> rules(String routing, String method, RiotCallPriority priority) {
-        List<Rule> rules = new ArrayList<>();
-        String app = appBucket(routing);
-        String appLimits = knownLimits(app);
-        addRules(rules, app, appLimits != null ? appLimits : appDefault);
-        String methodBucket = methodBucket(routing, method);
-        String methodLimits = knownLimits(methodBucket);
-        if (methodLimits != null) {
-            addRules(rules, methodBucket, methodLimits);
-        }
-        int backgroundMax = config.getBackgroundMaxPerSecond();
-        if (priority == RiotCallPriority.BACKGROUND && backgroundMax > 0) {
-            rules.add(new Rule(ruleKey(backgroundBucket(routing), BACKGROUND_WINDOW_SECONDS), backgroundMax,
-                    BACKGROUND_WINDOW_SECONDS * 1000L, false));
-        }
-        return rules;
     }
 
     /** 한도의 창마다 상한 max(1, floor(한도 × safetyRatio)) 인 낮춤 규칙을 더한다. */

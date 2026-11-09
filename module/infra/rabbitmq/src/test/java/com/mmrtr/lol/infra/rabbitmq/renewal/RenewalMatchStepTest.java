@@ -14,6 +14,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -33,28 +34,33 @@ import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchQueueRank;
 import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;
+import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import com.mmrtr.lol.infra.redis.service.RenewalMatchClaimService;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotRetryScope;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.ResourceAccessException;
@@ -63,9 +69,13 @@ class RenewalMatchStepTest {
 
     private static final long START_TIME = 1_767_225_600L;
     private static final EnumSet<RenewalStep> MATCH = EnumSet.of(RenewalStep.MATCH);
+    private static final Map<RiotMethod, Integer> IDS_COST = Map.of(RiotMethod.MATCH_IDS_BY_PUUID, 1);
+    private static final Map<RiotMethod, Integer> MATCH_COST =
+            Map.of(RiotMethod.MATCH, 1, RiotMethod.MATCH_TIMELINE, 1);
 
     private final RenewalRecordPort recordPort = mock(RenewalRecordPort.class);
     private final MatchApiPort matchApiPort = mock(MatchApiPort.class);
+    private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private final MatchRepositoryPort matchRepositoryPort = mock(MatchRepositoryPort.class);
     private final SaveMatchDataUseCase saveMatchDataUseCase = mock(SaveMatchDataUseCase.class);
     private final MatchCacheWritePort matchCacheWritePort = mock(MatchCacheWritePort.class);
@@ -76,8 +86,8 @@ class RenewalMatchStepTest {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalMatchStep step = new RenewalMatchStep(
-            recordPort, matchApiPort, matchRepositoryPort, saveMatchDataUseCase, matchCacheWritePort, claimService,
-            messageSender, stepPublisher, finisher, meterRegistry, executor);
+            recordPort, matchApiPort, permitPort, matchRepositoryPort, saveMatchDataUseCase, matchCacheWritePort,
+            claimService, messageSender, stepPublisher, finisher, meterRegistry, executor);
 
     private final MatchDto match1 = new MatchDto();
     private final MatchDto match2 = new MatchDto();
@@ -100,16 +110,16 @@ class RenewalMatchStepTest {
     }
 
     private void givenIds(List<String> ids) {
-        given(matchApiPort.fetchMatchIdsByPuuid(eq("p1"), eq("KR"), anyLong(), eq(0), eq(20), any()))
+        given(matchApiPort.fetchMatchIdsByPuuid(eq("p1"), eq("KR"), anyLong(), eq(0), eq(20), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(ids));
     }
 
     private void givenMatch(String matchId, CompletableFuture<MatchDto> result) {
-        given(matchApiPort.fetchMatchById(eq(matchId), eq("KR"), any())).willReturn(result);
+        given(matchApiPort.fetchMatchById(eq(matchId), eq("KR"), any(), any())).willReturn(result);
     }
 
     private void givenTimeline(String matchId, CompletableFuture<TimelineDto> result) {
-        given(matchApiPort.fetchTimelineById(eq(matchId), eq("KR"), any())).willReturn(result);
+        given(matchApiPort.fetchTimelineById(eq(matchId), eq("KR"), any(), any())).willReturn(result);
     }
 
     private static RenewalStepMessage msg(String renewalId, long startTime) {
@@ -117,11 +127,7 @@ class RenewalMatchStepTest {
     }
 
     private static RiotRateLimitException rateLimit() {
-        return new RiotRateLimitException(Duration.ofSeconds(1), HttpStatus.TOO_MANY_REQUESTS, "", null);
-    }
-
-    private static RiotBudgetExceededException budgetExceeded() {
-        return new RiotBudgetExceededException("asia", RiotCallPriority.USER);
+        return new RiotRateLimitException(Duration.ofSeconds(1), null, HttpStatus.TOO_MANY_REQUESTS, "", null);
     }
 
     private double count(String name, String... tags) {
@@ -155,7 +161,8 @@ class RenewalMatchStepTest {
         step.run(msg("r1", START_TIME), false);
 
         // then
-        verify(matchApiPort).fetchMatchIdsByPuuid("p1", "KR", START_TIME, 0, 20, executor);
+        verify(matchApiPort).fetchMatchIdsByPuuid(eq("p1"), eq("KR"), eq(START_TIME), eq(0), eq(20), any(),
+                eq(executor));
     }
 
     @Test
@@ -170,7 +177,7 @@ class RenewalMatchStepTest {
         // then
         verify(recordPort).recordTargets("p1", "r1", Set.of());
         verify(recordPort).markSteps("p1", "r1", MATCH);
-        verify(matchApiPort, never()).fetchMatchById(anyString(), anyString(), any());
+        verify(matchApiPort, never()).fetchMatchById(anyString(), anyString(), any(), any());
         verifyNoInteractions(saveMatchDataUseCase, matchCacheWritePort);
     }
 
@@ -184,8 +191,8 @@ class RenewalMatchStepTest {
         step.run(msg("r1", 0), false);
 
         // then
-        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any());
-        verify(matchApiPort, never()).fetchTimelineById(eq("m1"), any(), any());
+        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any(), any());
+        verify(matchApiPort, never()).fetchTimelineById(eq("m1"), any(), any(), any());
         verify(claimService, never()).release(eq("m1"), anyString());
         verify(saveMatchDataUseCase).execute(List.of(match2), List.of(timeline2));
         verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
@@ -209,17 +216,45 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("예약 실패한 매치도 사용자 재시도 순위로 넘긴다")
-    void run_matchBudgetExceeded_sendsUserRetry() {
-        // given
-        givenTimeline("m1", CompletableFuture.failedFuture(budgetExceeded()));
+    @DisplayName("허가가 거절된 매치는 부르지 않고 사용자 재시도 순위로 넘긴다")
+    void run_matchPermitDenied_sendsUserRetryWithoutRiotCall() {
+        // given: 첫 매치(m1)의 허가만 거절한다
+        AtomicInteger matchRequests = new AtomicInteger();
+        given(permitPort.tryAcquire(eq("KR"), eq(RiotCallPriority.USER), eq(MATCH_COST))).willAnswer(inv ->
+                matchRequests.incrementAndGet() == 1 ? Optional.empty() : Optional.of(RiotPermits.of(List.of(
+                        new RiotPermit("t-m", "KR", RiotMethod.MATCH, RiotCallPriority.USER),
+                        new RiotPermit("t-t", "KR", RiotMethod.MATCH_TIMELINE,
+                                RiotCallPriority.USER)))));
 
         // when
         step.run(msg("r1", 0), false);
 
         // then
+        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any(), any());
+        verify(matchApiPort, never()).fetchTimelineById(eq("m1"), any(), any(), any());
         verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
         verify(claimService).release("m1", "r1");
+        verify(claimService, never()).markFailed(anyString());
+        verify(saveMatchDataUseCase).execute(List.of(match2), List.of(timeline2));
+        verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
+    }
+
+    @Test
+    @DisplayName("매치 허가를 묻다 예외가 나면 그 매치만 부르지 않고 사용자 재시도 순위로 넘긴다")
+    void run_matchPermitCheckThrows_handsOffThatMatch() {
+        // given
+        given(permitPort.tryAcquire(eq("KR"), eq(RiotCallPriority.USER), eq(MATCH_COST)))
+                .willThrow(new IllegalStateException("redis down"));
+
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(matchApiPort, never()).fetchMatchById(anyString(), anyString(), any(), any());
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
+        verify(messageSender).sendMessageByMatchId("m2", "KR", MatchQueueRank.USER_RETRY);
+        verifyNoInteractions(saveMatchDataUseCase);
+        assertThat(count("lol.renewal.step", "step", "match", "result", "success")).isEqualTo(1);
     }
 
     @Test
@@ -315,8 +350,8 @@ class RenewalMatchStepTest {
         // then
         verify(recordPort).recordTargets("p1", "r1", Set.of("m2"));
         verify(claimService, never()).claim(eq("m1"), anyString());
-        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any());
-        verify(matchApiPort, never()).fetchTimelineById(eq("m1"), any(), any());
+        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any(), any());
+        verify(matchApiPort, never()).fetchTimelineById(eq("m1"), any(), any(), any());
         verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.BACKFILL);
         verify(messageSender, never()).sendMessageByMatchId(eq("m2"), anyString(), any());
         verify(recordPort).markSteps("p1", "r1", MATCH);
@@ -400,7 +435,7 @@ class RenewalMatchStepTest {
     @DisplayName("id 조회의 첫 429 는 시도 수를 올려 매치 단계 큐에 다시 넣는다")
     void run_ids429FirstAttempt_requeuesWithNextAttempt() {
         // given
-        given(matchApiPort.fetchMatchIdsByPuuid(eq("p1"), eq("KR"), anyLong(), eq(0), eq(20), any()))
+        given(matchApiPort.fetchMatchIdsByPuuid(eq("p1"), eq("KR"), anyLong(), eq(0), eq(20), any(), any()))
                 .willReturn(CompletableFuture.failedFuture(rateLimit()));
 
         // when
@@ -413,17 +448,18 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("id 조회의 예약 실패는 시도 수를 올리지 않고 잠시 뒤 다시 넣는다")
-    void run_idsBudgetExceeded_requeuesLater() {
+    @DisplayName("id 조회 허가가 거절되면 Riot 을 부르지 않고 시도 수를 올리지 않은 채 잠시 뒤 다시 넣는다")
+    void run_idsPermitDenied_requeuesLater() {
         // given
-        given(matchApiPort.fetchMatchIdsByPuuid(eq("p1"), eq("KR"), anyLong(), eq(0), eq(20), any()))
-                .willReturn(CompletableFuture.failedFuture(budgetExceeded()));
+        RiotPermitFixtures.denyAll(permitPort);
 
         // when
         step.run(msg("r1", START_TIME), false);
 
         // then
         verify(stepPublisher).requeueLater(RabbitMqBinding.RENEWAL_MATCH, msg("r1", START_TIME));
+        verifyNoInteractions(matchApiPort);
+        verify(recordPort, never()).recordTargets(anyString(), anyString(), anyCollection());
     }
 
     @Test
@@ -434,7 +470,7 @@ class RenewalMatchStepTest {
 
         // then
         verify(finisher).skipped("stale");
-        verifyNoInteractions(matchApiPort, claimService, saveMatchDataUseCase);
+        verifyNoInteractions(matchApiPort, permitPort, claimService, saveMatchDataUseCase);
     }
 
     @Test
@@ -461,28 +497,21 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("id·매치·타임라인 호출은 모두 429 인라인 재시도가 꺼져 있다")
-    void run_riotCallsWithoutRateLimitRetry() {
-        // given
-        List<Boolean> retryEnabled = new ArrayList<>();
-        given(matchApiPort.fetchMatchIdsByPuuid(eq("p1"), eq("KR"), anyLong(), eq(0), eq(20), any()))
-                .willAnswer(inv -> {
-                    retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
-                    return CompletableFuture.completedFuture(List.of("m1"));
-                });
-        given(matchApiPort.fetchMatchById(eq("m1"), eq("KR"), any())).willAnswer(inv -> {
-            retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
-            return CompletableFuture.completedFuture(match1);
-        });
-        given(matchApiPort.fetchTimelineById(eq("m1"), eq("KR"), any())).willAnswer(inv -> {
-            retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
-            return CompletableFuture.completedFuture(timeline1);
-        });
-
+    @DisplayName("id 는 USER 허가 1건, 매치는 매치마다 따로 받은 match·timeline 허가로 부른다")
+    void run_takesUserPermitsForIdsAndPerMatch() {
         // when
         step.run(msg("r1", 0), false);
 
         // then
-        assertThat(retryEnabled).containsExactly(false, false, false);
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, IDS_COST);
+        verify(permitPort, times(2)).tryAcquire("KR", RiotCallPriority.USER, MATCH_COST);
+        ArgumentCaptor<RiotPermits> m1Match = ArgumentCaptor.forClass(RiotPermits.class);
+        ArgumentCaptor<RiotPermits> m1Timeline = ArgumentCaptor.forClass(RiotPermits.class);
+        ArgumentCaptor<RiotPermits> m2Match = ArgumentCaptor.forClass(RiotPermits.class);
+        verify(matchApiPort).fetchMatchById(eq("m1"), eq("KR"), m1Match.capture(), any());
+        verify(matchApiPort).fetchTimelineById(eq("m1"), eq("KR"), m1Timeline.capture(), any());
+        verify(matchApiPort).fetchMatchById(eq("m2"), eq("KR"), m2Match.capture(), any());
+        assertThat(m1Match.getValue()).isSameAs(m1Timeline.getValue());
+        assertThat(m1Match.getValue()).isNotSameAs(m2Match.getValue());
     }
 }

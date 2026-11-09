@@ -22,17 +22,17 @@ import com.mmrtr.lol.domain.summoner.domain.RenewalTransition;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotRetryScope;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -46,12 +46,14 @@ class RenewalAccountStepTest {
     private final RenewalRecordPort recordPort = mock(RenewalRecordPort.class);
     private final SummonerRepositoryPort summonerRepositoryPort = mock(SummonerRepositoryPort.class);
     private final RiotApiService riotApiService = mock(RiotApiService.class);
+    private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private final RenewalStepPublisher stepPublisher = mock(RenewalStepPublisher.class);
     private final RenewalFinisher finisher = mock(RenewalFinisher.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalAccountStep step = new RenewalAccountStep(
-            recordPort, summonerRepositoryPort, riotApiService, stepPublisher, finisher, meterRegistry, executor);
+            recordPort, summonerRepositoryPort, riotApiService, permitPort, stepPublisher, finisher, meterRegistry,
+            executor);
 
     @BeforeEach
     void setUp() {
@@ -60,7 +62,7 @@ class RenewalAccountStepTest {
         account.setPuuid("p1");
         account.setGameName("Hide on bush");
         account.setTagLine("KR1");
-        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(account));
         given(recordPort.markSteps("p1", "r1", EnumSet.of(RenewalStep.ACCOUNT))).willReturn(RenewalTransition.NONE);
     }
@@ -75,12 +77,12 @@ class RenewalAccountStepTest {
     }
 
     private void givenRiotFails(Throwable cause) {
-        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.failedFuture(cause));
     }
 
     private RiotRateLimitException rateLimit() {
-        return new RiotRateLimitException(Duration.ofSeconds(1), HttpStatus.TOO_MANY_REQUESTS, "", null);
+        return new RiotRateLimitException(Duration.ofSeconds(1), null, HttpStatus.TOO_MANY_REQUESTS, "", null);
     }
 
     private double count(String result) {
@@ -158,16 +160,17 @@ class RenewalAccountStepTest {
     }
 
     @Test
-    @DisplayName("예약 실패는 시도 수를 올리지 않고 잠시 뒤 다시 넣는다")
-    void run_budgetExceeded_requeuesLaterWithoutAttemptIncrease() {
+    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 시도 수를 올리지 않은 채 잠시 뒤 다시 넣는다")
+    void run_permitDenied_requeuesLaterWithoutAttemptIncrease() {
         // given
-        givenRiotFails(new RiotBudgetExceededException("asia", RiotCallPriority.USER));
+        RiotPermitFixtures.denyAll(permitPort);
 
         // when
         step.run(msg("r1"));
 
         // then
         verify(stepPublisher).requeueLater(RabbitMqBinding.RENEWAL_ACCOUNT, msg("r1"));
+        verifyNoInteractions(riotApiService);
         verify(finisher, never()).fail(anyString(), anyString(), anyString());
         assertThat(count("requeue")).isEqualTo(1);
     }
@@ -227,7 +230,7 @@ class RenewalAccountStepTest {
     @DisplayName("그 밖의 예외는 분류한 reason 으로 실패시킨다")
     void run_otherException_failsWithClassifiedReason() {
         // given
-        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willThrow(new IllegalStateException("boom"));
 
         // when
@@ -238,20 +241,16 @@ class RenewalAccountStepTest {
     }
 
     @Test
-    @DisplayName("Riot 호출은 429 인라인 재시도가 꺼져 있다")
-    void run_riotCallWithoutRateLimitRetry() {
-        // given
-        List<Boolean> retryEnabled = new ArrayList<>();
-        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any())).willAnswer(inv -> {
-            retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
-            return CompletableFuture.completedFuture(new AccountDto());
-        });
-
+    @DisplayName("USER 로 ACCOUNT_BY_PUUID 허가 1건을 받아 그 허가로 부른다")
+    void run_callsRiotWithUserPermit() {
         // when
         step.run(msg("r1"));
 
         // then
-        assertThat(retryEnabled).containsExactly(false);
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, Map.of(RiotMethod.ACCOUNT_BY_PUUID, 1));
+        verify(riotApiService).getAccountByPuuid(eq("p1"), eq(Platform.KR),
+                org.mockito.ArgumentMatchers.argThat(permit -> permit.method() == RiotMethod.ACCOUNT_BY_PUUID
+                        && permit.priority() == RiotCallPriority.USER), any());
     }
 
     @Test

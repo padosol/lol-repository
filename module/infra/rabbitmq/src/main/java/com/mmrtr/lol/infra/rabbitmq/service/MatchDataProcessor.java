@@ -5,8 +5,11 @@ import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.infra.redis.service.MatchRedisService;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
-import com.mmrtr.lol.support.riot.RiotCallScope;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +19,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -26,10 +30,13 @@ import java.util.concurrent.TimeoutException;
 @Component
 public class MatchDataProcessor {
 
-    /** BACKGROUND 한도 대기(backgroundMaxWait 30초)에 재시도 backoff 까지 들어가도록 넉넉히 잡는다. */
+    /** match·timeline 을 받을 때까지 기다리는 상한. executor 가 밀린 경우까지 넉넉히 잡는다. */
     private static final Duration FETCH_TIMEOUT = Duration.ofSeconds(90);
+    /** 매치 하나에 받는 허가. */
+    private static final Map<RiotMethod, Integer> MATCH_COST = Map.of(RiotMethod.MATCH, 1, RiotMethod.MATCH_TIMELINE, 1);
 
     private final MatchApiPort matchApiPort;
+    private final RiotPermitPort permitPort;
     private final MatchRedisService matchRedisService;
     private final MatchBatchProcessor matchBatchProcessor;
     private final Executor riotApiExecutor;
@@ -38,18 +45,19 @@ public class MatchDataProcessor {
     private final Duration fetchTimeout;
 
     @Autowired
-    public MatchDataProcessor(MatchApiPort matchApiPort, MatchRedisService matchRedisService,
+    public MatchDataProcessor(MatchApiPort matchApiPort, RiotPermitPort permitPort, MatchRedisService matchRedisService,
                               MatchBatchProcessor matchBatchProcessor, Executor riotApiExecutor,
                               MatchRepositoryPort matchRepositoryPort, MeterRegistry meterRegistry) {
-        this(matchApiPort, matchRedisService, matchBatchProcessor, riotApiExecutor,
+        this(matchApiPort, permitPort, matchRedisService, matchBatchProcessor, riotApiExecutor,
                 matchRepositoryPort, meterRegistry, FETCH_TIMEOUT);
     }
 
-    MatchDataProcessor(MatchApiPort matchApiPort, MatchRedisService matchRedisService,
+    MatchDataProcessor(MatchApiPort matchApiPort, RiotPermitPort permitPort, MatchRedisService matchRedisService,
                        MatchBatchProcessor matchBatchProcessor, Executor riotApiExecutor,
                        MatchRepositoryPort matchRepositoryPort, MeterRegistry meterRegistry,
                        Duration fetchTimeout) {
         this.matchApiPort = matchApiPort;
+        this.permitPort = permitPort;
         this.matchRedisService = matchRedisService;
         this.matchBatchProcessor = matchBatchProcessor;
         this.riotApiExecutor = riotApiExecutor;
@@ -92,11 +100,25 @@ public class MatchDataProcessor {
             return Result.DUPLICATE;
         }
 
-        // 호출은 만드는 스레드의 스코프로 우선순위가 정해진다
-        CompletableFuture<MatchDto> matchFuture = RiotCallScope.call(rank.riotPriority(),
-                () -> matchApiPort.fetchMatchById(matchId, platformName, riotApiExecutor));
-        CompletableFuture<TimelineDto> timelineFuture = RiotCallScope.call(rank.riotPriority(),
-                () -> matchApiPort.fetchTimelineById(matchId, platformName, riotApiExecutor));
+        // 순위의 우선순위로 match·timeline 허가를 함께 받는다. 거절은 예약 실패와 같게 다시 큐에 넣는다
+        RiotCallPriority priority = rank.riotPriority();
+        RiotPermits permits;
+        try {
+            permits = permitPort.tryAcquire(platformName, priority, MATCH_COST)
+                    .orElseThrow(() -> new RiotPermitDeniedException(platformName, priority));
+        } catch (RiotPermitDeniedException e) {
+            log.warn("Riot permit denied, requeueing matchId {}", matchId);
+            matchRedisService.releaseProcessing(matchId);
+            return Result.QUEUE_FULL;
+        } catch (RuntimeException e) {
+            log.warn("Riot permit check failed for matchId {}: {}", matchId, e.toString());
+            matchRedisService.releaseProcessing(matchId);
+            return Result.FAILURE;
+        }
+        CompletableFuture<MatchDto> matchFuture =
+                matchApiPort.fetchMatchById(matchId, platformName, permits, riotApiExecutor);
+        CompletableFuture<TimelineDto> timelineFuture =
+                matchApiPort.fetchTimelineById(matchId, platformName, permits, riotApiExecutor);
 
         Pair<MatchDto, TimelineDto> dtoPair;
         try {
@@ -104,7 +126,7 @@ public class MatchDataProcessor {
                     .thenApply(v -> Pair.of(matchFuture.join(), timelineFuture.join()))
                     .get(fetchTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            // 한도 대기로 늦어진 경우가 대부분이라 혼잡으로 보고 다시 큐에 넣는다
+            // executor 가 밀려 늦어진 경우라 혼잡으로 보고 다시 큐에 넣는다
             log.warn("Timeout fetching match data, requeueing matchId {}", matchId);
             matchFuture.cancel(true);
             timelineFuture.cancel(true);
@@ -116,11 +138,6 @@ public class MatchDataProcessor {
             matchRedisService.releaseProcessing(matchId);
             return Result.FAILURE;
         } catch (ExecutionException e) {
-            if (isBudgetExceeded(e)) {
-                log.warn("Riot budget exceeded, requeueing matchId {}", matchId);
-                matchRedisService.releaseProcessing(matchId);
-                return Result.QUEUE_FULL;
-            }
             log.warn("Failed to fetch data for matchId {}: {}", matchId, e.getCause().getMessage());
             matchRedisService.releaseProcessing(matchId);
             return Result.FAILURE;
@@ -132,14 +149,5 @@ public class MatchDataProcessor {
             return Result.QUEUE_FULL;
         }
         return Result.SUCCESS;
-    }
-
-    private boolean isBudgetExceeded(Throwable e) {
-        for (Throwable t = e; t != null; t = t.getCause()) {
-            if (t instanceof RiotBudgetExceededException) {
-                return true;
-            }
-        }
-        return false;
     }
 }

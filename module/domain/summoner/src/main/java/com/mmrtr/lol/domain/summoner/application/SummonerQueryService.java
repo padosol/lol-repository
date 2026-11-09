@@ -13,6 +13,10 @@ import com.mmrtr.lol.domain.summoner.readmodel.SummonerLeagueReadModel;
 import com.mmrtr.lol.domain.summoner.readmodel.SummonerReadModel;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +43,7 @@ public class SummonerQueryService implements SummonerQueryUseCase {
     private final SummonerApiPort summonerApiPort;
     private final SaveSummonerDataUseCase saveSummonerDataUseCase;
     private final SummonerLookupLockPort summonerLookupLockPort;
+    private final RiotPermitPort riotPermitPort;
     private final Executor requestExecutor;
 
     @Override
@@ -106,9 +111,15 @@ public class SummonerQueryService implements SummonerQueryUseCase {
     private Summoner fetchAndSave(RiotId id, Platform platform) {
         Summoner summoner;
         try {
+            RiotPermits permits = riotPermitPort
+                    .tryAcquire(platform.name(), RiotCallPriority.USER, SummonerApiPort.BY_RIOT_ID_COST)
+                    .orElseThrow(() -> new RiotPermitDeniedException(platform.name(), RiotCallPriority.USER));
             summoner = summonerApiPort
-                    .fetchSummonerByRiotId(id.gameName(), id.tagLine(), platform.name(), requestExecutor)
+                    .fetchSummonerByRiotId(id.gameName(), id.tagLine(), platform.name(), permits, requestExecutor)
                     .join();
+        } catch (RiotPermitDeniedException e) {
+            // 어댑터가 Riot 429 를 바꾸는 것과 같은 응답이다
+            throw new CoreException(ErrorType.TOO_MANY_REQUESTS, "잠시 후 다시 시도해주세요.");
         } catch (CompletionException e) {
             // 어댑터가 NOT_FOUND_USER·TOO_MANY_REQUESTS 로 바꾼 예외를 그대로 응답에 쓴다
             if (e.getCause() instanceof CoreException coreException) {

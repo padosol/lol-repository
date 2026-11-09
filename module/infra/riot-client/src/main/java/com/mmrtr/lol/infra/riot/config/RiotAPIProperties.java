@@ -13,8 +13,6 @@ public class RiotAPIProperties {
     private String apiKey;
     private int timeout = 3;
     private int readTimeout = 5;
-    private int retryAttempts = 2;
-    private int retryDelay = 2;
     private RateLimit rateLimit = new RateLimit();
     private Mock mock = new Mock();
 
@@ -36,19 +34,6 @@ public class RiotAPIProperties {
         private double safetyRatio = 0.9;
         /** 응답 Count 헤더가 한도의 이 비율 이상이면 버킷을 잠시 멈춘다. */
         private double countPauseRatio = 0.95;
-        /** 우선순위별 누적 대기 상한. 넘으면 보내지 않고 포기한다. */
-        private Duration userMaxWait = Duration.ofSeconds(10);
-        private Duration deferredMaxWait = Duration.ofSeconds(60);
-        private Duration backgroundMaxWait = Duration.ofSeconds(30);
-        /** 다시 묻기 전 최소로 자는 시간. 기다린 요청들이 1ms 단위로 깨어 같은 자리를 두고 다시 묻지 않게 한다. */
-        private Duration retryMinWait = Duration.ofMillis(25);
-        /** 자는 시간에 더하는 무작위 몫의 최대 비율 (대기 × 이 비율 이하). 같은 대기를 받은 요청들이 흩어져 깬다. */
-        private double retryJitterRatio = 0.25;
-        /**
-         * USER 무작위 몫의 상한. 무작위로 더 잔 시간도 {@code userMaxWait} 에 들어가므로, 오래 기다린 유저 호출이
-         * 흔들림 때문에 상한에 걸려 포기하지 않게 짧게 묶는다. 흩어지는 데는 수십 ms 면 된다.
-         */
-        private Duration userRetryJitterMax = Duration.ofMillis(50);
         /** 마지막 USER 요청 뒤 이만큼은 그 routing 을 유저 활동 중으로 본다. */
         private Duration userActiveWindow = Duration.ofSeconds(10);
         /** 유저 활동 중 DEFERRED·BACKGROUND 가 쓸 수 있는 app·method 규칙 상한의 비율. */

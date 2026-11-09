@@ -5,13 +5,17 @@ import com.mmrtr.lol.domain.league.application.port.LeagueApiPort;
 import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPort;
 import com.mmrtr.lol.domain.league.application.usecase.CollectTierDataUseCase;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -21,14 +25,12 @@ public class TierCollectionService implements CollectTierDataUseCase {
 
     private final LeagueApiPort leagueApiPort;
     private final SummonerCollectionPublishPort publishPort;
+    private final RiotPermitPort riotPermitPort;
 
+    /** 스케줄 작업이라 Riot 호출은 BACKGROUND 허가로 페이지마다 받는다. 거절되면 예외로 수집을 멈춘다. */
     @Async("requestExecutor")
     @Override
     public void execute(String platformName) {
-        RiotCallScope.run(RiotCallPriority.BACKGROUND, () -> collect(platformName));
-    }
-
-    private void collect(String platformName) {
         String queue = "RANKED_SOLO_5x5";
         String tier = "EMERALD";
         int totalCollected = 0;
@@ -40,8 +42,11 @@ public class TierCollectionService implements CollectTierDataUseCase {
             int divisionCollected = 0;
 
             while (true) {
+                RiotPermits permits = riotPermitPort
+                        .tryAcquire(platformName, RiotCallPriority.BACKGROUND, Map.of(RiotMethod.LEAGUE_ENTRIES, 1))
+                        .orElseThrow(() -> new RiotPermitDeniedException(platformName, RiotCallPriority.BACKGROUND));
                 Set<LeagueApiPort.LeagueEntry> entries =
-                        leagueApiPort.getLeagueEntries(queue, tier, division.name(), page, platformName);
+                        leagueApiPort.getLeagueEntries(queue, tier, division.name(), page, platformName, permits);
 
                 if (entries.isEmpty()) {
                     log.info("[디비전 수집 완료] division={}, 총 {}명, 마지막 페이지={}",

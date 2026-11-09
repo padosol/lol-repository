@@ -12,7 +12,10 @@ import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotCallScope;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,12 +29,18 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -62,20 +71,36 @@ class SummonerRankingCalculationServiceTest {
     @Mock
     private SummonerService summonerService;
 
+    @Mock
+    private RiotPermitPort riotPermitPort;
+
     @InjectMocks
     private SummonerRankingCalculationService summonerRankingCalculationService;
 
     @BeforeEach
     void setUp() {
-        when(leagueApiPort.getApexEntries(QUEUE, "KR")).thenReturn(Map.of(
+        when(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).thenAnswer(inv -> {
+            String platform = inv.getArgument(0);
+            RiotCallPriority priority = inv.getArgument(1);
+            Map<RiotMethod, Integer> counts = inv.getArgument(2);
+            List<RiotPermit> permits = new ArrayList<>();
+            counts.forEach((method, count) -> {
+                for (int k = 1; k <= count; k++) {
+                    permits.add(new RiotPermit("t-" + method + "-" + k, platform, method, priority));
+                }
+            });
+            return Optional.of(RiotPermits.of(permits));
+        });
+        // 허가 거절 테스트는 Riot·DB 조회까지 가지 않으므로 lenient 로 둔다
+        lenient().when(leagueApiPort.getApexEntries(eq(QUEUE), eq("KR"), any())).thenReturn(Map.of(
                 Tier.CHALLENGER, List.of(entry(CHALLENGER_PUUID, 1500)),
                 Tier.GRANDMASTER, List.of(entry(GRANDMASTER_PUUID, 700))
         ));
-        when(summonerRepositoryPort.findAllByPuuidIn(anyCollection())).thenReturn(Map.of(
+        lenient().when(summonerRepositoryPort.findAllByPuuidIn(anyCollection())).thenReturn(Map.of(
                 CHALLENGER_PUUID, summoner(CHALLENGER_PUUID, "챌린저"),
                 GRANDMASTER_PUUID, summoner(GRANDMASTER_PUUID, "그랜드마스터")
         ));
-        when(matchSummonerJpaRepository.findMostChampionsByPuuids(anyList())).thenReturn(List.of());
+        lenient().when(matchSummonerJpaRepository.findMostChampionsByPuuids(anyList())).thenReturn(List.of());
     }
 
     @Test
@@ -113,29 +138,39 @@ class SummonerRankingCalculationServiceTest {
     }
 
     @Test
-    @DisplayName("Riot 호출(최상위 리그·미등록 소환사 조회)은 BACKGROUND 스코프에서 한다")
+    @DisplayName("Riot 호출(최상위 리그·미등록 소환사 조회)은 BACKGROUND 허가로 한다 — 최상위 리그는 APEX_COST 를 한 번에 받는다")
     void processQueueRanking_riotCallsUnderBackground() {
         // given
-        List<RiotCallPriority> seen = new ArrayList<>();
-        when(leagueApiPort.getApexEntries(QUEUE, "KR")).thenAnswer(inv -> {
-            seen.add(RiotCallScope.current());
-            return Map.of(
-                    Tier.CHALLENGER, List.of(entry(CHALLENGER_PUUID, 1500)),
-                    Tier.GRANDMASTER, List.of(entry(GRANDMASTER_PUUID, 700)));
-        });
         when(summonerRepositoryPort.findAllByPuuidIn(anyCollection())).thenReturn(
                 new HashMap<>(Map.of(CHALLENGER_PUUID, summoner(CHALLENGER_PUUID, "챌린저"))));
-        when(summonerService.getSummonerByPuuid("KR", GRANDMASTER_PUUID)).thenAnswer(inv -> {
-            seen.add(RiotCallScope.current());
-            return summoner(GRANDMASTER_PUUID, "그랜드마스터");
-        });
+        when(summonerService.getSummonerByPuuid("KR", GRANDMASTER_PUUID, RiotCallPriority.BACKGROUND))
+                .thenReturn(summoner(GRANDMASTER_PUUID, "그랜드마스터"));
 
         // when
         summonerRankingCalculationService.processQueueRanking(QUEUE, false);
 
         // then
-        assertThat(seen).containsExactly(RiotCallPriority.BACKGROUND, RiotCallPriority.BACKGROUND);
-        assertThat(RiotCallScope.current()).isEqualTo(RiotCallPriority.USER);
+        verify(riotPermitPort).tryAcquire("KR", RiotCallPriority.BACKGROUND, LeagueApiPort.APEX_COST);
+        ArgumentCaptor<RiotPermits> permits = ArgumentCaptor.forClass(RiotPermits.class);
+        verify(leagueApiPort).getApexEntries(eq(QUEUE), eq("KR"), permits.capture());
+        assertThat(permits.getValue().remaining(RiotMethod.CHALLENGER_LEAGUE)).isEqualTo(1);
+        assertThat(permits.getValue().remaining(RiotMethod.GRANDMASTER_LEAGUE)).isEqualTo(1);
+        verify(summonerService).getSummonerByPuuid("KR", GRANDMASTER_PUUID, RiotCallPriority.BACKGROUND);
+    }
+
+    @Test
+    @DisplayName("최상위 리그 허가가 거절되면 Riot 을 부르지 않고 랭킹을 교체하지 않으며 백업을 정리한다")
+    void processQueueRanking_apexPermitDenied_skipsAndCleansUp() {
+        // given
+        when(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).thenReturn(Optional.empty());
+
+        // when
+        summonerRankingCalculationService.processQueueRanking(QUEUE, false);
+
+        // then
+        verify(leagueApiPort, never()).getApexEntries(anyString(), anyString(), any());
+        verify(summonerRankingRepositoryPort, never()).replaceAllRankings(anyString(), anyList());
+        verify(summonerRankingRepositoryPort, org.mockito.Mockito.times(2)).clearBackup(QUEUE);
     }
 
     private static LeagueEntry entry(String puuid, int leaguePoints) {

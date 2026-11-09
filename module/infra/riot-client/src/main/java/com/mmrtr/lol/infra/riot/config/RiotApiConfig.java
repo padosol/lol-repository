@@ -2,11 +2,8 @@ package com.mmrtr.lol.infra.riot.config;
 
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
+import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
-import com.mmrtr.lol.infra.riot.interceptor.RetryInterceptor;
-import com.mmrtr.lol.infra.riot.interceptor.RiotRateLimitInterceptor;
-import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -14,6 +11,7 @@ import org.springframework.boot.logging.LogLevel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -26,7 +24,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
-import java.util.List;
 
 @Slf4j
 @Configuration
@@ -35,10 +32,12 @@ import java.util.List;
 public class RiotApiConfig {
 
     private final RiotAPIProperties riotAPIProperties;
-    private final RiotRateLimiter riotRateLimiter;
-    private final MeterRegistry meterRegistry;
     private final Environment environment;
 
+    /**
+     * 한도·재시도 로직이 없는 Riot RestClient. 허가는 호출하는 쪽이 받고, 응답 기록(허가 기록 옮기기·한도 학습·정지)은
+     * {@code RiotCallRecorder} 가 한다. 상태 처리기는 404 → 429 → 그 밖 4xx → 5xx 순서로 본다.
+     */
     @Bean
     public RestClient riotRestClient() {
         HttpClient httpClient = HttpClient.newBuilder()
@@ -56,25 +55,15 @@ public class RiotApiConfig {
             log.warn("Riot 요청을 가짜 서버({})로 보냅니다", mockBaseUrl);
         }
 
-        RiotRateLimitInterceptor rateLimitInterceptor = new RiotRateLimitInterceptor(
-                riotRateLimiter, riotAPIProperties, meterRegistry);
-        RetryInterceptor retryInterceptor = new RetryInterceptor(meterRegistry,
-                List.of(rateLimitInterceptor, logRequest()));
-
-        // RestClient 에는 retryInterceptor 하나만 등록한다. 안쪽 인터셉터는 재시도(시도)마다 다시 탄다:
-        // 1. retryInterceptor (가장 바깥 - 429/5xx/IOException 재시도)
-        // 2. rateLimitInterceptor (Redis 기반 한도 관리 — 우선순위·헤더 학습·429 정지)
-        // 3. logRequest (로깅)
-        // 허가 뒤에 대기 단계를 두지 않는다. 응답 전까지 기록은 허가 시각에 있으므로, 허가받고 늦게 보내면
-        // 기록이 Riot 이 센 시각보다 일찍 창을 빠져 한도를 넘을 수 있다.
         return RestClient.builder()
                 .requestFactory(effectiveFactory)
                 .defaultHeader("X-Riot-Token", riotAPIProperties.getApiKey())
                 .defaultHeader("User-Agent", "MMRTR")
                 .defaultHeader("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
                 .defaultHeader("Accept-Charset", "application/x-www-form-urlencoded; charset=UTF-8")
-                .requestInterceptor(retryInterceptor)
+                .requestInterceptor(logRequest())
                 .defaultStatusHandler(status -> status.value() == 404, this::handleNotFound)
+                .defaultStatusHandler(status -> status.value() == 429, this::handleRateLimited)
                 .defaultStatusHandler(HttpStatusCode::is4xxClientError, this::handleClientError)
                 .defaultStatusHandler(HttpStatusCode::is5xxServerError, this::handleServerError)
                 .build();
@@ -82,17 +71,47 @@ public class RiotApiConfig {
 
     private void handleNotFound(HttpRequest request, ClientHttpResponse response) throws IOException {
         throw new RiotClientNotFoundException(
-                response.getStatusCode(), response.getStatusText(), LogLevel.WARN);
+                response.getStatusCode(), response.getStatusText(), LogLevel.WARN, copyOf(response.getHeaders()));
+    }
+
+    /** Retry-After(양의 정수 초, 아니면 null)와 X-Rate-Limit-Type 을 담아 던진다. 다시 보내지 않는다. */
+    private void handleRateLimited(HttpRequest request, ClientHttpResponse response) throws IOException {
+        HttpHeaders headers = copyOf(response.getHeaders());
+        throw new RiotRateLimitException(retryAfter(headers.getFirst("Retry-After")),
+                headers.getFirst("X-Rate-Limit-Type"), response.getStatusCode(), response.getStatusText(),
+                LogLevel.WARN, headers);
     }
 
     private void handleClientError(HttpRequest request, ClientHttpResponse response) throws IOException {
         throw new RiotClientException(
-                response.getStatusCode(), response.getStatusText(), LogLevel.WARN);
+                response.getStatusCode(), response.getStatusText(), LogLevel.WARN, copyOf(response.getHeaders()));
     }
 
     private void handleServerError(HttpRequest request, ClientHttpResponse response) throws IOException {
         log.warn("5xx error headers: {}", response.getHeaders());
-        throw new RiotServerException(response.getStatusCode(), response.getStatusText());
+        throw new RiotServerException(response.getStatusCode(), response.getStatusText(),
+                copyOf(response.getHeaders()));
+    }
+
+    /** 양의 정수 초면 그 기간, 아니면 null. */
+    static Duration retryAfter(String header) {
+        if (header == null || header.isBlank()) {
+            return null;
+        }
+        try {
+            long seconds = Long.parseLong(header.trim());
+            return seconds > 0L ? Duration.ofSeconds(seconds) : null;
+        } catch (NumberFormatException e) {
+            log.debug("Failed to parse Retry-After header: {}", header);
+            return null;
+        }
+    }
+
+    /** 예외에 실어 응답을 닫은 뒤에도 읽을 수 있게 복사한다. */
+    private static HttpHeaders copyOf(HttpHeaders headers) {
+        HttpHeaders copy = new HttpHeaders();
+        copy.putAll(headers);
+        return copy;
     }
 
     private ClientHttpRequestInterceptor logRequest() {

@@ -23,17 +23,17 @@ import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
-import com.mmrtr.lol.infra.riot.exception.RiotBudgetExceededException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotRetryScope;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -49,12 +49,14 @@ class RenewalLeagueStepTest {
     private final RenewalRecordPort recordPort = mock(RenewalRecordPort.class);
     private final SaveSummonerDataUseCase saveSummonerDataUseCase = mock(SaveSummonerDataUseCase.class);
     private final RiotApiService riotApiService = mock(RiotApiService.class);
+    private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private final RenewalStepPublisher stepPublisher = mock(RenewalStepPublisher.class);
     private final RenewalFinisher finisher = mock(RenewalFinisher.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalLeagueStep step = new RenewalLeagueStep(
-            recordPort, saveSummonerDataUseCase, riotApiService, stepPublisher, finisher, meterRegistry, executor);
+            recordPort, saveSummonerDataUseCase, riotApiService, permitPort, stepPublisher, finisher, meterRegistry,
+            executor);
 
     @BeforeEach
     void setUp() {
@@ -71,7 +73,7 @@ class RenewalLeagueStepTest {
         entry.setVeteran(true);
         entry.setFreshBlood(true);
         entry.setInactive(true);
-        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(Set.of(entry)));
         given(recordPort.markSteps("p1", "r1", EnumSet.of(RenewalStep.LEAGUE))).willReturn(RenewalTransition.NONE);
     }
@@ -86,7 +88,7 @@ class RenewalLeagueStepTest {
     }
 
     private void givenRiotFails(Throwable cause) {
-        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.failedFuture(cause));
     }
 
@@ -141,7 +143,7 @@ class RenewalLeagueStepTest {
     @DisplayName("리그 항목이 없어도 빈 집합으로 저장하고 단계를 끝낸다")
     void run_noEntries_savesEmptyAndMarks() {
         // given
-        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any()))
+        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(Set.of()));
 
         // when
@@ -170,7 +172,7 @@ class RenewalLeagueStepTest {
     @DisplayName("첫 429 는 시도 수를 올려 리그 큐에 다시 넣는다")
     void run_riot429FirstAttempt_requeuesWithNextAttempt() {
         // given
-        givenRiotFails(new RiotRateLimitException(Duration.ofSeconds(1), HttpStatus.TOO_MANY_REQUESTS, "", null));
+        givenRiotFails(new RiotRateLimitException(Duration.ofSeconds(1), null, HttpStatus.TOO_MANY_REQUESTS, "", null));
 
         // when
         step.run(msg("r1"));
@@ -184,7 +186,7 @@ class RenewalLeagueStepTest {
     @DisplayName("세 번째 429 는 riot_429 로 실패시킨다")
     void run_riot429ThirdAttempt_failsRiot429() {
         // given
-        givenRiotFails(new RiotRateLimitException(Duration.ofSeconds(1), HttpStatus.TOO_MANY_REQUESTS, "", null));
+        givenRiotFails(new RiotRateLimitException(Duration.ofSeconds(1), null, HttpStatus.TOO_MANY_REQUESTS, "", null));
 
         // when
         step.run(new RenewalStepMessage("r1", "p1", "KR", 0, 2));
@@ -195,16 +197,17 @@ class RenewalLeagueStepTest {
     }
 
     @Test
-    @DisplayName("예약 실패는 시도 수를 올리지 않고 잠시 뒤 다시 넣는다")
-    void run_budgetExceeded_requeuesLaterWithoutAttemptIncrease() {
+    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 시도 수를 올리지 않은 채 잠시 뒤 다시 넣는다")
+    void run_permitDenied_requeuesLaterWithoutAttemptIncrease() {
         // given
-        givenRiotFails(new RiotBudgetExceededException("asia", RiotCallPriority.USER));
+        RiotPermitFixtures.denyAll(permitPort);
 
         // when
         step.run(msg("r1"));
 
         // then
         verify(stepPublisher).requeueLater(RabbitMqBinding.RENEWAL_LEAGUE, msg("r1"));
+        verifyNoInteractions(riotApiService);
     }
 
     @Test
@@ -235,20 +238,16 @@ class RenewalLeagueStepTest {
     }
 
     @Test
-    @DisplayName("Riot 호출은 429 인라인 재시도가 꺼져 있다")
-    void run_riotCallWithoutRateLimitRetry() {
-        // given
-        List<Boolean> retryEnabled = new ArrayList<>();
-        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any())).willAnswer(inv -> {
-            retryEnabled.add(RiotRetryScope.rateLimitRetryEnabled());
-            return CompletableFuture.completedFuture(Set.<LeagueEntryDto>of());
-        });
-
+    @DisplayName("USER 로 LEAGUE_ENTRIES_BY_PUUID 허가 1건을 받아 그 허가로 부른다")
+    void run_callsRiotWithUserPermit() {
         // when
         step.run(msg("r1"));
 
         // then
-        assertThat(retryEnabled).containsExactly(false);
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, Map.of(RiotMethod.LEAGUE_ENTRIES_BY_PUUID, 1));
+        verify(riotApiService).getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR),
+                org.mockito.ArgumentMatchers.argThat(permit -> permit.method() == RiotMethod.LEAGUE_ENTRIES_BY_PUUID
+                        && permit.priority() == RiotCallPriority.USER), any());
     }
 
     @Test
