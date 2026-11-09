@@ -164,6 +164,12 @@ public class MatchDataProcessor {
             return classify("match", matchId, matchFailure);
         }
         MatchDto match = matchFuture.join();
+        if (match == null) {
+            // 빈 본문을 넣으면 타임라인만 저장하는 항목이 되어 매치가 빠진다
+            log.warn("Empty match body for matchId {}", matchId);
+            matchRedisService.releaseProcessing(matchId);
+            return Result.FAILURE;
+        }
         Throwable timelineFailure = failureOf(timelineFuture);
         TimelineDto timeline = timelineFailure == null ? timelineFuture.join() : null;
 
@@ -228,6 +234,11 @@ public class MatchDataProcessor {
             return Result.FAILURE;
         } catch (ExecutionException e) {
             return classify("timeline", matchId, e.getCause() != null ? e.getCause() : e);
+        }
+        // 저장은 metadata.matchId 로 짝짓는다. 없으면 저장되지 않으니 ack 하지 않고 DLX 에 남긴다
+        if (timeline == null || timeline.getMetadata() == null || timeline.getMetadata().getMatchId() == null) {
+            log.warn("Empty timeline body or missing metadata.matchId for matchId {}", matchId);
+            return Result.FAILURE;
         }
 
         if (!matchBatchProcessor.add(null, timeline)) {

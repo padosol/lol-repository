@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.rabbitmq.service;
 import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.MetadataTimeLineDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import com.mmrtr.lol.infra.redis.service.MatchRedisService;
@@ -95,6 +96,15 @@ class MatchDataProcessorTest {
         };
         processor = new MatchDataProcessor(port, permitPort, redis, batch, messageSender, Runnable::run,
                 matchRepository, meters);
+    }
+
+    /** 저장할 수 있는 타임라인 — metadata.matchId 가 있다. */
+    private static TimelineDto timelineOf(String matchId) {
+        MetadataTimeLineDto metadata = new MetadataTimeLineDto();
+        metadata.setMatchId(matchId);
+        TimelineDto timeline = new TimelineDto();
+        timeline.setMetadata(metadata);
+        return timeline;
     }
 
     private static RiotRateLimitException rateLimit() {
@@ -292,7 +302,7 @@ class MatchDataProcessorTest {
     @Test
     @DisplayName("나중 타임라인: DEFERRED 로 타임라인 허가 1건만 받아 타임라인만 적재한다")
     void timelineLater_fetchesTimelineOnlyWithDeferredPermit() {
-        TimelineDto timeline = new TimelineDto();
+        TimelineDto timeline = timelineOf("KR_1");
         timelineResult = CompletableFuture.completedFuture(timeline);
 
         assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
@@ -303,6 +313,49 @@ class MatchDataProcessorTest {
         verify(batch).add(null, timeline);
         verify(matchRepository, never()).findExistingMatchIds(any());
         verifyNoInteractions(redis);
+    }
+
+    @Test
+    @DisplayName("나중 타임라인: 본문이 비었거나 metadata·matchId 가 없으면 저장하지 않고 FAILURE 다")
+    void timelineLater_emptyBodyOrMissingMatchId_failure() {
+        TimelineDto noMatchId = timelineOf(null);
+        List<TimelineDto> bodies = new ArrayList<>();
+        bodies.add(null);
+        bodies.add(new TimelineDto());
+        bodies.add(noMatchId);
+        for (TimelineDto body : bodies) {
+            timelineResult = CompletableFuture.completedFuture(body);
+
+            assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
+                    .isEqualTo(MatchDataProcessor.Result.FAILURE);
+        }
+        verify(batch, never()).add(any(), any());
+        assertThat(count("timeline_later", "failure")).isEqualTo(3.0);
+    }
+
+    @Test
+    @DisplayName("match 본문이 비면 저장하지 않고 FAILURE 이며 처리 표시를 푼다")
+    void process_emptyMatchBody_failureAndReleasesMark() {
+        matchResult = CompletableFuture.completedFuture(null);
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL))
+                .isEqualTo(MatchDataProcessor.Result.FAILURE);
+        verify(batch, never()).add(any(), any());
+        verify(redis, times(1)).releaseProcessing("KR_1");
+        verifyNoInteractions(messageSender);
+    }
+
+    @Test
+    @DisplayName("timeline 본문만 비면 받지 못한 것으로 보고 매치를 저장한 뒤 나중 타임라인으로 넘긴다")
+    void process_emptyTimelineBody_savesMatchAndSendsTimelineLater() {
+        MatchDto match = new MatchDto();
+        matchResult = CompletableFuture.completedFuture(match);
+        timelineResult = CompletableFuture.completedFuture(null);
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL))
+                .isEqualTo(MatchDataProcessor.Result.SUCCESS);
+        verify(batch).add(match, null);
+        verify(messageSender).sendMessageByMatchId("KR_1", "KR", MatchQueueRank.TIMELINE_LATER);
     }
 
     @Test
