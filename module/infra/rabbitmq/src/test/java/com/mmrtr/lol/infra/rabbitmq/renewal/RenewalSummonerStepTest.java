@@ -83,7 +83,7 @@ class RenewalSummonerStepTest {
 
     private void givenRecord(String renewalId, RenewalStatus status, String reason) {
         given(recordPort.find("p1")).willReturn(Optional.of(
-                new RenewalRecord(renewalId, status, reason, 0, false, 1_000L, 6_000L, null, "KR")));
+                new RenewalRecord(renewalId, status, reason, 0, null, 1_000L, 6_000L, null, "KR")));
     }
 
     private SummonerMessage message(String renewalId) {

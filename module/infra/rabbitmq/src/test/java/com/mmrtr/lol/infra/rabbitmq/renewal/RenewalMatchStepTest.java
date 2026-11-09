@@ -92,7 +92,7 @@ class RenewalMatchStepTest {
     @BeforeEach
     void setUp() {
         given(recordPort.find("p1")).willReturn(Optional.of(
-                new RenewalRecord("r1", RenewalStatus.PROGRESS, null, 2, false, 1_000L, 6_000L, null, "KR")));
+                new RenewalRecord("r1", RenewalStatus.PROGRESS, null, 2, null, 1_000L, 6_000L, null, "KR")));
         givenIds(List.of("m1", "m2"));
         given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(List.of());
         given(matchRepositoryPort.findMatchIdsWithTimeline(anyList())).willReturn(Set.of());

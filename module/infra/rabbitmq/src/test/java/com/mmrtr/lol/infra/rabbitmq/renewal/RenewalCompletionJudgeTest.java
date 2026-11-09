@@ -40,14 +40,17 @@ class RenewalCompletionJudgeTest {
     private final List<String> activePuuids = new ArrayList<>();
 
     private RenewalRecord record(String id, RenewalStatus status, String reason, int steps, boolean ready) {
-        return new RenewalRecord(id, status, reason, steps, ready, ACCEPTED, ACCEPTED + 5000, null, "KR");
+        return new RenewalRecord(id, status, reason, steps, ready ? Set.of() : null,
+                ACCEPTED, ACCEPTED + 5000, null, "KR");
     }
 
     private void active(String puuid, RenewalRecord record, String... targets) {
         activePuuids.add(puuid);
+        RenewalRecord withTargets = record == null || !record.targetsReady() ? record : new RenewalRecord(
+                record.renewalId(), record.status(), record.reason(), record.steps(), Set.of(targets),
+                record.acceptedAt(), record.deadlineAt(), record.riotRevisionDate(), record.platform());
         given(recordPort.findActive()).willReturn(List.copyOf(activePuuids));
-        given(recordPort.find(puuid)).willReturn(Optional.ofNullable(record));
-        given(recordPort.findTargets(puuid)).willReturn(Set.of(targets));
+        given(recordPort.find(puuid)).willReturn(Optional.ofNullable(withTargets));
     }
 
     @Test

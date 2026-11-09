@@ -258,7 +258,7 @@ class SummonerRenewalRequestServiceTest {
     }
 
     private RenewalRecord record(RenewalStatus status, long deadlineAt) {
-        return new RenewalRecord("r1", status, null, 0, false, 0L, deadlineAt, null, "KR");
+        return new RenewalRecord("r1", status, null, 0, null, 0L, deadlineAt, null, "KR");
     }
 
     private Summoner summoner(String platformId, LocalDateTime lastRiotCallDate) {

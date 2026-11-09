@@ -30,10 +30,8 @@ public interface RenewalRecordPort {
 
     void saveRiotRevisionDate(String puuid, String renewalId, long revisionDateMillis);
 
-    /** 대상 matchId 를 기록하고 targetsReady 를 켠다. 빈 목록이어도 켠다. */
+    /** 대상 matchId 를 레코드 targets 필드에 기록한다. 빈 목록이어도 기록 후 상태가 된다. */
     void recordTargets(String puuid, String renewalId, Collection<String> matchIds);
-
-    Set<String> findTargets(String puuid);
 
     List<String> findActive();
 

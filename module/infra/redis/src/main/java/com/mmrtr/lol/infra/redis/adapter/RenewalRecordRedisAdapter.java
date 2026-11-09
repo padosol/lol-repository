@@ -35,8 +35,7 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
     private static final DefaultRedisScript<Long> OPEN = script("renewal/renewal-open.lua");
     private static final DefaultRedisScript<Long> MARK = script("renewal/renewal-mark.lua");
     private static final DefaultRedisScript<Long> FAIL = script("renewal/renewal-fail.lua");
-    private static final DefaultRedisScript<Long> FIELD = script("renewal/renewal-field.lua");
-    private static final DefaultRedisScript<Long> TARGETS = script("renewal/renewal-targets.lua");
+    private static final DefaultRedisScript<Long> UPDATE = script("renewal/renewal-update.lua");
 
     private final StringRedisTemplate redis;
 
@@ -55,14 +54,10 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
         return KEY_PREFIX + puuid;
     }
 
-    private static String targetsKey(String puuid) {
-        return KEY_PREFIX + puuid + ":matches";
-    }
-
     @Override
     public long open(String puuid, String renewalId, String platform) {
         Long acceptedAt = redis.execute(OPEN,
-                List.of(recordKey(puuid), targetsKey(puuid), ACTIVE_KEY),
+                List.of(recordKey(puuid), ACTIVE_KEY),
                 renewalId, platform, puuid,
                 String.valueOf(DEADLINE.toMillis()), String.valueOf(PROGRESS_TTL.toSeconds()));
         return acceptedAt == null ? 0L : acceptedAt;
@@ -80,7 +75,7 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
                 RenewalStatus.valueOf((String) hash.get("status")),
                 (String) hash.get("reason"),
                 Integer.parseInt((String) hash.getOrDefault("steps", "0")),
-                "1".equals(hash.get("targetsReady")),
+                parseTargets((String) hash.get("targets")),
                 Long.parseLong((String) hash.get("acceptedAt")),
                 Long.parseLong((String) hash.get("deadlineAt")),
                 revision == null ? null : Long.valueOf(revision),
@@ -94,7 +89,7 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
             bits |= step.bit();
         }
         Long result = redis.execute(MARK,
-                List.of(recordKey(puuid), ACTIVE_KEY, targetsKey(puuid)),
+                List.of(recordKey(puuid), ACTIVE_KEY),
                 renewalId, String.valueOf(bits), puuid,
                 String.valueOf(DONE_TTL.toSeconds()), String.valueOf(DEADLINE_FAILED_TTL.toSeconds()));
         return toTransition(result);
@@ -112,7 +107,7 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
 
     private RenewalTransition runFail(String puuid, String renewalId, String reason, String mode) {
         Long result = redis.execute(FAIL,
-                List.of(recordKey(puuid), ACTIVE_KEY, targetsKey(puuid)),
+                List.of(recordKey(puuid), ACTIVE_KEY),
                 renewalId, reason, puuid, mode,
                 String.valueOf(DONE_TTL.toSeconds()), String.valueOf(DEADLINE_FAILED_TTL.toSeconds()),
                 DEADLINE_REASON);
@@ -121,22 +116,25 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
 
     @Override
     public void saveRiotRevisionDate(String puuid, String renewalId, long revisionDateMillis) {
-        redis.execute(FIELD, List.of(recordKey(puuid)),
+        redis.execute(UPDATE, List.of(recordKey(puuid)),
                 renewalId, "riotRevisionDate", String.valueOf(revisionDateMillis));
     }
 
     @Override
     public void recordTargets(String puuid, String renewalId, Collection<String> matchIds) {
-        List<String> args = new ArrayList<>(matchIds.size() + 1);
-        args.add(renewalId);
-        args.addAll(matchIds);
-        redis.execute(TARGETS, List.of(recordKey(puuid), targetsKey(puuid)), args.toArray());
+        redis.execute(UPDATE, List.of(recordKey(puuid)),
+                renewalId, "targets", String.join(",", matchIds));
     }
 
-    @Override
-    public Set<String> findTargets(String puuid) {
-        Set<String> members = redis.opsForSet().members(targetsKey(puuid));
-        return members == null ? Set.of() : members;
+    /** targets 필드가 없으면 기록 전(null), 빈 문자열이면 대상 없음(빈 Set). */
+    private static Set<String> parseTargets(String value) {
+        if (value == null) {
+            return null;
+        }
+        if (value.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(java.util.Arrays.asList(value.split(",")));
     }
 
     @Override

@@ -81,13 +81,9 @@ public class RenewalCompletionJudge {
             if (!isMatchCandidate(record)) {
                 return;
             }
-            try {
-                Set<String> targets = recordPort.findTargets(puuid);
-                targetsByPuuid.put(puuid, targets);
-                allTargets.addAll(targets);
-            } catch (Exception e) {
-                log.warn("갱신 대상 조회 실패 puuid={}", puuid, e);
-            }
+            Set<String> targets = record.targets();
+            targetsByPuuid.put(puuid, targets);
+            allTargets.addAll(targets);
         });
 
         Set<String> existing = Set.of();

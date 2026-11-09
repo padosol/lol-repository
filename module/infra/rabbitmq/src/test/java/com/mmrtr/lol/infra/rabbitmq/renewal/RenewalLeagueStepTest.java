@@ -80,7 +80,7 @@ class RenewalLeagueStepTest {
 
     private void givenRecord(String renewalId) {
         given(recordPort.find("p1")).willReturn(Optional.of(
-                new RenewalRecord(renewalId, RenewalStatus.PROGRESS, null, 0, false, 1_000L, 6_000L, null, "KR")));
+                new RenewalRecord(renewalId, RenewalStatus.PROGRESS, null, 0, null, 1_000L, 6_000L, null, "KR")));
     }
 
     private RenewalStepMessage msg(String renewalId) {

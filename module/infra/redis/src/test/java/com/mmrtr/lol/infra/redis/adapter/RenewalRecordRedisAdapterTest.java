@@ -79,12 +79,13 @@ class RenewalRecordRedisAdapterTest {
         assertThat(r.deadlineAt()).isEqualTo(accepted + 5000);
         assertThat(r.steps()).isZero();
         assertThat(r.targetsReady()).isFalse();
+        assertThat(r.targets()).isNull();
         assertThat(adapter.findActive()).contains("p1");
         assertThat(redis.getExpire(KEY)).isBetween(290L, 300L);
     }
 
     @Test
-    @DisplayName("open 은 이전 레코드와 대상 집합을 덮어쓴다")
+    @DisplayName("open 은 이전 레코드와 대상을 덮어쓴다")
     void open_overwritesPreviousRecordAndTargets() {
         // given
         adapter.open("p1", "r1", "KR");
@@ -99,7 +100,7 @@ class RenewalRecordRedisAdapterTest {
         assertThat(r.renewalId()).isEqualTo("r2");
         assertThat(r.steps()).isZero();
         assertThat(r.targetsReady()).isFalse();
-        assertThat(adapter.findTargets("p1")).isEmpty();
+        assertThat(redis.opsForHash().hasKey(KEY, "targets")).isFalse();
     }
 
     @Test
@@ -145,7 +146,7 @@ class RenewalRecordRedisAdapterTest {
         assertThat(r.status()).isEqualTo(RenewalStatus.PROGRESS);
         assertThat(r.riotRevisionDate()).isNull();
         assertThat(r.targetsReady()).isFalse();
-        assertThat(adapter.findTargets("p1")).isEmpty();
+        assertThat(redis.opsForHash().hasKey(KEY, "targets")).isFalse();
     }
 
     @Test
@@ -227,8 +228,8 @@ class RenewalRecordRedisAdapterTest {
     }
 
     @Test
-    @DisplayName("대상이 비어 있어도 targetsReady 를 켠다")
-    void recordTargets_setsReadyEvenWhenEmpty() {
+    @DisplayName("대상이 비어 있어도 기록 후 상태가 된다")
+    void recordEmptyTargetsIsReady() {
         // given
         adapter.open("p1", "r1", "KR");
 
@@ -236,13 +237,15 @@ class RenewalRecordRedisAdapterTest {
         adapter.recordTargets("p1", "r1", List.of());
 
         // then
-        assertThat(adapter.find("p1").orElseThrow().targetsReady()).isTrue();
-        assertThat(adapter.findTargets("p1")).isEmpty();
+        RenewalRecord r = adapter.find("p1").orElseThrow();
+        assertThat(r.targetsReady()).isTrue();
+        assertThat(r.targets()).isEmpty();
+        assertThat(redis.opsForHash().get(KEY, "targets")).isEqualTo("");
     }
 
     @Test
-    @DisplayName("대상과 revisionDate 를 기록한다")
-    void recordTargets_andRevisionDate() {
+    @DisplayName("대상을 targets 필드에 쉼표로 이어 쓰고 revisionDate 도 기록한다")
+    void recordTargetsWritesFieldAndMarksReady() {
         // given
         adapter.open("p1", "r1", "KR");
 
@@ -251,50 +254,58 @@ class RenewalRecordRedisAdapterTest {
         adapter.saveRiotRevisionDate("p1", "r1", 1234L);
 
         // then
-        assertThat(adapter.findTargets("p1")).containsExactlyInAnyOrder("KR_1", "KR_2");
-        assertThat(adapter.find("p1").orElseThrow().riotRevisionDate()).isEqualTo(1234L);
+        RenewalRecord r = adapter.find("p1").orElseThrow();
+        assertThat(r.targetsReady()).isTrue();
+        assertThat(r.targets()).containsExactlyInAnyOrder("KR_1", "KR_2");
+        assertThat((String) redis.opsForHash().get(KEY, "targets")).isIn("KR_1,KR_2", "KR_2,KR_1");
+        assertThat(redis.opsForHash().hasKey(KEY, "targetsReady")).isFalse();
+        assertThat(r.riotRevisionDate()).isEqualTo(1234L);
     }
 
     @Test
-    @DisplayName("기한 실패로 레코드 TTL 이 다시 잡혀도 대상 집합은 레코드보다 먼저 만료되지 않는다")
-    void targets_ttlFollowsRecordTtl_afterDeadlineFailure() {
+    @DisplayName("다른 renewalId 의 update 는 무시한다")
+    void updateIgnoredForOtherRenewalId() {
+        // given
+        adapter.open("p1", "r2", "KR");
+
+        // when
+        adapter.recordTargets("p1", "r1", List.of("KR_1"));
+        adapter.saveRiotRevisionDate("p1", "r1", 9L);
+
+        // then
+        RenewalRecord r = adapter.find("p1").orElseThrow();
+        assertThat(r.targets()).isNull();
+        assertThat(r.riotRevisionDate()).isNull();
+    }
+
+    @Test
+    @DisplayName("새 open 은 옛 레코드의 targets 필드를 지운다")
+    void openClearsPreviousTargets() {
         // given
         adapter.open("p1", "r1", "KR");
         adapter.recordTargets("p1", "r1", List.of("KR_1"));
-        assertThat(redis.getExpire(KEY + ":matches")).isBetween(290L, 300L);
-        redis.expire(KEY + ":matches", java.time.Duration.ofSeconds(10));
-        redis.opsForHash().put(KEY, "deadlineAt", "1");
 
         // when
-        adapter.failIfOverdue("p1", "r1");
+        adapter.open("p1", "r2", "KR");
 
         // then
-        assertThat(redis.getExpire(KEY + ":matches")).isGreaterThanOrEqualTo(redis.getExpire(KEY) - 1);
-        assertThat(redis.getExpire(KEY + ":matches")).isBetween(290L, 300L);
+        assertThat(redis.opsForHash().hasKey(KEY, "targets")).isFalse();
+        assertThat(adapter.find("p1").orElseThrow().targets()).isNull();
     }
 
     @Test
-    @DisplayName("일반 실패와 성공 때도 대상 집합 TTL 을 레코드와 맞춘다")
-    void targets_ttlFollowsRecordTtl_onFailAndSuccessAndLateFailure() {
-        // given 일반 실패
+    @DisplayName("어떤 동작 뒤에도 대상 set 키는 만들어지지 않는다")
+    void noTargetsSetKeyIsCreated() {
+        // given
         adapter.open("p1", "r1", "KR");
         adapter.recordTargets("p1", "r1", List.of("KR_1"));
-        adapter.fail("p1", "r1", "not_found");
-        assertThat(redis.getExpire(KEY + ":matches")).isBetween(1L, 30L);
-
-        // given 성공
+        adapter.markSteps("p1", "r1", EnumSet.allOf(com.mmrtr.lol.domain.summoner.domain.RenewalStep.class));
         adapter.open("p1", "r2", "KR");
-        adapter.recordTargets("p1", "r2", List.of("KR_1"));
-        adapter.markSteps("p1", "r2", EnumSet.allOf(com.mmrtr.lol.domain.summoner.domain.RenewalStep.class));
-        assertThat(redis.getExpire(KEY + ":matches")).isBetween(1L, 30L);
+        adapter.fail("p1", "r2", "x");
 
-        // given 기한 뒤 마지막 비트
-        adapter.open("p1", "r3", "KR");
-        adapter.recordTargets("p1", "r3", List.of("KR_1"));
-        redis.expire(KEY + ":matches", java.time.Duration.ofSeconds(10));
-        redis.opsForHash().put(KEY, "deadlineAt", "1");
-        adapter.markSteps("p1", "r3", EnumSet.allOf(com.mmrtr.lol.domain.summoner.domain.RenewalStep.class));
-        assertThat(redis.getExpire(KEY + ":matches")).isBetween(290L, 300L);
+        // then
+        assertThat(redis.hasKey(KEY + ":matches")).isFalse();
+        assertThat(redis.keys("summoner:renewal-v2:*")).containsExactlyInAnyOrder(KEY);
     }
 
     @Test

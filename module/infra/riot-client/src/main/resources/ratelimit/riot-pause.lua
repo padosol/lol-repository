@@ -1,6 +1,8 @@
 -- 버킷 정지. 값은 정지가 끝나는 시각(ms)이라 riot-permit.lua 가 같은 시계로 정지 중인지 판단한다.
+-- KEYS: [1] riot:rl:pause:{bucket}
+-- ARGV: [1] durationMs, [2] nowMillis(빈 문자열이면 Redis TIME)
+-- 반환: 0 (항상)
 -- 이미 더 늦게 끝나는 정지가 있으면 줄이지 않는다.
--- KEYS[1]: riot:rl:pause:{bucket}, ARGV: durationMs, nowMillis(빈 문자열이면 Redis TIME)
 -- TIME 뒤에 쓰기를 하므로 효과 복제를 켠다 (Redis 5 이상에서는 기본값이라 no-op)
 redis.replicate_commands()
 local now

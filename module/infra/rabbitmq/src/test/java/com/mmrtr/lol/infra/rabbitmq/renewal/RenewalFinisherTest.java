@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,7 @@ class RenewalFinisherTest {
             new RenewalFinisher(recordPort, summonerRepositoryPort, registry, () -> NOW);
 
     private RenewalRecord record(RenewalStatus status, String reason, Long revision) {
-        return new RenewalRecord("r1", status, reason, 15, true, NOW - 1200, NOW + 3800, revision, "KR");
+        return new RenewalRecord("r1", status, reason, 15, Set.of(), NOW - 1200, NOW + 3800, revision, "KR");
     }
 
     private static LocalDateTime toLocal(long ms) {
