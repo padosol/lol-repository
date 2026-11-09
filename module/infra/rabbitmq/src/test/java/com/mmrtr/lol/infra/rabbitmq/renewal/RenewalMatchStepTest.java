@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
@@ -29,33 +30,30 @@ import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStatus;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
 import com.mmrtr.lol.domain.summoner.domain.RenewalTransition;
+import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchQueueRank;
 import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;
-import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import com.mmrtr.lol.infra.redis.service.RenewalMatchClaimService;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
-import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
-import com.mmrtr.lol.support.riot.RiotPermit;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -63,15 +61,13 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.client.ResourceAccessException;
 
 class RenewalMatchStepTest {
 
     private static final long START_TIME = 1_767_225_600L;
     private static final EnumSet<RenewalStep> MATCH = EnumSet.of(RenewalStep.MATCH);
     private static final Map<RiotMethod, Integer> IDS_COST = Map.of(RiotMethod.MATCH_IDS_BY_PUUID, 1);
-    private static final Map<RiotMethod, Integer> MATCH_COST =
-            Map.of(RiotMethod.MATCH, 1, RiotMethod.MATCH_TIMELINE, 1);
+    private static final List<String> TWENTY = IntStream.rangeClosed(1, 20).mapToObj(i -> "m" + i).toList();
 
     private final RenewalRecordPort recordPort = mock(RenewalRecordPort.class);
     private final MatchApiPort matchApiPort = mock(MatchApiPort.class);
@@ -86,13 +82,12 @@ class RenewalMatchStepTest {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalMatchStep step = new RenewalMatchStep(
-            recordPort, matchApiPort, permitPort, matchRepositoryPort, saveMatchDataUseCase, matchCacheWritePort,
-            claimService, messageSender, stepPublisher, finisher, meterRegistry, executor);
+            recordPort, matchApiPort, permitPort, new RenewalMatchFetcher(matchApiPort, permitPort, executor),
+            matchRepositoryPort, saveMatchDataUseCase, matchCacheWritePort, claimService, messageSender,
+            stepPublisher, finisher, meterRegistry, executor);
 
-    private final MatchDto match1 = new MatchDto();
-    private final MatchDto match2 = new MatchDto();
-    private final TimelineDto timeline1 = new TimelineDto();
-    private final TimelineDto timeline2 = new TimelineDto();
+    private final Map<String, MatchDto> matches = new HashMap<>();
+    private final Map<String, TimelineDto> timelines = new HashMap<>();
 
     @BeforeEach
     void setUp() {
@@ -100,13 +95,22 @@ class RenewalMatchStepTest {
                 new RenewalRecord("r1", RenewalStatus.PROGRESS, null, 2, false, 1_000L, 6_000L, null, "KR")));
         givenIds(List.of("m1", "m2"));
         given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(List.of());
+        given(matchRepositoryPort.findMatchIdsWithTimeline(anyList())).willReturn(Set.of());
         given(claimService.findExcluded(anyCollection())).willReturn(Set.of());
         given(claimService.claim(anyString(), eq("r1"))).willReturn(true);
-        givenMatch("m1", CompletableFuture.completedFuture(match1));
-        givenTimeline("m1", CompletableFuture.completedFuture(timeline1));
-        givenMatch("m2", CompletableFuture.completedFuture(match2));
-        givenTimeline("m2", CompletableFuture.completedFuture(timeline2));
+        given(matchApiPort.fetchMatchById(anyString(), eq("KR"), any(), any()))
+                .willAnswer(inv -> CompletableFuture.completedFuture(match(inv.getArgument(0))));
+        given(matchApiPort.fetchTimelineById(anyString(), eq("KR"), any(), any()))
+                .willAnswer(inv -> CompletableFuture.completedFuture(timeline(inv.getArgument(0))));
         given(recordPort.markSteps("p1", "r1", MATCH)).willReturn(RenewalTransition.NONE);
+    }
+
+    private MatchDto match(String matchId) {
+        return matches.computeIfAbsent(matchId, id -> new MatchDto());
+    }
+
+    private TimelineDto timeline(String matchId) {
+        return timelines.computeIfAbsent(matchId, id -> new TimelineDto());
     }
 
     private void givenIds(List<String> ids) {
@@ -120,6 +124,13 @@ class RenewalMatchStepTest {
 
     private void givenTimeline(String matchId, CompletableFuture<TimelineDto> result) {
         given(matchApiPort.fetchTimelineById(eq(matchId), eq("KR"), any(), any())).willReturn(result);
+    }
+
+    /** id 목록 허가는 내주고, 매치 묶음 허가만 거절한다. */
+    private void denyMatchBatches() {
+        given(permitPort.tryAcquire(eq("KR"), eq(RiotCallPriority.USER),
+                argThat(counts -> !counts.containsKey(RiotMethod.MATCH_IDS_BY_PUUID))))
+                .willReturn(Optional.empty());
     }
 
     private static RenewalStepMessage msg(String renewalId, long startTime) {
@@ -143,13 +154,16 @@ class RenewalMatchStepTest {
 
         // then
         verify(recordPort).recordTargets("p1", "r1", Set.of("m1", "m2"));
+        List<MatchDto> saved = List.of(match("m1"), match("m2"));
+        List<TimelineDto> savedTimelines = List.of(timeline("m1"), timeline("m2"));
         InOrder order = inOrder(saveMatchDataUseCase, matchCacheWritePort, claimService, finisher);
-        order.verify(saveMatchDataUseCase).execute(List.of(match1, match2), List.of(timeline1, timeline2));
-        order.verify(matchCacheWritePort).writeMatches(List.of(match1, match2), List.of(timeline1, timeline2), "p1");
+        order.verify(saveMatchDataUseCase).execute(saved, savedTimelines);
+        order.verify(matchCacheWritePort).writeMatches(saved, savedTimelines, "p1");
         order.verify(claimService).release("m1", "r1");
         order.verify(claimService).release("m2", "r1");
         order.verify(finisher).finish("p1", RenewalTransition.NONE);
         verify(recordPort).markSteps("p1", "r1", MATCH);
+        verifyNoInteractions(messageSender);
         verify(stepPublisher, never()).publishMatchFind(any());
         assertThat(count("lol.renewal.step", "step", "match", "result", "success")).isEqualTo(1);
     }
@@ -166,84 +180,90 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("매치가 전부 DB 에 있으면 빈 대상을 기록하고 조회 없이 매치 비트를 켠다")
-    void run_noNewMatches_recordsEmptyTargetsAndMarksMatch() {
+    @DisplayName("id 는 USER 허가 1건, 매치는 묶음 허가 하나로 부른다")
+    void run_takesOnePermitForIdsAndOneBatchForMatches() {
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, IDS_COST);
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER,
+                Map.of(RiotMethod.MATCH, 2, RiotMethod.MATCH_TIMELINE, 2));
+        ArgumentCaptor<RiotPermits> m1 = ArgumentCaptor.forClass(RiotPermits.class);
+        ArgumentCaptor<RiotPermits> m2 = ArgumentCaptor.forClass(RiotPermits.class);
+        verify(matchApiPort).fetchMatchById(eq("m1"), eq("KR"), m1.capture(), eq(executor));
+        verify(matchApiPort).fetchTimelineById(eq("m2"), eq("KR"), m2.capture(), eq(executor));
+        assertThat(m1.getValue()).isSameAs(m2.getValue());
+    }
+
+    @Test
+    @DisplayName("새 매치 20개를 받으면 저장은 한 번이고 타임라인은 최신 3개뿐이다")
+    void savesOnceWithAtMostThreeTimelines() {
         // given
-        given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(List.of("m1", "m2"));
+        givenIds(TWENTY);
 
         // when
         step.run(msg("r1", 0), false);
 
         // then
-        verify(recordPort).recordTargets("p1", "r1", Set.of());
+        ArgumentCaptor<List<MatchDto>> savedMatches = ArgumentCaptor.captor();
+        ArgumentCaptor<List<TimelineDto>> savedTimelines = ArgumentCaptor.captor();
+        verify(saveMatchDataUseCase, times(1)).execute(savedMatches.capture(), savedTimelines.capture());
+        assertThat(savedMatches.getValue()).hasSize(20);
+        assertThat(savedTimelines.getValue()).hasSizeLessThanOrEqualTo(3)
+                .containsExactly(timeline("m1"), timeline("m2"), timeline("m3"));
+        verify(matchApiPort, never()).fetchTimelineById(eq("m4"), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("저장한 새 매치 중 타임라인을 받지 않은 17개는 나중 타임라인 순위로 하나씩 넘긴다")
+    void untimelinedSavedMatchesGoToTimelineLater() {
+        // given
+        givenIds(TWENTY);
+
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(messageSender, times(17)).sendMessageByMatchId(anyString(), eq("KR"), eq(MatchQueueRank.TIMELINE_LATER));
+        TWENTY.subList(3, 20).forEach(id ->
+                verify(messageSender).sendMessageByMatchId(id, "KR", MatchQueueRank.TIMELINE_LATER));
+        verify(messageSender, never()).sendMessageByMatchId(anyString(), anyString(), eq(MatchQueueRank.USER_RETRY));
         verify(recordPort).markSteps("p1", "r1", MATCH);
+    }
+
+    @Test
+    @DisplayName("묶음 허가가 세 번 모두 거절되면 매치 대상은 사용자 재시도로, 타임라인만 필요한 것은 나중 타임라인으로 넘긴다")
+    void deniedMatchesGoToUserRetry_deniedTimelineOnlyToTimelineLater() {
+        // given: m2 는 매치가 DB 에 있고 타임라인만 없다
+        givenIds(List.of("m1", "m2", "m3"));
+        given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(List.of("m2"));
+        denyMatchBatches();
+
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
+        verify(messageSender).sendMessageByMatchId("m3", "KR", MatchQueueRank.USER_RETRY);
+        verify(messageSender).sendMessageByMatchId("m2", "KR", MatchQueueRank.TIMELINE_LATER);
+        verify(messageSender, never()).sendMessageByMatchId("m2", "KR", MatchQueueRank.USER_RETRY);
         verify(matchApiPort, never()).fetchMatchById(anyString(), anyString(), any(), any());
+        verify(matchApiPort, never()).fetchTimelineById(anyString(), anyString(), any(), any());
         verifyNoInteractions(saveMatchDataUseCase, matchCacheWritePort);
-    }
-
-    @Test
-    @DisplayName("다른 갱신이 선점한 매치는 부르지 않고 매치 비트를 켜지 않는다")
-    void run_matchClaimedByOtherRenewal_skipsFetchAndLeavesMatchStepOpen() {
-        // given
-        given(claimService.claim("m1", "r1")).willReturn(false);
-
-        // when
-        step.run(msg("r1", 0), false);
-
-        // then
-        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any(), any());
-        verify(matchApiPort, never()).fetchTimelineById(eq("m1"), any(), any(), any());
-        verify(claimService, never()).release(eq("m1"), anyString());
-        verify(saveMatchDataUseCase).execute(List.of(match2), List.of(timeline2));
-        verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
-    }
-
-    @Test
-    @DisplayName("429 받은 매치는 사용자 재시도 순위로 매치 적재 큐에 넘기고 선점을 푼다")
-    void run_match429_sendsUserRetryAndReleasesWithoutMarkingMatch() {
-        // given
-        givenMatch("m1", CompletableFuture.failedFuture(rateLimit()));
-
-        // when
-        step.run(msg("r1", 0), false);
-
-        // then
-        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
         verify(claimService).release("m1", "r1");
-        verify(claimService, never()).markFailed(anyString());
-        verify(saveMatchDataUseCase).execute(List.of(match2), List.of(timeline2));
+        verify(claimService).release("m3", "r1");
+        verify(claimService, never()).claim(eq("m2"), anyString());
         verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
+        assertThat(count("lol.renewal.step", "step", "match", "result", "success")).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("허가가 거절된 매치는 부르지 않고 사용자 재시도 순위로 넘긴다")
-    void run_matchPermitDenied_sendsUserRetryWithoutRiotCall() {
-        // given: 첫 매치(m1)의 허가만 거절한다
-        AtomicInteger matchRequests = new AtomicInteger();
-        given(permitPort.tryAcquire(eq("KR"), eq(RiotCallPriority.USER), eq(MATCH_COST))).willAnswer(inv ->
-                matchRequests.incrementAndGet() == 1 ? Optional.empty() : Optional.of(RiotPermits.of(List.of(
-                        new RiotPermit("t-m", "KR", RiotMethod.MATCH, RiotCallPriority.USER),
-                        new RiotPermit("t-t", "KR", RiotMethod.MATCH_TIMELINE,
-                                RiotCallPriority.USER)))));
-
-        // when
-        step.run(msg("r1", 0), false);
-
-        // then
-        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any(), any());
-        verify(matchApiPort, never()).fetchTimelineById(eq("m1"), any(), any(), any());
-        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
-        verify(claimService).release("m1", "r1");
-        verify(claimService, never()).markFailed(anyString());
-        verify(saveMatchDataUseCase).execute(List.of(match2), List.of(timeline2));
-        verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
-    }
-
-    @Test
-    @DisplayName("매치 허가를 묻다 예외가 나면 그 매치만 부르지 않고 사용자 재시도 순위로 넘긴다")
-    void run_matchPermitCheckThrows_handsOffThatMatch() {
+    @DisplayName("매치 묶음 허가를 묻다 예외가 나면 매치를 부르지 않고 사용자 재시도 순위로 넘긴다")
+    void run_matchPermitCheckThrows_handsOffMatches() {
         // given
-        given(permitPort.tryAcquire(eq("KR"), eq(RiotCallPriority.USER), eq(MATCH_COST)))
+        given(permitPort.tryAcquire(eq("KR"), eq(RiotCallPriority.USER),
+                argThat(counts -> counts.containsKey(RiotMethod.MATCH))))
                 .willThrow(new IllegalStateException("redis down"));
 
         // when
@@ -258,7 +278,42 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("4xx 받은 매치는 실패 표시를 남기고 선점을 푼다")
+    @DisplayName("타임라인만 넘겼어도 매치 대상이 모두 저장되면 매치 비트를 켜고, 그 타임라인은 한 번만 넘긴다")
+    void matchBitSetWhenAllMatchTargetsSaved_evenIfTimelinesHandedOff() {
+        // given
+        givenTimeline("m1", CompletableFuture.failedFuture(
+                new RiotServerException(HttpStatus.SERVICE_UNAVAILABLE, "")));
+
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(saveMatchDataUseCase).execute(List.of(match("m1"), match("m2")), List.of(timeline("m2")));
+        verify(messageSender, times(1)).sendMessageByMatchId("m1", "KR", MatchQueueRank.TIMELINE_LATER);
+        verify(messageSender, never()).sendMessageByMatchId(anyString(), anyString(), eq(MatchQueueRank.USER_RETRY));
+        verify(recordPort).markSteps("p1", "r1", MATCH);
+    }
+
+    @Test
+    @DisplayName("매치 대상을 하나라도 넘기면 매치 비트는 판정기에 맡긴다 (429 → 사용자 재시도, 선점 해제)")
+    void matchBitLeftToJudgeWhenAnyMatchHandedOff() {
+        // given
+        givenMatch("m1", CompletableFuture.failedFuture(rateLimit()));
+
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
+        verify(messageSender, never()).sendMessageByMatchId("m1", "KR", MatchQueueRank.TIMELINE_LATER);
+        verify(claimService).release("m1", "r1");
+        verify(claimService, never()).markFailed(anyString());
+        verify(saveMatchDataUseCase).execute(List.of(match("m2")), List.of(timeline("m2")));
+        verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
+    }
+
+    @Test
+    @DisplayName("4xx 받은 매치는 실패 표시를 남기고 선점을 풀며 넘기지 않는다")
     void run_match4xx_marksFailedAndReleases() {
         // given
         givenMatch("m1", CompletableFuture.failedFuture(new RiotClientException(HttpStatus.BAD_REQUEST, "", null)));
@@ -274,68 +329,76 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("타임라인이 5xx 면 그 매치는 저장하지 않고 실패 표시 없이 사용자 재시도 순위로 넘긴다")
-    void run_timeline5xx_handsOffAsUserRetryWithoutFailedMark() {
+    @DisplayName("다른 갱신이 선점한 매치라도 최신 3게임이면 타임라인만 받고, 매치 비트는 켜지 않는다")
+    void claimedElsewhereTimelineTargetStillFetchesTimeline() {
         // given
-        givenTimeline("m1", CompletableFuture.failedFuture(
-                new RiotServerException(HttpStatus.SERVICE_UNAVAILABLE, "")));
+        given(claimService.claim("m1", "r1")).willReturn(false);
 
         // when
         step.run(msg("r1", 0), false);
 
         // then
-        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
-        verify(claimService).release("m1", "r1");
-        verify(claimService, never()).markFailed(anyString());
-        verify(saveMatchDataUseCase).execute(List.of(match2), List.of(timeline2));
+        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any(), any());
+        verify(matchApiPort).fetchTimelineById(eq("m1"), eq("KR"), any(), any());
+        verify(saveMatchDataUseCase).execute(List.of(match("m2")), List.of(timeline("m1"), timeline("m2")));
+        verify(claimService, never()).release(eq("m1"), anyString());
+        verifyNoInteractions(messageSender);
+        verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
     }
 
     @Test
-    @DisplayName("Riot 예외가 아닌 조회 실패(읽기 시간 초과 등)는 실패 표시 없이 사용자 재시도 순위로 넘긴다")
-    void run_matchNonRiotFailure_handsOffAsUserRetryWithoutFailedMark() {
+    @DisplayName("다른 갱신이 선점한 매치가 최신 3게임 밖이면 부르지 않고 매치 비트를 켜지 않는다")
+    void run_matchClaimedByOtherRenewal_skipsFetchAndLeavesMatchStepOpen() {
         // given
-        givenMatch("m1", CompletableFuture.failedFuture(
-                new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out"))));
+        givenIds(List.of("m1", "m2", "m3", "m4"));
+        given(claimService.claim("m4", "r1")).willReturn(false);
 
         // when
         step.run(msg("r1", 0), false);
 
         // then
-        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
-        verify(claimService).release("m1", "r1");
-        verify(claimService, never()).markFailed(anyString());
+        verify(matchApiPort, never()).fetchMatchById(eq("m4"), any(), any(), any());
+        verify(matchApiPort, never()).fetchTimelineById(eq("m4"), any(), any(), any());
+        verify(claimService, never()).release(eq("m4"), anyString());
+        verify(messageSender, never()).sendMessageByMatchId(eq("m4"), anyString(), any());
+        verify(recordPort, never()).markSteps(any(), any(), eq(MATCH));
     }
 
     @Test
-    @DisplayName("상태가 429 인 RiotClientException 은 4xx 로 보지 않고 사용자 재시도 순위로 넘긴다")
-    void run_plainClientException429_handsOffAsUserRetry() {
+    @DisplayName("매치가 전부 DB 에 있고 최신 타임라인도 있으면 빈 대상을 기록하고 조회 없이 매치 비트를 켠다")
+    void run_noNewMatches_recordsEmptyTargetsAndMarksMatch() {
         // given
-        givenMatch("m1", CompletableFuture.failedFuture(
-                new RiotClientException(HttpStatus.TOO_MANY_REQUESTS, "", null)));
+        given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(List.of("m1", "m2"));
+        given(matchRepositoryPort.findMatchIdsWithTimeline(List.of("m1", "m2"))).willReturn(Set.of("m1", "m2"));
 
         // when
         step.run(msg("r1", 0), false);
 
         // then
-        verify(messageSender).sendMessageByMatchId("m1", "KR", MatchQueueRank.USER_RETRY);
-        verify(claimService, never()).markFailed(anyString());
+        verify(recordPort).recordTargets("p1", "r1", Set.of());
+        verify(recordPort).markSteps("p1", "r1", MATCH);
+        verifyNoInteractions(saveMatchDataUseCase, matchCacheWritePort);
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, IDS_COST);
+        verify(matchApiPort, never()).fetchMatchById(anyString(), anyString(), any(), any());
+        verify(matchApiPort, never()).fetchTimelineById(anyString(), anyString(), any(), any());
     }
 
     @Test
-    @DisplayName("한쪽이 429 여도 다른 쪽이 404 면 넘기지 않고 실패 표시를 남긴다")
-    void run_match429AndTimeline404_marksFailed() {
+    @DisplayName("매치는 DB 에 있고 최신 타임라인만 없으면 타임라인만 받아 저장하고 매치 비트를 켠다")
+    void run_existingMatchesMissingTimeline_savesTimelinesOnly() {
         // given
-        givenMatch("m1", CompletableFuture.failedFuture(rateLimit()));
-        givenTimeline("m1", CompletableFuture.failedFuture(
-                new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
+        given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(List.of("m1", "m2"));
 
         // when
         step.run(msg("r1", 0), false);
 
         // then
-        verify(claimService).markFailed("m1");
-        verify(claimService).release("m1", "r1");
-        verify(messageSender, never()).sendMessageByMatchId(anyString(), anyString(), any());
+        verify(recordPort).recordTargets("p1", "r1", Set.of());
+        verify(matchApiPort, never()).fetchMatchById(anyString(), anyString(), any(), any());
+        verify(saveMatchDataUseCase).execute(List.of(), List.of(timeline("m1"), timeline("m2")));
+        verify(claimService, never()).claim(anyString(), anyString());
+        verifyNoInteractions(messageSender);
+        verify(recordPort).markSteps("p1", "r1", MATCH);
     }
 
     @Test
@@ -376,9 +439,8 @@ class RenewalMatchStepTest {
     @DisplayName("id 가 20개면 21번째부터 찾도록 매치 검색 큐에 넘긴다")
     void run_twentyIds_handsOffToMatchFindFromOffset20() {
         // given
-        List<String> ids = IntStream.range(0, 20).mapToObj(i -> "x" + i).toList();
-        givenIds(ids);
-        given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(ids);
+        givenIds(TWENTY);
+        given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(TWENTY);
 
         // when
         step.run(msg("r1", START_TIME), false);
@@ -388,9 +450,10 @@ class RenewalMatchStepTest {
     }
 
     @Test
-    @DisplayName("첫 전달에서 저장이 실패하면 다시 던져 재전달받고, 선점은 쥔 채 둔다")
+    @DisplayName("첫 전달에서 저장이 실패하면 다시 던져 재전달받고, 선점은 쥔 채 아무것도 넘기지 않는다")
     void run_saveFails_rethrowsForRedelivery() {
         // given
+        givenIds(TWENTY);
         IllegalStateException boom = new IllegalStateException("db down");
         doThrow(boom).when(saveMatchDataUseCase).execute(anyList(), anyList());
 
@@ -399,7 +462,7 @@ class RenewalMatchStepTest {
         verify(recordPort, never()).markSteps(any(), any(), any());
         verify(claimService, never()).release(anyString(), anyString());
         verify(finisher, never()).fail(anyString(), anyString(), anyString());
-        verifyNoInteractions(matchCacheWritePort, stepPublisher);
+        verifyNoInteractions(matchCacheWritePort, stepPublisher, messageSender);
     }
 
     @Test
@@ -429,6 +492,21 @@ class RenewalMatchStepTest {
         assertThatCode(() -> step.run(msg("r1", 0), false)).doesNotThrowAnyException();
         verify(finisher).fail("p1", "r1", "other");
         verify(claimService).release("m1", "r1");
+    }
+
+    @Test
+    @DisplayName("매치 조회 429 는 그 자리에서 다시 부르지 않는다")
+    void run_match429_isNotRetriedInline() {
+        // given
+        givenMatch("m1", CompletableFuture.failedFuture(rateLimit()));
+
+        // when
+        step.run(msg("r1", 0), false);
+
+        // then
+        verify(matchApiPort, times(1)).fetchMatchById(eq("m1"), any(), any(), any());
+        verify(permitPort, times(1)).tryAcquire(eq("KR"), eq(RiotCallPriority.USER),
+                argThat(counts -> counts.containsKey(RiotMethod.MATCH)));
     }
 
     @Test
@@ -495,24 +573,5 @@ class RenewalMatchStepTest {
         // then
         verify(finisher).fail("p1", "r1", "other");
         verifyNoInteractions(matchApiPort);
-    }
-
-    @Test
-    @DisplayName("id 는 USER 허가 1건, 매치는 매치마다 따로 받은 match·timeline 허가로 부른다")
-    void run_takesUserPermitsForIdsAndPerMatch() {
-        // when
-        step.run(msg("r1", 0), false);
-
-        // then
-        verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, IDS_COST);
-        verify(permitPort, times(2)).tryAcquire("KR", RiotCallPriority.USER, MATCH_COST);
-        ArgumentCaptor<RiotPermits> m1Match = ArgumentCaptor.forClass(RiotPermits.class);
-        ArgumentCaptor<RiotPermits> m1Timeline = ArgumentCaptor.forClass(RiotPermits.class);
-        ArgumentCaptor<RiotPermits> m2Match = ArgumentCaptor.forClass(RiotPermits.class);
-        verify(matchApiPort).fetchMatchById(eq("m1"), eq("KR"), m1Match.capture(), any());
-        verify(matchApiPort).fetchTimelineById(eq("m1"), eq("KR"), m1Timeline.capture(), any());
-        verify(matchApiPort).fetchMatchById(eq("m2"), eq("KR"), m2Match.capture(), any());
-        assertThat(m1Match.getValue()).isSameAs(m1Timeline.getValue());
-        assertThat(m1Match.getValue()).isNotSameAs(m2Match.getValue());
     }
 }

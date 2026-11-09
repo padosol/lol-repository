@@ -13,37 +13,40 @@ import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
+import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalMatchFetcher.Fetched;
+import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalMatchFetcher.Result;
+import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalMatchPlan.Item;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchQueueRank;
 import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;
 import com.mmrtr.lol.infra.redis.service.RenewalMatchClaimService;
-import com.mmrtr.lol.infra.riot.exception.RiotClientException;
-import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 갱신 ④ 매치 단계. 최근 매치 id 20개 중 DB 에 없는 것을 대상으로 기록하고, 선점한 대상의 match ∥ timeline 을
- * 한꺼번에 병렬로 받아 한 번에 저장한다. Riot 호출은 id 목록 1건, 매치마다 match·timeline 1건씩 USER 허가를 받는다.
- * 4xx(429 제외)로 실패한 매치만 실패 표시를 남기고(스펙 5.4), 그 밖의 실패
- * (429·허가 거절·5xx·시간 초과·IO 등)는 매치 적재 큐에 사용자 재시도 순위로 넘긴다. 실패 표시는 매치 단위라 그 매치를
- * 대상으로 둔 다른 갱신까지 match_failed 로 끝내므로, 매치 자체가 잘못된 경우에만 남긴다.
+ * 갱신 ④ 매치 단계. 최근 매치 id 20개(최신순)로 {@link RenewalMatchPlan} 을 만든다. 매치 대상은 DB 에 없는 매치,
+ * 타임라인 대상은 앞 3개 중 타임라인이 DB 에 없는 것이다. 매치 대상을 레코드에 기록하고 선점한 뒤
+ * {@link RenewalMatchFetcher} 로 묶음 허가를 받아 한꺼번에 받고, 받은 것을 한 번에 저장한다.
+ * 못 받은 것은 넘긴다: 허가가 끝내 거절됐거나 match 가 429·5xx·IO·시간 초과로 실패한 매치는 매치 적재 큐에
+ * 사용자 재시도 순위로, 타임라인을 받지 못한 것(저장한 매치·타임라인만 필요한 것)은 나중 타임라인 순위로 넘긴다.
+ * match 가 4xx(429 제외)인 매치만 실패 표시를 남긴다(스펙 5.4). 실패 표시는 매치 단위라 그 매치를 대상으로 둔
+ * 다른 갱신까지 match_failed 로 끝내므로, 매치 자체가 잘못된 경우에만 남긴다.
  * 계속 실패해 대상에서 뺀 매치는 버리지 않고 매치 적재 큐에 백필 순위로 넘긴다. 커서가 그 매치를 지나가도 잃지 않는다 (G8).
- * 대상이 전부 DB 에 들어가면 매치 비트를 켜고, 아니면 판정기가 DB 를 보고 켠다.
+ * 매치 대상이 전부 저장되면 매치 비트를 켜고(최신 3게임 타임라인은 조건이 아니다), 아니면 판정기가 DB 를 보고 켠다.
  * 밖으로 던지는 예외는 첫 전달의 저장 실패뿐이다 (재전달받아 DB 에 쓴 뒤에만 ack 한다).
  */
 @Slf4j
@@ -56,6 +59,7 @@ public class RenewalMatchStep {
     private final RenewalRecordPort recordPort;
     private final MatchApiPort matchApiPort;
     private final RiotPermitPort permitPort;
+    private final RenewalMatchFetcher fetcher;
     private final MatchRepositoryPort matchRepositoryPort;
     private final SaveMatchDataUseCase saveMatchDataUseCase;
     private final MatchCacheWritePort matchCacheWritePort;
@@ -68,13 +72,15 @@ public class RenewalMatchStep {
     private final RenewalStepFailures failures;
 
     public RenewalMatchStep(RenewalRecordPort recordPort, MatchApiPort matchApiPort, RiotPermitPort permitPort,
-                            MatchRepositoryPort matchRepositoryPort, SaveMatchDataUseCase saveMatchDataUseCase,
-                            MatchCacheWritePort matchCacheWritePort, RenewalMatchClaimService claimService,
-                            MessageSender messageSender, RenewalStepPublisher stepPublisher,
-                            RenewalFinisher finisher, MeterRegistry meterRegistry, Executor requestExecutor) {
+                            RenewalMatchFetcher fetcher, MatchRepositoryPort matchRepositoryPort,
+                            SaveMatchDataUseCase saveMatchDataUseCase, MatchCacheWritePort matchCacheWritePort,
+                            RenewalMatchClaimService claimService, MessageSender messageSender,
+                            RenewalStepPublisher stepPublisher, RenewalFinisher finisher,
+                            MeterRegistry meterRegistry, Executor requestExecutor) {
         this.recordPort = recordPort;
         this.matchApiPort = matchApiPort;
         this.permitPort = permitPort;
+        this.fetcher = fetcher;
         this.matchRepositoryPort = matchRepositoryPort;
         this.saveMatchDataUseCase = saveMatchDataUseCase;
         this.matchCacheWritePort = matchCacheWritePort;
@@ -118,11 +124,19 @@ public class RenewalMatchStep {
             return;
         }
 
-        List<String> claimed = List.of();
+        List<String> claimed = new ArrayList<>();
         try {
-            Set<String> targets = recordTargets(puuid, renewalId, platformName, ids);
-            claimed = claim(targets, renewalId);
-            completeClaimed(message, platformName, targets, claimed);
+            RenewalMatchPlan plan = plan(puuid, renewalId, platformName, ids);
+            // 대상이 0개여도 기록한다 (판정기가 대상이 준비됐는지 본다).
+            recordPort.recordTargets(puuid, renewalId, plan.matchTargets());
+            List<Item> items = claim(plan.items(), renewalId, claimed);
+            Result result = fetcher.fetch(platformName, items);
+            int savedMatches = save(puuid, result.fetched());
+            handOff(platformName, result);
+            releaseQuietly(claimed, renewalId);
+            if (savedMatches == plan.matchTargets().size()) {
+                finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.of(RenewalStep.MATCH)));
+            }
             handOffRest(message, platformName, ids);
             failures.success();
         } catch (MatchSaveFailure e) {
@@ -147,121 +161,88 @@ public class RenewalMatchStep {
     }
 
     /**
-     * DB 에 없고 계속 실패해 빠지지 않은 매치를 대상으로 기록한다. 0개여도 기록해 targetsReady 를 켠다.
-     * 뺀 매치는 로그와 지표({@code lol.renewal.match_excluded})로 남기고(스펙 5.6), 매치 적재 큐에 백필 순위로 넘긴다.
-     * 넘기기가 실패하면 예외가 run 까지 올라가 갱신이 실패하므로 커서가 그 매치를 지나가지 않는다.
+     * 매치 대상과 타임라인 대상을 정한다. 계속 실패해 빠진 매치는 대상에서 빼고 로그와 지표({@code lol.renewal.match_excluded})로
+     * 남기며(스펙 5.6), 매치 적재 큐에 백필 순위로 넘긴다. 넘기기가 실패하면 예외가 run 까지 올라가 갱신이 실패하므로
+     * 커서가 그 매치를 지나가지 않는다.
      */
-    private Set<String> recordTargets(String puuid, String renewalId, String platformName, List<String> ids) {
-        Set<String> targets = new LinkedHashSet<>(ids);
-        if (!targets.isEmpty()) {
-            targets.removeAll(matchRepositoryPort.findExistingMatchIds(ids));
-        }
-        Set<String> excluded = targets.isEmpty() ? Set.of() : claimService.findExcluded(targets);
+    private RenewalMatchPlan plan(String puuid, String renewalId, String platformName, List<String> ids) {
+        Set<String> existing = ids.isEmpty() ? Set.of() : new HashSet<>(matchRepositoryPort.findExistingMatchIds(ids));
+        Set<String> candidates = new LinkedHashSet<>(ids);
+        candidates.removeAll(existing);
+        Set<String> excluded = candidates.isEmpty() ? Set.of() : claimService.findExcluded(candidates);
         if (!excluded.isEmpty()) {
             log.warn("계속 실패한 매치를 갱신 대상에서 빼고 매치 적재 큐에 백필로 넘긴다. puuid={}, renewalId={}, matchIds={}",
                     puuid, renewalId, excluded);
             excluded.forEach(matchId -> messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.BACKFILL));
         }
-        targets.removeAll(excluded);
         meterRegistry.counter(EXCLUDED_METRIC).increment(excluded.size());
-        recordPort.recordTargets(puuid, renewalId, targets);
-        return targets;
-    }
-
-    /** 다른 갱신이 쥔 매치는 부르지 않는다. 그 갱신이 저장하면 판정기가 두 갱신을 함께 끝낸다. */
-    private List<String> claim(Set<String> targets, String renewalId) {
-        return targets.stream().filter(matchId -> claimService.claim(matchId, renewalId)).toList();
-    }
-
-    /** 선점한 매치를 받아 저장하고 못 받은 매치를 넘긴다. 대상이 전부 이번에 저장됐으면 매치 비트를 켠다. */
-    private void completeClaimed(RenewalStepMessage message, String platformName,
-                                 Set<String> targets, List<String> claimed) {
-        List<MatchFetch> results = fetchAll(claimed, platformName);
-        List<MatchFetch> fetched = results.stream().filter(r -> r.outcome() == Outcome.FETCHED).toList();
-        save(message.puuid(), message.renewalId(), fetched);
-        handOffUnfetched(results, platformName, message.renewalId());
-        if (fetched.size() == targets.size()) {
-            finisher.finish(message.puuid(),
-                    recordPort.markSteps(message.puuid(), message.renewalId(), EnumSet.of(RenewalStep.MATCH)));
-        }
-    }
-
-    /** 매치마다 match ∥ timeline 을 한꺼번에 시작한 뒤 모두 기다린다. */
-    private List<MatchFetch> fetchAll(List<String> matchIds, String platformName) {
-        List<PendingFetch> pending = matchIds.stream().map(matchId -> start(matchId, platformName)).toList();
-        return pending.stream().map(RenewalMatchStep::await).toList();
+        List<String> recent = ids.subList(0, Math.min(RenewalMatchPlan.TIMELINE_COUNT, ids.size()));
+        Set<String> withTimeline = recent.isEmpty() ? Set.of() : matchRepositoryPort.findMatchIdsWithTimeline(recent);
+        return RenewalMatchPlan.of(ids, existing, excluded, withTimeline);
     }
 
     /**
-     * 매치마다 따로 USER 허가(match·timeline 1건씩)를 받아 둘을 시작한다. 거절되면 부르지 않고 {@link PendingFetch#denied}
-     * 로 두어 {@link #await} 가 HAND_OFF 로 넘기게 한다. 허가를 묻지 못해도 그 예외로 실패한 것으로 두어 같다.
+     * 매치 대상만 선점하고, 받을 항목을 돌려준다. 다른 갱신이 쥔 매치는 부르지 않는다 — 그 갱신이 저장하면 판정기가
+     * 두 갱신을 함께 끝낸다. 단 타임라인 대상이면 타임라인만 받는다. 선점한 id 는 도중에 던져도 풀 수 있게 claimed 에 모은다.
      */
-    private PendingFetch start(String matchId, String platformName) {
-        Optional<RiotPermits> permits;
-        try {
-            permits = permitPort.tryAcquire(platformName, RiotCallPriority.USER, MatchApiPort.MATCH_COST);
-        } catch (RuntimeException e) {
-            return new PendingFetch(matchId, CompletableFuture.failedFuture(e), CompletableFuture.failedFuture(e));
+    private List<Item> claim(List<Item> items, String renewalId, List<String> claimed) {
+        List<Item> toFetch = new ArrayList<>();
+        for (Item item : items) {
+            if (!item.match()) {
+                toFetch.add(item);
+            } else if (claimService.claim(item.matchId(), renewalId)) {
+                claimed.add(item.matchId());
+                toFetch.add(item);
+            } else if (item.timeline()) {
+                toFetch.add(item.timelineOnly());
+            }
         }
-        if (permits.isEmpty()) {
-            return PendingFetch.denied(matchId);
-        }
-        return new PendingFetch(matchId,
-                matchApiPort.fetchMatchById(matchId, platformName, permits.get(), requestExecutor),
-                matchApiPort.fetchTimelineById(matchId, platformName, permits.get(), requestExecutor));
+        return toFetch;
     }
 
     /**
-     * 둘 다 받으면 FETCHED. 하나라도 4xx(429 제외)면 CLIENT_ERROR — 다시 불러도 같으니 넘기지 않는다.
-     * 그 밖의 실패(429·허가 거절·5xx·시간 초과·IO·역직렬화 등)는 HAND_OFF.
+     * 받은 매치·타임라인을 한 번에 저장하고 요청자 캐시를 쓴다. 저장한 매치 수를 돌려준다.
+     * 저장 예외는 {@link MatchSaveFailure} 로 올린다.
      */
-    private static MatchFetch await(PendingFetch pending) {
-        if (pending.match() == null) {
-            log.warn("갱신 매치 허가 거절. matchId={}, outcome={}", pending.matchId(), Outcome.HAND_OFF);
-            return new MatchFetch(pending.matchId(), Outcome.HAND_OFF, null, null);
-        }
-        Throwable matchFailure = failureOf(pending.match());
-        Throwable timelineFailure = failureOf(pending.timeline());
-        if (matchFailure == null && timelineFailure == null) {
-            return new MatchFetch(pending.matchId(), Outcome.FETCHED,
-                    pending.match().join(), pending.timeline().join());
-        }
-        Outcome outcome = isClientError(matchFailure) || isClientError(timelineFailure)
-                ? Outcome.CLIENT_ERROR : Outcome.HAND_OFF;
-        log.warn("갱신 매치 조회 실패. matchId={}, outcome={}, match={}, timeline={}",
-                pending.matchId(), outcome, describe(matchFailure), describe(timelineFailure));
-        return new MatchFetch(pending.matchId(), outcome, null, null);
-    }
-
-    /** 받은 매치를 한 번에 저장하고 요청자 캐시를 쓴 뒤 선점을 푼다. 저장 예외는 {@link MatchSaveFailure} 로 올린다. */
-    private void save(String puuid, String renewalId, List<MatchFetch> fetched) {
+    private int save(String puuid, List<Fetched> fetched) {
         if (fetched.isEmpty()) {
-            return;
+            return 0;
         }
-        List<MatchDto> matches = fetched.stream().map(MatchFetch::match).toList();
-        List<TimelineDto> timelines = fetched.stream().map(MatchFetch::timeline).toList();
+        List<MatchDto> matches = fetched.stream().map(Fetched::match).filter(Objects::nonNull).toList();
+        List<TimelineDto> timelines = fetched.stream().map(Fetched::timeline).filter(Objects::nonNull).toList();
         try {
             saveMatchDataUseCase.execute(matches, timelines);
         } catch (RuntimeException e) {
             throw new MatchSaveFailure(e);
         }
         matchCacheWritePort.writeMatches(matches, timelines, puuid);
-        fetched.forEach(result -> claimService.release(result.matchId(), renewalId));
+        return matches.size();
     }
 
-    /** 4xx 만 실패 표시를 남기고, 그 밖의 실패는 매치 적재 큐에 사용자 재시도 순위로 넘긴다. 어느 쪽이든 선점을 푼다. */
-    private void handOffUnfetched(List<MatchFetch> results, String platformName, String renewalId) {
-        for (MatchFetch result : results) {
-            if (result.outcome() == Outcome.FETCHED) {
-                continue;
-            }
-            if (result.outcome() == Outcome.CLIENT_ERROR) {
-                claimService.markFailed(result.matchId());
+    /**
+     * 못 받은 것을 매치 적재 큐에 id 로 넘긴다. 허가가 거절된 매치와 match 가 429·5xx·IO·시간 초과로 실패한 매치는
+     * 사용자 재시도 순위로(그 길은 match·timeline 을 둘 다 받는다), 타임라인을 받지 못한 것 — 거절된 타임라인만 항목,
+     * 타임라인 없이 저장한 매치, 실패한 타임라인 — 은 id 마다 한 번 나중 타임라인 순위로 넘긴다. 타임라인만 필요한 항목을
+     * 사용자 재시도로 넘기면 DB 에 있는 매치라 DUPLICATE 로 버려지기 때문이다. match 가 4xx 면 실패 표시만 남긴다.
+     */
+    private void handOff(String platformName, Result result) {
+        Set<String> timelineLater = new LinkedHashSet<>();
+        for (Item item : result.denied()) {
+            if (item.match()) {
+                messageSender.sendMessageByMatchId(item.matchId(), platformName, MatchQueueRank.USER_RETRY);
             } else {
-                messageSender.sendMessageByMatchId(result.matchId(), platformName, MatchQueueRank.USER_RETRY);
+                timelineLater.add(item.matchId());
             }
-            claimService.release(result.matchId(), renewalId);
         }
+        result.fetched().stream()
+                .filter(fetched -> fetched.match() != null && fetched.timeline() == null)
+                .forEach(fetched -> timelineLater.add(fetched.matchId()));
+        timelineLater.addAll(result.timelineLater());
+        timelineLater.forEach(matchId ->
+                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.TIMELINE_LATER));
+        result.userRetry().forEach(matchId ->
+                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.USER_RETRY));
+        result.clientError().forEach(claimService::markFailed);
     }
 
     /** 20개를 꽉 채웠으면 21번째부터는 백그라운드 매치 검색이 찾는다. */
@@ -298,48 +279,6 @@ public class RenewalMatchStep {
                         matchId, renewalId, e.toString());
             }
         }
-    }
-
-    /** cause 사슬의 Riot 예외가 429 가 아닌 4xx({@link RiotClientException}, 404 포함)면 true. 허가 거절은 Riot 예외가 아니다. */
-    private static boolean isClientError(Throwable failure) {
-        RiotClientException client = RenewalStepFailures.findCause(failure, RiotClientException.class);
-        return client != null
-                && !(client instanceof RiotRateLimitException)
-                && (client.getStatus() == null || client.getStatus().value() != 429);
-    }
-
-    private static Throwable failureOf(CompletableFuture<?> future) {
-        try {
-            future.join();
-            return null;
-        } catch (CompletionException | CancellationException e) {
-            return e;
-        }
-    }
-
-    private static String describe(Throwable failure) {
-        if (failure == null) {
-            return "ok";
-        }
-        Throwable cause = failure instanceof CompletionException && failure.getCause() != null
-                ? failure.getCause() : failure;
-        return cause.toString();
-    }
-
-    /** FETCHED: 저장한다. CLIENT_ERROR: 4xx 라 실패 표시. HAND_OFF: 매치 적재 큐에 사용자 재시도 순위로. */
-    private enum Outcome { FETCHED, CLIENT_ERROR, HAND_OFF }
-
-    /** 허가가 거절돼 부르지 않은 매치는 match·timeline 이 null 이다. */
-    private record PendingFetch(String matchId, CompletableFuture<MatchDto> match,
-                                CompletableFuture<TimelineDto> timeline) {
-
-        static PendingFetch denied(String matchId) {
-            return new PendingFetch(matchId, null, null);
-        }
-    }
-
-    /** FETCHED 일 때만 match·timeline 이 있다. */
-    private record MatchFetch(String matchId, Outcome outcome, MatchDto match, TimelineDto timeline) {
     }
 
     /** 저장 예외를 run 까지 올려 그 밖의 예외와 가른다. */
