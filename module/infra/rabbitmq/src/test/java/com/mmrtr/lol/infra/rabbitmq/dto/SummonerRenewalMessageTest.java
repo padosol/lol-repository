@@ -51,6 +51,35 @@ class SummonerRenewalMessageTest {
         assertThat(zero.startOffsetOrDefault()).isEqualTo(0);
     }
 
+    @Test
+    @DisplayName("JSON 에 attempt 가 없으면 0, 있으면 그 값으로 역직렬화된다")
+    void deserialize_attemptDefaultsToZero() {
+        // given
+        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();
+
+        // when
+        SummonerRenewalMessage without = read(converter,
+                "{\"puuid\":\"p\",\"platform\":\"KR\",\"revisionDate\":5,\"startOffset\":20}");
+        SummonerRenewalMessage retried = read(converter,
+                "{\"puuid\":\"p\",\"platform\":\"KR\",\"revisionDate\":5,\"startOffset\":120,\"attempt\":1}");
+
+        // then
+        assertThat(without.attempt()).isZero();
+        assertThat(retried).isEqualTo(new SummonerRenewalMessage("p", "KR", 5L, 120, 1));
+    }
+
+    @Test
+    @DisplayName("fromOffset 은 시도 수를 두고 offset 만, nextAttempt 는 offset 과 시도 수 하나를 바꾼다")
+    void fromOffsetKeepsAttempt_nextAttemptIncrements() {
+        // given
+        SummonerRenewalMessage message = new SummonerRenewalMessage("p", "KR", 5L, 20, 1);
+
+        // when // then
+        assertThat(message.fromOffset(220)).isEqualTo(new SummonerRenewalMessage("p", "KR", 5L, 220, 1));
+        assertThat(message.nextAttempt(120)).isEqualTo(new SummonerRenewalMessage("p", "KR", 5L, 120, 2));
+        assertThat(new SummonerRenewalMessage("p", "KR", 5L, 20).attempt()).isZero();
+    }
+
     private SummonerRenewalMessage read(Jackson2JsonMessageConverter converter, String json) {
         MessageProperties props = new MessageProperties();
         props.setContentType(MessageProperties.CONTENT_TYPE_JSON);

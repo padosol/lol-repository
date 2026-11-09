@@ -6,6 +6,9 @@ import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.infra.rabbitmq.RiotPermitFixtures;
 import com.mmrtr.lol.infra.redis.service.MatchRedisService;
+import com.mmrtr.lol.infra.riot.exception.RiotClientException;
+import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
+import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
@@ -16,7 +19,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.client.ResourceAccessException;
 
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.never;
@@ -46,6 +52,7 @@ class MatchDataProcessorTest {
     private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private MatchRedisService redis;
     private MatchBatchProcessor batch;
+    private MessageSender messageSender;
     private CompletableFuture<MatchDto> matchResult;
     private CompletableFuture<TimelineDto> timelineResult;
     private MatchRepositoryPort matchRepository;
@@ -57,9 +64,11 @@ class MatchDataProcessorTest {
     void setUp() {
         redis = mock(MatchRedisService.class);
         batch = mock(MatchBatchProcessor.class);
+        messageSender = mock(MessageSender.class);
         matchRepository = mock(MatchRepositoryPort.class);
         meters = new SimpleMeterRegistry();
         when(redis.tryMarkProcessing(anyString())).thenReturn(true);
+        when(batch.hasCapacity()).thenReturn(true);
         when(batch.add(any(), any())).thenReturn(true);
         matchResult = CompletableFuture.completedFuture(new MatchDto());
         timelineResult = CompletableFuture.completedFuture(new TimelineDto());
@@ -84,7 +93,12 @@ class MatchDataProcessorTest {
                 return timelineResult;
             }
         };
-        processor = new MatchDataProcessor(port, permitPort, redis, batch, Runnable::run, matchRepository, meters);
+        processor = new MatchDataProcessor(port, permitPort, redis, batch, messageSender, Runnable::run,
+                matchRepository, meters);
+    }
+
+    private static RiotRateLimitException rateLimit() {
+        return new RiotRateLimitException(Duration.ofSeconds(1), null, HttpStatus.TOO_MANY_REQUESTS, "", null);
     }
 
     @Test
@@ -170,21 +184,35 @@ class MatchDataProcessorTest {
     }
 
     @Test
-    @DisplayName("fetch 가 시간 안에 끝나지 않으면 QUEUE_FULL 로 requeue 하고 표시를 풀고 호출을 취소한다")
-    void fetchTimeout_requeuesReleasesMarkAndCancels() {
+    @DisplayName("fetch 가 시간 안에 끝나지 않으면 일시 오류로 보고 RETRY 이며 표시를 풀고 호출을 취소한다")
+    void fetchTimeout_retriesReleasesMarkAndCancels() {
         matchResult = new CompletableFuture<>();
         timelineResult = new CompletableFuture<>();
-        processor = new MatchDataProcessor(port, permitPort, redis, batch, Runnable::run, matchRepository, meters,
-                Duration.ofMillis(50));
+        processor = new MatchDataProcessor(port, permitPort, redis, batch, messageSender, Runnable::run,
+                matchRepository, meters, Duration.ofMillis(50));
 
-        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL)).isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL)).isEqualTo(MatchDataProcessor.Result.RETRY);
         verify(redis, times(1)).releaseProcessing("KR_1");
         assertThat(matchResult).isCancelled();
         assertThat(timelineResult).isCancelled();
+        assertThat(count("backfill", "retry")).isEqualTo(1.0);
     }
 
     @Test
-    @DisplayName("배치 큐가 가득 차면 QUEUE_FULL 이고 처리 표시를 푼다")
+    @DisplayName("배치 큐가 가득 차 있으면 허가·조회 없이 QUEUE_FULL 이고 처리 표시를 잡지 않는다")
+    void batchFullBeforeFetch_queueFullWithoutPermitOrRiotCall() {
+        when(batch.hasCapacity()).thenReturn(false);
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.USER_RETRY))
+                .isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
+        verifyNoInteractions(permitPort, redis);
+        assertThat(seen).isEmpty();
+        verify(batch, never()).add(any(), any());
+        assertThat(count("user_retry", "requeue")).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("받은 뒤 배치 큐에 넣지 못하면 QUEUE_FULL 이고 처리 표시를 푼다")
     void batchQueueFull_releasesMark() {
         when(batch.add(any(), any())).thenReturn(false);
 
@@ -193,14 +221,60 @@ class MatchDataProcessorTest {
     }
 
     @Test
-    @DisplayName("실패해도 processing 표시를 푼다")
-    void process_failure_releasesProcessing() {
-        matchResult = CompletableFuture.failedFuture(new RiotServerException(HttpStatus.BAD_GATEWAY, "x"));
+    @DisplayName("match 가 4xx(429 제외)면 FAILURE 이고 processing 표시를 푼다")
+    void process_clientError_failureAndReleasesProcessing() {
+        matchResult = CompletableFuture.failedFuture(new RiotClientException(HttpStatus.BAD_REQUEST, "x", null));
 
         assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL))
                 .isEqualTo(MatchDataProcessor.Result.FAILURE);
         verify(redis, times(1)).releaseProcessing("KR_1");
+        verify(batch, never()).add(any(), any());
         assertThat(count("backfill", "failure")).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("match 가 429·5xx·IO 로 실패하면 RETRY 이고 processing 표시를 푼다")
+    void process_transientMatchFailure_retryAndReleasesProcessing() {
+        List<Throwable> failures = List.of(rateLimit(), new RiotServerException(HttpStatus.BAD_GATEWAY, "x"),
+                new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out")));
+        for (Throwable failure : failures) {
+            matchResult = CompletableFuture.failedFuture(failure);
+
+            assertThat(processor.process("KR_1", "KR", MatchQueueRank.USER_RETRY))
+                    .isEqualTo(MatchDataProcessor.Result.RETRY);
+        }
+        verify(redis, times(3)).releaseProcessing("KR_1");
+        verify(batch, never()).add(any(), any());
+        verifyNoInteractions(messageSender);
+        assertThat(count("user_retry", "retry")).isEqualTo(3.0);
+    }
+
+    @Test
+    @DisplayName("match 는 받고 timeline 만 실패하면 매치를 저장하고 그 id 를 나중 타임라인으로 넘긴 뒤 SUCCESS 다")
+    void process_timelineOnlyFailure_savesMatchAndSendsTimelineLater() {
+        MatchDto match = new MatchDto();
+        matchResult = CompletableFuture.completedFuture(match);
+        timelineResult = CompletableFuture.failedFuture(new RiotServerException(HttpStatus.BAD_GATEWAY, "x"));
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL))
+                .isEqualTo(MatchDataProcessor.Result.SUCCESS);
+        verify(batch).add(match, null);
+        verify(messageSender).sendMessageByMatchId("KR_1", "KR", MatchQueueRank.TIMELINE_LATER);
+        verify(redis, never()).releaseProcessing(anyString());
+    }
+
+    @Test
+    @DisplayName("나중 타임라인 발행이 실패해도 매치는 저장했으니 SUCCESS 다")
+    void process_timelineLaterPublishFails_stillSuccess() {
+        MatchDto match = new MatchDto();
+        matchResult = CompletableFuture.completedFuture(match);
+        timelineResult = CompletableFuture.failedFuture(rateLimit());
+        doThrow(new IllegalStateException("mq down"))
+                .when(messageSender).sendMessageByMatchId("KR_1", "KR", MatchQueueRank.TIMELINE_LATER);
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL))
+                .isEqualTo(MatchDataProcessor.Result.SUCCESS);
+        verify(batch).add(match, null);
     }
 
     @Test
@@ -229,6 +303,50 @@ class MatchDataProcessorTest {
         verify(batch).add(null, timeline);
         verify(matchRepository, never()).findExistingMatchIds(any());
         verifyNoInteractions(redis);
+    }
+
+    @Test
+    @DisplayName("나중 타임라인: 429·5xx·IO 로 실패하면 RETRY 다")
+    void timelineLater_transientFailure_retry() {
+        timelineResult = CompletableFuture.failedFuture(new RiotServerException(HttpStatus.SERVICE_UNAVAILABLE, "x"));
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
+                .isEqualTo(MatchDataProcessor.Result.RETRY);
+        verify(batch, never()).add(any(), any());
+        assertThat(count("timeline_later", "retry")).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("나중 타임라인: 4xx(429 제외)면 FAILURE 다")
+    void timelineLater_clientError_failure() {
+        timelineResult = CompletableFuture.failedFuture(new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "x", null));
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
+                .isEqualTo(MatchDataProcessor.Result.FAILURE);
+        verify(batch, never()).add(any(), any());
+    }
+
+    @Test
+    @DisplayName("나중 타임라인: 시간 안에 끝나지 않으면 RETRY 이고 호출을 취소한다")
+    void timelineLater_timeout_retryAndCancels() {
+        timelineResult = new CompletableFuture<>();
+        processor = new MatchDataProcessor(port, permitPort, redis, batch, messageSender, Runnable::run,
+                matchRepository, meters, Duration.ofMillis(50));
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
+                .isEqualTo(MatchDataProcessor.Result.RETRY);
+        assertThat(timelineResult).isCancelled();
+    }
+
+    @Test
+    @DisplayName("나중 타임라인: 배치 큐가 가득 차 있으면 허가·조회 없이 QUEUE_FULL 이다")
+    void timelineLater_batchFull_queueFullWithoutPermit() {
+        when(batch.hasCapacity()).thenReturn(false);
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
+                .isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
+        verifyNoInteractions(permitPort);
+        assertThat(seen).isEmpty();
     }
 
     @Test

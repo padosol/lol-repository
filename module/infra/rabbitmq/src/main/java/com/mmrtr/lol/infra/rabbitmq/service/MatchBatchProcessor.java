@@ -36,6 +36,14 @@ public class MatchBatchProcessor {
         return queue.offer(new Item(match, timeline));
     }
 
+    /**
+     * 큐에 자리가 남았으면 true. Riot 을 부르기 전에 보고, 가득이면 받지 않고 다시 넣게 해 받은 것을 버리지 않는다.
+     * 여러 consumer 가 함께 보므로 true 여도 {@link #add} 가 false 일 수 있다.
+     */
+    public boolean hasCapacity() {
+        return queue.remainingCapacity() > 0;
+    }
+
     @Scheduled(fixedRate = 1000)
     public void flush() {
         List<Item> items = new ArrayList<>();

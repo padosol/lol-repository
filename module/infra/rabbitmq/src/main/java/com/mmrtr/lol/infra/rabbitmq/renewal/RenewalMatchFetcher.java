@@ -3,9 +3,8 @@ package com.mmrtr.lol.infra.rabbitmq.renewal;
 import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
+import com.mmrtr.lol.infra.rabbitmq.listener.RiotFailures;
 import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalMatchPlan.Item;
-import com.mmrtr.lol.infra.riot.exception.RiotClientException;
-import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.support.riot.PermitRounds;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
@@ -91,7 +90,7 @@ public class RenewalMatchFetcher {
         if (!pending.item().match()) {
             if (timeline != null) {
                 collected.fetched().add(new Fetched(matchId, null, timeline));
-            } else if (isClientError(timelineFailure)) {
+            } else if (RiotFailures.isClientError(timelineFailure)) {
                 // 다시 받아도 같은 4xx 라 나중 타임라인으로 넘기지 않는다
                 log.warn("갱신 타임라인 조회 4xx. 나중 타임라인으로 넘기지 않고 버린다. matchId={}, timeline={}",
                         matchId, describe(timelineFailure));
@@ -105,7 +104,7 @@ public class RenewalMatchFetcher {
         Throwable matchFailure = failureOf(pending.match());
         MatchDto match = matchFailure == null ? pending.match().join() : null;
         if (match == null) {
-            boolean clientError = isClientError(matchFailure);
+            boolean clientError = RiotFailures.isClientError(matchFailure);
             log.warn("갱신 매치 조회 실패. matchId={}, clientError={}, match={}",
                     matchId, clientError, describe(matchFailure));
             (clientError ? collected.clientError() : collected.userRetry()).add(matchId);
@@ -125,14 +124,6 @@ public class RenewalMatchFetcher {
         } catch (RuntimeException e) {
             return CompletableFuture.failedFuture(e);
         }
-    }
-
-    /** cause 사슬의 Riot 예외가 429 가 아닌 4xx({@link RiotClientException}, 404 포함)면 true. */
-    private static boolean isClientError(Throwable failure) {
-        RiotClientException client = RenewalStepFailures.findCause(failure, RiotClientException.class);
-        return client != null
-                && !(client instanceof RiotRateLimitException)
-                && (client.getStatus() == null || client.getStatus().value() != 429);
     }
 
     private static Throwable failureOf(CompletableFuture<?> future) {

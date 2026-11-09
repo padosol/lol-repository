@@ -3,15 +3,9 @@ package com.mmrtr.lol.infra.rabbitmq.renewal;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
 import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
+import com.mmrtr.lol.infra.rabbitmq.listener.RiotFailures;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
-import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
-import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import io.micrometer.core.instrument.MeterRegistry;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -105,14 +99,15 @@ final class RenewalStepFailures {
     }
 
     /**
-     * Riot 조회 실패를 분류한다. 404 는 not_found. 429·5xx·IO·시간 초과는 {@link #MAX_ATTEMPT} 번째 시도 전이면
-     * 시도 수를 올려 다시 넣고 그 뒤엔 예외에서 reason 을 뽑아 실패시킨다. 그 밖은 바로 실패시킨다.
+     * Riot 조회 실패를 분류한다. 404 는 not_found. 429·5xx·IO·시간 초과({@link RiotFailures#isTransient})는
+     * {@link #MAX_ATTEMPT} 번째 시도 전이면 시도 수를 올려 다시 넣고 그 뒤엔 예외에서 reason 을 뽑아 실패시킨다.
+     * 그 밖은 바로 실패시킨다.
      */
     void fetchFailed(String puuid, String renewalId, int attempt, Exception e, Runnable requeueNextAttempt) {
         try {
-            if (causedBy(e, RiotClientNotFoundException.class)) {
+            if (RiotFailures.causedBy(e, RiotClientNotFoundException.class)) {
                 fail(puuid, renewalId, "not_found");
-            } else if (isRetryable(e)) {
+            } else if (RiotFailures.isTransient(e)) {
                 if (attempt < MAX_ATTEMPT) {
                     count("requeue");
                     requeueNextAttempt.run();
@@ -129,30 +124,7 @@ final class RenewalStepFailures {
         }
     }
 
-    private static boolean isRetryable(Throwable e) {
-        return causedBy(e, RiotRateLimitException.class)
-                || causedBy(e, RiotServerException.class)
-                || causedBy(e, IOException.class)
-                || causedBy(e, TimeoutException.class);
-    }
-
     private void count(String result) {
         meterRegistry.counter(STEP_METRIC, "step", step, "result", result).increment();
-    }
-
-    /** cause 사슬(CompletionException 포함) 어딘가에 type 이 있는지 본다. */
-    static boolean causedBy(Throwable throwable, Class<? extends Throwable> type) {
-        return findCause(throwable, type) != null;
-    }
-
-    /** cause 사슬(CompletionException 포함)에서 처음 나오는 type 예외. 없으면(throwable 이 null 이어도) null. */
-    static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
-        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Throwable t = throwable; t != null && seen.add(t); t = t.getCause()) {
-            if (type.isInstance(t)) {
-                return type.cast(t);
-            }
-        }
-        return null;
     }
 }

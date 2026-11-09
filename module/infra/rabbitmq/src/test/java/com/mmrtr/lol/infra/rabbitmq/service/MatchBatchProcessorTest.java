@@ -83,4 +83,18 @@ class MatchBatchProcessorTest {
         boolean overflow = processor.add(new MatchDto(), new TimelineDto());
         assertThat(overflow).isFalse();
     }
+
+    @Test
+    @DisplayName("hasCapacity 는 큐에 자리가 남았는지 알려 주고, flush 로 비우면 다시 true 다")
+    void hasCapacity_reflectsRemainingCapacity() {
+        assertThat(processor.hasCapacity()).isTrue();
+        for (int i = 0; i < 500; i++) {
+            processor.add(new MatchDto(), new TimelineDto());
+        }
+        assertThat(processor.hasCapacity()).isFalse();
+
+        processor.flush();
+
+        assertThat(processor.hasCapacity()).isTrue();
+    }
 }

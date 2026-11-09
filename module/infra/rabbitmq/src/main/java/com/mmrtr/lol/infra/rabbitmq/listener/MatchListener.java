@@ -3,11 +3,13 @@ package com.mmrtr.lol.infra.rabbitmq.listener;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchDataProcessor;
 import com.mmrtr.lol.infra.rabbitmq.service.MatchQueueRank;
+import com.mmrtr.lol.infra.rabbitmq.service.MessageSender;
 import com.mmrtr.lol.support.aop.TraceLogging;
 import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,21 +23,31 @@ import java.time.Duration;
 @TraceLogging
 public class MatchListener {
 
-    /** 허가가 거절된 메시지를 다시 넣기 전에 쉬는 시간. 쉬지 않으면 같은 메시지가 쉬지 않고 돈다. */
-    static final Duration DENIED_REQUEUE_DELAY = Duration.ofSeconds(1);
+    /**
+     * 허가가 거절됐거나 배치 큐가 가득 찬 메시지, 일시 오류로 다시 넣는 메시지를 넣기 전에 쉬는 시간.
+     * 쉬지 않으면 같은 메시지가 쉬지 않고 돈다.
+     */
+    static final Duration REQUEUE_DELAY = Duration.ofSeconds(1);
+
+    /** 일시 오류의 시도 수 상한. 다음 시도 수가 이 값에 닿으면 다시 넣지 않고 DLX 로 보낸다. */
+    static final int MAX_ATTEMPT = 2;
 
     private final MessageConverter messageConverter;
     private final MatchDataProcessor matchDataProcessor;
+    private final MessageSender messageSender;
     private final Sleeper sleeper;
 
     @Autowired
-    public MatchListener(MessageConverter messageConverter, MatchDataProcessor matchDataProcessor) {
-        this(messageConverter, matchDataProcessor, MatchListener::sleep);
+    public MatchListener(MessageConverter messageConverter, MatchDataProcessor matchDataProcessor,
+                         MessageSender messageSender) {
+        this(messageConverter, matchDataProcessor, messageSender, MatchListener::sleep);
     }
 
-    MatchListener(MessageConverter messageConverter, MatchDataProcessor matchDataProcessor, Sleeper sleeper) {
+    MatchListener(MessageConverter messageConverter, MatchDataProcessor matchDataProcessor,
+                  MessageSender messageSender, Sleeper sleeper) {
         this.messageConverter = messageConverter;
         this.matchDataProcessor = matchDataProcessor;
+        this.messageSender = messageSender;
         this.sleeper = sleeper;
     }
 
@@ -54,12 +66,15 @@ public class MatchListener {
     ) {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
 
+        String platformName;
+        String matchId;
+        MatchQueueRank rank;
         MatchDataProcessor.Result result;
         try {
-            String platformName = message.getMessageProperties().getHeader("region");
-            String matchId = messageConverter.fromMessage(message).toString();
+            platformName = message.getMessageProperties().getHeader("region");
+            matchId = messageConverter.fromMessage(message).toString();
 
-            MatchQueueRank rank = MatchQueueRank.fromAmqpPriority(message.getMessageProperties().getPriority());
+            rank = MatchQueueRank.fromAmqpPriority(message.getMessageProperties().getPriority());
 
             result = matchDataProcessor.process(matchId, platformName, rank);
         } catch (Exception e) {
@@ -70,13 +85,54 @@ public class MatchListener {
 
         switch (result) {
             case DUPLICATE, SUCCESS -> safeAck(channel, deliveryTag);
-            case QUEUE_FULL -> safeNackRequeue(channel, deliveryTag);
-            case DENIED -> {
-                sleeper.sleep(DENIED_REQUEUE_DELAY);
+            case QUEUE_FULL, DENIED -> {
+                sleeper.sleep(REQUEUE_DELAY);
                 safeNackRequeue(channel, deliveryTag);
             }
+            case RETRY -> retryOrDeadLetter(message, channel, matchId, platformName, rank);
             case FAILURE -> safeNack(channel, deliveryTag);
         }
+    }
+
+    /**
+     * 일시 오류. 다음 시도 수가 {@link #MAX_ATTEMPT} 에 닿지 않았으면 잠시 쉬고 같은 id·region·순위에 다음 시도 수를 단
+     * 새 메시지를 보낸 뒤 원래 메시지를 ack 한다. 닿았거나 보내기가 실패하면 requeue 없이 nack 해 DLX 로 보낸다.
+     * 시도 수는 헤더로 센다 — redelivered 는 거절된 메시지를 다시 넣을 때도 켜지므로 쓰지 않는다.
+     */
+    private void retryOrDeadLetter(Message message, Channel channel, String matchId, String platformName,
+                                   MatchQueueRank rank) {
+        long deliveryTag = message.getMessageProperties().getDeliveryTag();
+        int nextAttempt = attemptOf(message.getMessageProperties()) + 1;
+        if (nextAttempt >= MAX_ATTEMPT) {
+            log.warn("Transient failure retries exhausted, nacking to DLX. matchId={}, attempt={}", matchId, nextAttempt);
+            safeNack(channel, deliveryTag);
+            return;
+        }
+        sleeper.sleep(REQUEUE_DELAY);
+        try {
+            messageSender.sendMessageByMatchId(matchId, platformName, rank, nextAttempt);
+        } catch (RuntimeException e) {
+            log.warn("Failed to republish match message for retry, nacking to DLX. matchId={}", matchId, e);
+            safeNack(channel, deliveryTag);
+            return;
+        }
+        safeAck(channel, deliveryTag);
+    }
+
+    /** {@link MessageSender#ATTEMPT_HEADER} 의 정수 값. 없거나 읽을 수 없으면 0. */
+    static int attemptOf(MessageProperties properties) {
+        Object value = properties.getHeader(MessageSender.ATTEMPT_HEADER);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value != null) {
+            try {
+                return Integer.parseInt(value.toString().trim());
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     private static void sleep(Duration duration) {
