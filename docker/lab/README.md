@@ -14,6 +14,8 @@ docker compose ps              # app 이 (healthy) 가 되면 준비 끝
 기동 순서는 compose 가 정한다: postgres·rabbitmq healthy → `init-db`(`lol_lab` 생성)·`init-vhost`(vhost `lab` 생성, guest 권한) 완료 후 종료 → `app`.
 두 init 은 이미 있으면 그대로 두므로 몇 번을 다시 올려도 된다.
 
+> 호출 경로 (2026-11-09 설계 이후): 호출하는 쪽이 `RiotPermitPort.tryAcquire` 로 허가를 먼저 받고, 거절되면 기다리지 않고 절반으로 줄여(20 → 10 → 5) 다시 묻는다. 응답 뒤 `RiotCallRecorder` 가 기록을 응답 시각으로 옮기고 한도를 배우며 정지를 건다. 아무것도 다시 보내지 않는다. 대시보드의 허가 패널은 `riot_permit_requests_total{routing,priority,result}` 를 본다.
+
 ## 개발 모드 절차
 
 1. `bash docker/lab/lab.sh up` (또는 위의 `docker compose up -d --build`) — 이미지를 소스에서 빌드하고 모든 서비스를 띄운 뒤, 앱 health 가 UP 이 될 때까지 기다린다 (포트 8111). 앱 로그에 "Riot 요청을 가짜 서버" WARN 이 한 줄 나온다.
@@ -200,6 +202,8 @@ FAIL
 - `limit 30:10` 직후에는 run 이 Redis DB 1 을 비워 앱이 배운 한도를 잃으므로, 첫 응답이 `30:10` 을 알려 줄 때까지 기본값 `500:10` 으로 보내 429 가 난다. 앱이 배운 한도는 대시보드에 없고 Redis DB 1 `riot:rl:limits` 와 앱 로그 `Riot 한도 갱신 [asia|app] 30:10` 으로 본다.
 
 #### 한도 관리자 비교 (기준선 = 1초 칸 방식 (같은 갱신 코드), 새 방식 = ZSET 슬라이딩 창)
+
+> 참고: 이 절의 `riot_ratelimit_wait_*`·`riot_ratelimit_acquire_attempts_total`·`riot_ratelimit_rejected_total` 지표는 2026-11-09 설계로 사라졌다. 당시 측정을 그대로 남긴다.
 
 - 기준선은 1초 칸 한도 관리자, "새 방식 (흩기 전)" 은 ZSET 슬라이딩 창의 첫 측정, "새 방식" 은 지금 코드다. 지금 코드는 기다리던 요청을 흩어 깨운다 (최소 25ms + 대기의 25% 까지 무작위 몫, 설계 4.4).
 - 칸마다 **한 번씩만** 돌린 값이다. 같은 조건을 되풀이해 흩어짐을 잰 것이 아니다.

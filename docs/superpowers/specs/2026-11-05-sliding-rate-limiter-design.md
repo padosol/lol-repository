@@ -102,6 +102,8 @@ asia 허가 시각만 본 시뮬레이션 (첫 방문 갱신 1건 = 42회, 네�
 
 ### 4.4 기다림과 포기 (인터셉터)
 
+> **2026-11-09 설계(`2026-11-09-riot-permit-check-design.md`)가 대체함.** 인터셉터의 대기·재시도와 `riot.ratelimit.wait`·`rejected`·`acquire.attempts` 지표는 없어졌다. 아래는 당시 기록이다.
+
 - 인터셉터는 요청 한 건마다 eventId 를 하나 만들고 (UUID) 같은 요청의 재시도 동안 그대로 쓴다. 거절 때는 기록하지 않으므로 같은 member 로 다시 물어도 된다. `RetryInterceptor` 가 다시 보내는 것은 새 요청이므로 새 eventId 다.
 - `acquire` 가 0 이면 바로 보낸다. 0 보다 크면 잔 뒤 다시 묻는다.
 - **자는 시간 [판단, 최종 리뷰 때 더함]:** `max(대기, retry-min-wait) + uniform[0, 대기 × retry-jitter-ratio]` (기본 25ms, 0.25)를 자되, 누적 대기가 우선순위 상한을 넘지 않게 남은 상한으로 자른다.

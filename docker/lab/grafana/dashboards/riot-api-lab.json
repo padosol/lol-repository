@@ -356,7 +356,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "앱 한도 대기 p95",
+      "title": "허가 요청 (초당, routing·priority·결과별)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -373,10 +373,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, priority) (rate(riot_ratelimit_wait_seconds_bucket[30s])))",
+          "expr": "sum by (routing, priority, result) (rate(riot_permit_requests_total[30s]))",
           "refId": "A",
           "instant": false,
-          "legendFormat": "{{priority}}"
+          "legendFormat": "{{routing}} {{priority}} {{result}}"
         }
       ],
       "fieldConfig": {
@@ -388,7 +388,7 @@
             "lineWidth": 1,
             "fillOpacity": 10
           },
-          "unit": "s"
+          "unit": "reqps"
         },
         "overrides": []
       },
