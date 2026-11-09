@@ -33,8 +33,11 @@ import java.util.concurrent.TimeoutException;
 @Component
 public class MatchDataProcessor {
 
-    /** match·timeline 을 받을 때까지 기다리는 상한. executor 가 밀린 경우까지 넉넉히 잡는다. */
-    private static final Duration FETCH_TIMEOUT = Duration.ofSeconds(90);
+    /**
+     * match·timeline 을 받을 때까지 기다리는 상한. 허가는 기다리지 않고 read timeout 이 5초라,
+     * executor 가 밀린 경우까지 보아 15초로 잡는다. 넘으면 일시 오류(RETRY)다.
+     */
+    private static final Duration FETCH_TIMEOUT = Duration.ofSeconds(15);
 
     /** 나중 타임라인은 타임라인 허가 1건만 받는다. */
     private static final Map<RiotMethod, Integer> TIMELINE_COST = Map.of(RiotMethod.MATCH_TIMELINE, 1);
