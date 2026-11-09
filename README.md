@@ -158,13 +158,16 @@ routing 마다 Lua `riot-permit.lua` 한 번으로 app·method 규칙을 모두 
    |---|---|
    | 갱신 단계 | 1초 뒤 requeue |
    | 매치 적재 큐 | `DENIED` → 1초 자고 requeue |
-   | 공개 API | HTTP 429 `TOO_MANY_REQUESTS` |
+   | 공개 API — 관전 (`ActiveGameQueryService`, `/api/v1/summoners/{puuid}/active-game`) | 진행 중인 게임 없음으로 응답 (캐시하지 않음) |
+   | 공개 API — 챔피언 로테이션 조회 (`ChampionRotationQueryService`, `/api/v1/game-data/champion-rotations`) | 빈 로테이션으로 응답 (60초 캐시) |
+   | 그 밖의 공개 API (Riot ID 조회, 이행용 `/api/riot/**` 등) | HTTP 429 `TOO_MANY_REQUESTS` |
    | 스케줄러 | `acquireWithRetry` (1초 간격 10번) |
    | 매치 찾기 | 거절된 offset 부터 requeue |
 
 4. **응답 뒤 기록** — `RiotCallRecorder` 가 응답(또는 IO 예외)을 받으면 기록을 허가 시각에서 응답 시각으로 옮기고(Riot 이 센 시각에 맞춘다),
    응답 헤더(`X-App-Rate-Limit`·`X-Method-Rate-Limit`)에서 한도를 배우며, Count 가 한도의 95% 이상이면 1초,
    429 면 `Retry-After` 동안 해당 버킷을 Redis 키로 정지시킨다(모든 인스턴스가 함께 멈춘다). **어떤 응답도 다시 보내지 않는다.**
+   429·5xx·IO·시간 초과는 호출하는 쪽이 메시지 단위로 1초 뒤 시도 수를 올려 다시 넣는다 (갱신 단계 `attempt`, 매치 적재 큐 `x-attempt` 헤더, 매치 찾기 `attempt`). 상한에 닿으면 갱신은 실패, 매치 적재는 DLX, 매치 찾기는 버린다.
 5. **갱신 매치 단계** — 사용자 경로는 최근 3게임의 타임라인만 받는다. 나머지는 매치 적재 큐의 `TIMELINE_LATER` 순위(`DEFERRED`, 타임라인만, 배치 저장)로 보내 나중에 채운다.
    최근 3게임 타임라인은 갱신 성공 조건이 아니다.
 6. **메트릭** — `riot.permit.requests{routing,priority,result=granted|denied}`(허가 요청 수), `riot.api.responses{status,host}`,
