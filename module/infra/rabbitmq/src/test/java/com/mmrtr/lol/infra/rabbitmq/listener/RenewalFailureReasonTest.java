@@ -3,7 +3,6 @@ package com.mmrtr.lol.infra.rabbitmq.listener;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.logging.LogLevel;

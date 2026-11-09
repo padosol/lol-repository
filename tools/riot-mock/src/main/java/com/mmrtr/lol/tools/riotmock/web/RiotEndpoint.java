@@ -5,7 +5,7 @@ import org.springframework.http.server.PathContainer;
 import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
 
-/** 가짜 서버가 받는 Riot 엔드포인트. key 는 앱의 RiotRequestAttributes.METHOD 값과 같다. 컨트롤러 매핑과 1:1 이다. */
+/** 가짜 서버가 받는 Riot 엔드포인트. key 는 앱의 RiotMethod methodName 값과 같다. 컨트롤러 매핑과 1:1 이다. */
 public enum RiotEndpoint {
 
     ACCOUNT_BY_RIOT_ID("account-v1.by-riot-id", Paths.ACCOUNT_BY_RIOT_ID),
