@@ -6,6 +6,7 @@ import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public interface MatchRepositoryPort {
 
@@ -13,4 +14,7 @@ public interface MatchRepositoryPort {
                  Map<String, Map<String, LeagueSummoner>> leagueMap);
 
     List<String> findExistingMatchIds(List<String> matchIds);
+
+    /** 타임라인(participant_frame)이 이미 저장된 matchId. */
+    Set<String> findMatchIdsWithTimeline(List<String> matchIds);
 }

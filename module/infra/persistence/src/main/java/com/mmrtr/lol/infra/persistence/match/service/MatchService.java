@@ -137,7 +137,7 @@ public class MatchService implements MatchRepositoryPort {
             t = System.currentTimeMillis();
             CompletableFuture<Void> participantFrameSave = CompletableFuture.runAsync(() -> {
                 long inner = System.currentTimeMillis();
-                timeLineService.saveAll(matchEntities, timelineDtos);
+                timeLineService.saveAll(timelineDtos);
                 log.debug("[saveAll] saveAll timelines: {}ms", System.currentTimeMillis() - inner);
             }, timelineSaveExecutor);
 
@@ -151,10 +151,13 @@ public class MatchService implements MatchRepositoryPort {
             log.debug("[saveAll] saveAll timelines (parallel total): {}ms", System.currentTimeMillis() - t);
         }
 
-        // match 행은 마지막에 쓴다 — 행이 있으면 자식 테이블·타임라인까지 저장이 끝난 것이다.
-        t = System.currentTimeMillis();
-        matchRepository.bulkSave(matchEntities);
-        log.debug("[saveAll] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
+        // match 행은 마지막에 쓴다 — 행이 있으면 자식 테이블·같은 호출의 타임라인까지 저장이 끝난 것이다.
+        // 타임라인만 저장하는 호출(매치는 이미 DB 에 있음)이면 쓸 매치 행이 없다.
+        if (!matchEntities.isEmpty()) {
+            t = System.currentTimeMillis();
+            matchRepository.bulkSave(matchEntities);
+            log.debug("[saveAll] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
+        }
 
         log.info("[saveAll] 총 소요: {}ms", System.currentTimeMillis() - start);
     }
@@ -170,6 +173,11 @@ public class MatchService implements MatchRepositoryPort {
             log.debug("[saveAll] bulkSave {}: {}ms ({}건)", name,
                     System.currentTimeMillis() - t, entities.size());
         }, timelineSaveExecutor);
+    }
+
+    @Override
+    public Set<String> findMatchIdsWithTimeline(List<String> matchIds) {
+        return timeLineService.findMatchIdsWithTimeline(matchIds);
     }
 
     @Override

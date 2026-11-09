@@ -5,6 +5,8 @@ import com.mmrtr.lol.domain.match.readmodel.InfoDto;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.MetadataDto;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.MetadataTimeLineDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.infra.redis.adapter.view.MatchCacheViewMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -110,6 +112,29 @@ class MatchCacheWriteAdapterTest {
 
         assertThat(meterRegistry.counter("cache.match.write", "result", "success").count())
                 .isEqualTo(2.0);
+    }
+
+    @Test
+    @DisplayName("타임라인은 index 가 아니라 matchId 로 짝짓는다 — 짝이 없는 매치는 null")
+    void pairsTimelinesByMatchIdNotIndex() {
+        List<MatchDto> matches = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            matches.add(buildMatch("KR_" + i, i, "Ahri"));
+        }
+        TimelineDto t3 = new TimelineDto();
+        MetadataTimeLineDto tm = new MetadataTimeLineDto();
+        tm.setMatchId("KR_3");
+        t3.setMetadata(tm);
+        MatchCacheViewMapper mapper = mock(MatchCacheViewMapper.class);
+        MatchCacheWriteAdapter pairing = new MatchCacheWriteAdapter(
+                redissonClient, objectMapper, meterRegistry, mapper);
+
+        pairing.writeMatches(matches, List.of(t3), "p0");
+
+        for (MatchDto m : matches) {
+            String id = m.getMetadata().getMatchId();
+            verify(mapper).toView(m, id.equals("KR_3") ? t3 : null);
+        }
     }
 
     @Test

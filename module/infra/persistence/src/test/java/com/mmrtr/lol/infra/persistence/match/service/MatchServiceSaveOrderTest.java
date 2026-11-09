@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -72,7 +73,7 @@ class MatchServiceSaveOrderTest {
         InOrder order = inOrder(matchSummonerRepository, timeLineService,
                 timelineEventJsonService, matchRepository);
         order.verify(matchSummonerRepository).bulkSave(anyList());
-        order.verify(timeLineService).saveAll(anyList(), anyList());
+        order.verify(timeLineService).saveAll(anyList());
         order.verify(timelineEventJsonService).saveAll(anyList());
         order.verify(matchRepository).bulkSave(anyList());
     }
@@ -81,7 +82,7 @@ class MatchServiceSaveOrderTest {
     @DisplayName("자식 저장이 실패하면 match 행을 저장하지 않는다 — 다음 처리가 다시 저장한다")
     void saveAll_childSaveFails_doesNotSaveMatchRow() {
         // given
-        doThrow(new IllegalStateException("boom")).when(timeLineService).saveAll(anyList(), anyList());
+        doThrow(new IllegalStateException("boom")).when(timeLineService).saveAll(anyList());
         List<MatchDto> matches = List.of(matchDto());
         List<TimelineDto> timelines = List.of(new TimelineDto());
 
@@ -89,6 +90,22 @@ class MatchServiceSaveOrderTest {
         assertThatThrownBy(() -> service.saveAll(matches, timelines, Map.of()))
                 .isInstanceOf(CompletionException.class);
         verify(matchRepository, never()).bulkSave(anyList());
+    }
+
+    @Test
+    @DisplayName("매치가 없으면 매치·참가자·팀·밴 저장 없이 타임라인만 저장한다")
+    void timelinesOnly_skipsMatchBulkSaves() {
+        // when
+        service.saveAll(List.of(), List.of(new TimelineDto()), Map.of());
+
+        // then
+        verify(matchSummonerRepository, never()).bulkSave(anyList());
+        verify(challengesRepository, never()).bulkSave(anyList());
+        verify(matchTeamRepository, never()).bulkSave(anyList());
+        verify(matchBanRepository, never()).bulkSave(anyList());
+        verify(matchRepository, never()).bulkSave(anyList());
+        verify(timeLineService, times(1)).saveAll(anyList());
+        verify(timelineEventJsonService, times(1)).saveAll(anyList());
     }
 
     @Test

@@ -75,13 +75,23 @@ public class MatchCacheWriteAdapter implements MatchCacheWritePort {
             RBatch batch = redissonClient.createBatch();
             Map<String, Double> zsetMembers = new HashMap<>();
 
-            for (int i = 0; i < matches.size(); i++) {
-                MatchDto match = matches.get(i);
+            // 타임라인은 index 가 아니라 matchId 로 짝짓는다 — 최근 일부 매치만 타임라인을 받기 때문이다.
+            Map<String, TimelineDto> timelineByMatchId = new HashMap<>();
+            if (timelines != null) {
+                for (TimelineDto timeline : timelines) {
+                    if (timeline != null && timeline.getMetadata() != null
+                            && timeline.getMetadata().getMatchId() != null) {
+                        timelineByMatchId.put(timeline.getMetadata().getMatchId(), timeline);
+                    }
+                }
+            }
+
+            for (MatchDto match : matches) {
                 String matchId = extractMatchId(match);
                 if (matchId == null) {
                     continue;
                 }
-                TimelineDto timeline = (timelines != null && i < timelines.size()) ? timelines.get(i) : null;
+                TimelineDto timeline = timelineByMatchId.get(matchId);
                 MatchCacheView view = viewMapper.toView(match, timeline);
 
                 String json = objectMapper.writeValueAsString(view);

@@ -6,6 +6,7 @@ import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.infra.redis.service.MatchRedisService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -17,7 +18,9 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -30,6 +33,9 @@ public class MatchDataProcessor {
 
     /** match·timeline 을 받을 때까지 기다리는 상한. executor 가 밀린 경우까지 넉넉히 잡는다. */
     private static final Duration FETCH_TIMEOUT = Duration.ofSeconds(90);
+
+    /** 나중 타임라인은 타임라인 허가 1건만 받는다. */
+    private static final Map<RiotMethod, Integer> TIMELINE_COST = Map.of(RiotMethod.MATCH_TIMELINE, 1);
 
     private final MatchApiPort matchApiPort;
     private final RiotPermitPort permitPort;
@@ -81,6 +87,9 @@ public class MatchDataProcessor {
     }
 
     private Result doProcess(String matchId, String platformName, MatchQueueRank rank) {
+        if (rank == MatchQueueRank.TIMELINE_LATER) {
+            return processTimelineOnly(matchId, platformName, rank);
+        }
         List<String> existing;
         try {
             existing = matchRepositoryPort.findExistingMatchIds(List.of(matchId));
@@ -142,9 +151,62 @@ public class MatchDataProcessor {
             return Result.FAILURE;
         }
 
-        if (!matchBatchProcessor.add(dtoPair)) {
+        if (!matchBatchProcessor.add(dtoPair.getFirst(), dtoPair.getSecond())) {
             log.warn("Match batch queue is full, requeueing matchId {}", matchId);
             matchRedisService.releaseProcessing(matchId);
+            return Result.QUEUE_FULL;
+        }
+        return Result.SUCCESS;
+    }
+
+    /**
+     * 나중 타임라인: 매치는 이미 DB 에 있으니 타임라인만 받아 저장한다.
+     * 처리 표시는 쓰지 않는다 — 저장이 ON CONFLICT DO NOTHING 이라 같은 타임라인이 겹쳐도 안전하다.
+     */
+    private Result processTimelineOnly(String matchId, String platformName, MatchQueueRank rank) {
+        try {
+            Set<String> saved = matchRepositoryPort.findMatchIdsWithTimeline(List.of(matchId));
+            if (saved != null && saved.contains(matchId)) {
+                log.debug("Skipping timeline already in DB: {}", matchId);
+                return Result.DUPLICATE;
+            }
+        } catch (RuntimeException e) {
+            log.warn("DB timeline check failed for matchId {}: {}", matchId, e.toString());
+            return Result.FAILURE;
+        }
+
+        Optional<RiotPermits> granted;
+        try {
+            granted = permitPort.tryAcquire(platformName, rank.riotPriority(), TIMELINE_COST);
+        } catch (RuntimeException e) {
+            log.warn("Riot permit check failed for timeline matchId {}: {}", matchId, e.toString());
+            return Result.FAILURE;
+        }
+        if (granted.isEmpty()) {
+            log.debug("Riot permit denied for timeline matchId {}", matchId);
+            return Result.DENIED;
+        }
+
+        CompletableFuture<TimelineDto> timelineFuture =
+                matchApiPort.fetchTimelineById(matchId, platformName, granted.get(), riotApiExecutor);
+        TimelineDto timeline;
+        try {
+            timeline = timelineFuture.get(fetchTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            log.warn("Timeout fetching timeline, requeueing matchId {}", matchId);
+            timelineFuture.cancel(true);
+            return Result.QUEUE_FULL;
+        } catch (InterruptedException e) {
+            log.warn("Interrupted while fetching timeline for matchId {}", matchId);
+            Thread.currentThread().interrupt();
+            return Result.FAILURE;
+        } catch (ExecutionException e) {
+            log.warn("Failed to fetch timeline for matchId {}: {}", matchId, e.getCause().getMessage());
+            return Result.FAILURE;
+        }
+
+        if (!matchBatchProcessor.add(null, timeline)) {
+            log.warn("Match batch queue is full, requeueing timeline matchId {}", matchId);
             return Result.QUEUE_FULL;
         }
         return Result.SUCCESS;

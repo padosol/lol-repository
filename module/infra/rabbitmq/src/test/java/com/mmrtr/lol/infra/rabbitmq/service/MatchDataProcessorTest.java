@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -59,7 +60,7 @@ class MatchDataProcessorTest {
         matchRepository = mock(MatchRepositoryPort.class);
         meters = new SimpleMeterRegistry();
         when(redis.tryMarkProcessing(anyString())).thenReturn(true);
-        when(batch.add(any())).thenReturn(true);
+        when(batch.add(any(), any())).thenReturn(true);
         matchResult = CompletableFuture.completedFuture(new MatchDto());
         timelineResult = CompletableFuture.completedFuture(new TimelineDto());
 
@@ -133,7 +134,7 @@ class MatchDataProcessorTest {
     @DisplayName("순위와 결과별로 센다")
     void process_countsByRankAndResult() {
         processor.process("KR_1", "KR", MatchQueueRank.USER_RETRY);
-        when(batch.add(any())).thenReturn(false);
+        when(batch.add(any(), any())).thenReturn(false);
         processor.process("KR_2", "KR", MatchQueueRank.BACKFILL);
 
         assertThat(count("user_retry", "success")).isEqualTo(1.0);
@@ -185,7 +186,7 @@ class MatchDataProcessorTest {
     @Test
     @DisplayName("배치 큐가 가득 차면 QUEUE_FULL 이고 처리 표시를 푼다")
     void batchQueueFull_releasesMark() {
-        when(batch.add(any())).thenReturn(false);
+        when(batch.add(any(), any())).thenReturn(false);
 
         assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL)).isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
         verify(redis, times(1)).releaseProcessing("KR_1");
@@ -200,6 +201,45 @@ class MatchDataProcessorTest {
                 .isEqualTo(MatchDataProcessor.Result.FAILURE);
         verify(redis, times(1)).releaseProcessing("KR_1");
         assertThat(count("backfill", "failure")).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("나중 타임라인: 타임라인이 이미 있으면 Riot 호출 없이 DUPLICATE 이다")
+    void timelineLater_skipsWhenTimelineExists() {
+        when(matchRepository.findMatchIdsWithTimeline(List.of("KR_1"))).thenReturn(Set.of("KR_1"));
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
+                .isEqualTo(MatchDataProcessor.Result.DUPLICATE);
+        assertThat(seen).isEmpty();
+        verifyNoInteractions(permitPort);
+        verify(batch, never()).add(any(), any());
+    }
+
+    @Test
+    @DisplayName("나중 타임라인: DEFERRED 로 타임라인 허가 1건만 받아 타임라인만 적재한다")
+    void timelineLater_fetchesTimelineOnlyWithDeferredPermit() {
+        TimelineDto timeline = new TimelineDto();
+        timelineResult = CompletableFuture.completedFuture(timeline);
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
+                .isEqualTo(MatchDataProcessor.Result.SUCCESS);
+
+        verify(permitPort).tryAcquire("KR", RiotCallPriority.DEFERRED, Map.of(RiotMethod.MATCH_TIMELINE, 1));
+        assertThat(seen).hasSize(1);
+        verify(batch).add(null, timeline);
+        verify(matchRepository, never()).findExistingMatchIds(any());
+        verifyNoInteractions(redis);
+    }
+
+    @Test
+    @DisplayName("나중 타임라인: 허가가 거절되면 DENIED 이고 Riot 을 부르지 않는다")
+    void timelineLater_deniedReturnsDenied() {
+        RiotPermitFixtures.denyAll(permitPort);
+
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.TIMELINE_LATER))
+                .isEqualTo(MatchDataProcessor.Result.DENIED);
+        assertThat(seen).isEmpty();
+        verify(batch, never()).add(any(), any());
     }
 
     @Test
