@@ -161,7 +161,7 @@ class RenewalAccountStepTest {
 
     @Test
     @DisplayName("허가가 거절되면 Riot 을 부르지 않고 시도 수를 올리지 않은 채 잠시 뒤 다시 넣는다")
-    void run_permitDenied_requeuesLaterWithoutAttemptIncrease() {
+    void deniedRequeuesLaterWithoutAttempt() {
         // given
         RiotPermitFixtures.denyAll(permitPort);
 

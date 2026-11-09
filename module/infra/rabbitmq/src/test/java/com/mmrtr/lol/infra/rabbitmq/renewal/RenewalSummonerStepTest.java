@@ -270,7 +270,7 @@ class RenewalSummonerStepTest {
 
     @Test
     @DisplayName("허가가 거절되면 Riot 을 부르지 않고 같은 메시지를 잠시 뒤 다시 넣는다")
-    void run_permitDenied_requeuesLater() {
+    void deniedRequeuesLaterWithoutAttempt() {
         // given
         RiotPermitFixtures.denyAll(permitPort);
         SummonerMessage message = message("r1");
@@ -280,6 +280,7 @@ class RenewalSummonerStepTest {
 
         // then
         verify(stepPublisher).republishSummonerLater(message);
+        verify(stepPublisher, never()).republishSummoner(any());
         verify(finisher, never()).fail(anyString(), anyString(), anyString());
         verifyNoInteractions(riotApiService);
     }

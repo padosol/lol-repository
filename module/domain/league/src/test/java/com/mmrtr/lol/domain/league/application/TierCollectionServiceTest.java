@@ -6,7 +6,6 @@ import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPor
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.invocation.InvocationOnMock;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +21,6 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -42,7 +41,8 @@ class TierCollectionServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(permitPort.tryAcquire(anyString(), any(), anyMap())).thenAnswer(TierCollectionServiceTest::grant);
+        when(permitPort.acquireWithRetry(anyString(), any(), anyMap(), anyInt(), any()))
+                .thenAnswer(TierCollectionServiceTest::grant);
         when(leaguePort.getLeagueEntries(anyString(), anyString(), anyString(), anyInt(), anyString(), any()))
                 .thenReturn(Set.of());
     }
@@ -63,21 +63,26 @@ class TierCollectionServiceTest {
 
         // then
         int pages = Division.values().length;
-        verify(permitPort, times(pages))
-                .tryAcquire("KR", RiotCallPriority.BACKGROUND, Map.of(RiotMethod.LEAGUE_ENTRIES, 1));
+        verify(permitPort, times(pages)).acquireWithRetry(
+                "KR", RiotCallPriority.BACKGROUND, Map.of(RiotMethod.LEAGUE_ENTRIES, 1), 10, Duration.ofSeconds(1));
         assertThat(passed).hasSize(pages)
                 .allSatisfy(permits -> assertThat(permits.remaining(RiotMethod.LEAGUE_ENTRIES)).isEqualTo(1));
     }
 
     @Test
-    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 RiotPermitDeniedException 이 올라간다")
-    void permitDenied_throwsWithoutRiotCall() {
+    @DisplayName("다시 물어도 거절이면 Riot 을 부르지 않고 예외 없이 수집을 멈춘다")
+    void schedulerRetriesThenSkips() {
         // given
-        when(permitPort.tryAcquire(anyString(), any(), anyMap())).thenReturn(Optional.empty());
+        when(permitPort.acquireWithRetry(anyString(), any(), anyMap(), anyInt(), any())).thenReturn(Optional.empty());
 
-        // when // then
-        assertThatThrownBy(() -> service.execute("KR")).isInstanceOf(RiotPermitDeniedException.class);
+        // when
+        service.execute("KR");
+
+        // then
+        verify(permitPort).acquireWithRetry(
+                "KR", RiotCallPriority.BACKGROUND, Map.of(RiotMethod.LEAGUE_ENTRIES, 1), 10, Duration.ofSeconds(1));
         verify(leaguePort, never()).getLeagueEntries(anyString(), anyString(), anyString(), anyInt(), anyString(), any());
+        verify(publishPort, never()).publishForCollection(any(), any());
     }
 
     @Test

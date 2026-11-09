@@ -3,7 +3,6 @@ package com.mmrtr.lol.infra.rabbitmq.listener;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
@@ -20,7 +19,6 @@ import java.util.concurrent.TimeoutException;
  */
 public final class RenewalFailureReason {
 
-    public static final String BUDGET_EXCEEDED = "budget_exceeded";
     public static final String RIOT_404 = "riot_404";
     public static final String RIOT_429 = "riot_429";
     public static final String RIOT_4XX = "riot_4xx";
@@ -33,9 +31,6 @@ public final class RenewalFailureReason {
 
     public static String of(Throwable throwable) {
         Throwable t = unwrap(throwable);
-        if (t instanceof RiotPermitDeniedException) {
-            return BUDGET_EXCEEDED;
-        }
         // 하위 클래스를 먼저 본다
         if (t instanceof RiotClientNotFoundException) {
             return RIOT_404;

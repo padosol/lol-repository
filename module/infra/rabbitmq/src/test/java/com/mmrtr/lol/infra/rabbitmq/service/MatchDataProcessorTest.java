@@ -147,14 +147,15 @@ class MatchDataProcessorTest {
     }
 
     @Test
-    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 QUEUE_FULL 로 requeue 하고 처리 표시를 푼다")
-    void permitDenied_requeuesAndReleasesMark() {
+    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 DENIED 를 돌려주고 처리 표시를 푼다")
+    void deniedReturnsDeniedAndReleasesProcessing() {
         RiotPermitFixtures.denyAll(permitPort);
 
-        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL)).isEqualTo(MatchDataProcessor.Result.QUEUE_FULL);
+        assertThat(processor.process("KR_1", "KR", MatchQueueRank.BACKFILL)).isEqualTo(MatchDataProcessor.Result.DENIED);
         verify(redis, times(1)).releaseProcessing("KR_1");
         assertThat(seen).isEmpty();
-        assertThat(count("backfill", "requeue")).isEqualTo(1.0);
+        assertThat(count("backfill", "denied")).isEqualTo(1.0);
+        assertThat(count("backfill", "requeue")).isZero();
     }
 
     @Test

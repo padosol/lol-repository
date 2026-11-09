@@ -44,6 +44,12 @@ public class RenewalStepPublisher {
                 RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey(), message);
     }
 
+    /** 거절돼 멈춘 매치 검색을 1초 기다린 뒤 다시 넣는다. 메시지의 startOffset 부터 이어서 찾는다. */
+    public void requeueMatchFindLater(SummonerRenewalMessage message) {
+        sleeper.sleep(REQUEUE_DELAY);
+        publishMatchFind(message);
+    }
+
     public void republishSummoner(SummonerMessage message) {
         rabbitTemplate.convertAndSend(
                 RabbitMqBinding.SUMMONER.getExchange(), RabbitMqBinding.SUMMONER.getRoutingKey(), message);

@@ -5,11 +5,13 @@ import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
+import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -21,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 final class RenewalStepFailures {
 
-    static final int MAX_RATE_LIMIT_ATTEMPT = 2;
+    static final int MAX_ATTEMPT = 2;
 
     private static final String STEP_METRIC = "lol.renewal.step";
 
@@ -89,23 +91,33 @@ final class RenewalStepFailures {
     }
 
     /**
-     * Riot 조회 실패를 분류한다. 404 는 not_found, 429 는 두 번까지 시도 수를 올려 다시 넣고 그 뒤엔 riot_429,
-     * 허가 거절(예약 실패)은 시도 수를 올리지 않고 잠시 뒤 다시 넣고, 그 밖은 예외에서 reason 을 뽑는다.
+     * 허가가 거절됐다. 시도 수를 올리지 않고 잠시 뒤 다시 넣는다 ({@code requeue}).
+     * 다시 넣기가 던지면 그 갱신을 실패시킨다.
      */
-    void fetchFailed(String puuid, String renewalId, int attempt, Exception e,
-                     Runnable requeueNextAttempt, Runnable requeueLater) {
+    void denied(String puuid, String renewalId, Runnable requeueLater) {
+        try {
+            count("requeue");
+            requeueLater.run();
+        } catch (Exception failure) {
+            log.error("{} 단계 다시 넣기 실패. puuid={}", step, puuid, failure);
+            fail(puuid, renewalId, failure);
+        }
+    }
+
+    /**
+     * Riot 조회 실패를 분류한다. 404 는 not_found. 429·5xx·IO·시간 초과는 {@link #MAX_ATTEMPT} 번째 시도 전이면
+     * 시도 수를 올려 다시 넣고 그 뒤엔 예외에서 reason 을 뽑아 실패시킨다. 그 밖은 바로 실패시킨다.
+     */
+    void fetchFailed(String puuid, String renewalId, int attempt, Exception e, Runnable requeueNextAttempt) {
         try {
             if (causedBy(e, RiotClientNotFoundException.class)) {
                 fail(puuid, renewalId, "not_found");
-            } else if (causedBy(e, RiotPermitDeniedException.class)) {
-                count("requeue");
-                requeueLater.run();
-            } else if (causedBy(e, RiotRateLimitException.class)) {
-                if (attempt < MAX_RATE_LIMIT_ATTEMPT) {
+            } else if (isRetryable(e)) {
+                if (attempt < MAX_ATTEMPT) {
                     count("requeue");
                     requeueNextAttempt.run();
                 } else {
-                    fail(puuid, renewalId, RenewalFailureReason.RIOT_429);
+                    fail(puuid, renewalId, e);
                 }
             } else {
                 log.error("{} 단계 조회 실패. puuid={}", step, puuid, e);
@@ -115,6 +127,13 @@ final class RenewalStepFailures {
             log.error("{} 단계 실패 처리 중 예외. puuid={}", step, puuid, failure);
             fail(puuid, renewalId, failure);
         }
+    }
+
+    private static boolean isRetryable(Throwable e) {
+        return causedBy(e, RiotRateLimitException.class)
+                || causedBy(e, RiotServerException.class)
+                || causedBy(e, IOException.class)
+                || causedBy(e, TimeoutException.class);
     }
 
     private void count(String result) {

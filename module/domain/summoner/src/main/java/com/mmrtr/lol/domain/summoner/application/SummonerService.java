@@ -7,20 +7,24 @@ import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SummonerService {
+
+    private static final int BACKGROUND_ATTEMPTS = 10;
+    private static final Duration BACKGROUND_PAUSE = Duration.ofSeconds(1);
 
     private final SummonerApiPort summonerApiPort;
     private final SaveSummonerDataUseCase saveSummonerDataUseCase;
@@ -70,8 +74,14 @@ public class SummonerService {
         }
     }
 
+    /**
+     * USER(HTTP 요청)는 한 번 묻고 거절이면 429 와 같은 응답({@code TOO_MANY_REQUESTS})을 던진다.
+     * BACKGROUND(스케줄러)는 1초 간격으로 10번까지 다시 묻고, 그래도 거절이면 호출하는 쪽이 그 puuid 를 건너뛰게 던진다.
+     */
     private RiotPermits acquire(String platform, RiotCallPriority priority, Map<RiotMethod, Integer> cost) {
-        return riotPermitPort.tryAcquire(platform, priority, cost)
-                .orElseThrow(() -> new RiotPermitDeniedException(platform, priority));
+        Optional<RiotPermits> granted = priority == RiotCallPriority.BACKGROUND
+                ? riotPermitPort.acquireWithRetry(platform, priority, cost, BACKGROUND_ATTEMPTS, BACKGROUND_PAUSE)
+                : riotPermitPort.tryAcquire(platform, priority, cost);
+        return granted.orElseThrow(() -> new CoreException(ErrorType.TOO_MANY_REQUESTS, "잠시 후 다시 시도해주세요."));
     }
 }

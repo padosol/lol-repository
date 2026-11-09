@@ -16,11 +16,12 @@ import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -75,7 +76,12 @@ public class RenewalSummonerStep {
 
         SummonerDto summonerDto;
         try {
-            summonerDto = fetchSummoner(puuid, platform);
+            Optional<SummonerDto> fetched = fetchSummoner(puuid, platform);
+            if (fetched.isEmpty()) {
+                failures.denied(puuid, renewalId, () -> stepPublisher.republishSummonerLater(message));
+                return;
+            }
+            summonerDto = fetched.get();
         } catch (Exception e) {
             handleFetchFailure(message, e);
             return;
@@ -118,18 +124,19 @@ public class RenewalSummonerStep {
         failures.success();
     }
 
-    /** USER 허가 1건을 받아 부른다. 거절은 {@link RiotPermitDeniedException} 으로 예약 실패와 같게 다룬다. */
-    private SummonerDto fetchSummoner(String puuid, Platform platform) {
-        RiotPermit permit = permitPort
-                .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.SUMMONER_BY_PUUID, 1))
-                .orElseThrow(() -> new RiotPermitDeniedException(platform.name(), RiotCallPriority.USER))
-                .take(RiotMethod.SUMMONER_BY_PUUID);
-        return riotApiService.getSummonerByPuuid(puuid, platform, permit, requestExecutor).join();
+    /** USER 허가 1건을 받아 부른다. 허가가 거절되면 비어 있다. */
+    private Optional<SummonerDto> fetchSummoner(String puuid, Platform platform) {
+        Optional<RiotPermits> granted = permitPort
+                .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.SUMMONER_BY_PUUID, 1));
+        if (granted.isEmpty()) {
+            return Optional.empty();
+        }
+        RiotPermit permit = granted.get().take(RiotMethod.SUMMONER_BY_PUUID);
+        return Optional.of(riotApiService.getSummonerByPuuid(puuid, platform, permit, requestExecutor).join());
     }
 
     private void handleFetchFailure(SummonerMessage message, Exception e) {
         failures.fetchFailed(message.getPuuid(), message.getRenewalId(), message.getAttempt(), e,
-                () -> stepPublisher.republishSummoner(message.nextAttempt()),
-                () -> stepPublisher.republishSummonerLater(message));
+                () -> stepPublisher.republishSummoner(message.nextAttempt()));
     }
 }

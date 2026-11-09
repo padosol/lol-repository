@@ -13,11 +13,12 @@ import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.EnumSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
@@ -69,16 +70,18 @@ public class RenewalLeagueStep {
 
         Set<LeagueEntryDto> entries;
         try {
-            // 거절은 RiotPermitDeniedException 으로 예약 실패와 같게 다룬다
-            RiotPermit permit = permitPort
-                    .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.LEAGUE_ENTRIES_BY_PUUID, 1))
-                    .orElseThrow(() -> new RiotPermitDeniedException(platform.name(), RiotCallPriority.USER))
-                    .take(RiotMethod.LEAGUE_ENTRIES_BY_PUUID);
+            Optional<RiotPermits> granted = permitPort
+                    .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.LEAGUE_ENTRIES_BY_PUUID, 1));
+            if (granted.isEmpty()) {
+                failures.denied(puuid, renewalId,
+                        () -> stepPublisher.requeueLater(RabbitMqBinding.RENEWAL_LEAGUE, message));
+                return;
+            }
+            RiotPermit permit = granted.get().take(RiotMethod.LEAGUE_ENTRIES_BY_PUUID);
             entries = riotApiService.getLeagueEntriesByPuuid(puuid, platform, permit, requestExecutor).join();
         } catch (Exception e) {
             failures.fetchFailed(puuid, renewalId, message.attempt(), e,
-                    () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_LEAGUE, message.nextAttempt()),
-                    () -> stepPublisher.requeueLater(RabbitMqBinding.RENEWAL_LEAGUE, message));
+                    () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_LEAGUE, message.nextAttempt()));
             return;
         }
 

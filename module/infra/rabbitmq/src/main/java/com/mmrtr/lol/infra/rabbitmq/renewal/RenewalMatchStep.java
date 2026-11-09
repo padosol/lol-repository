@@ -20,7 +20,6 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -28,6 +27,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -52,8 +52,6 @@ public class RenewalMatchStep {
 
     private static final int MATCH_COUNT = 20;
     private static final String EXCLUDED_METRIC = "lol.renewal.match_excluded";
-    /** 매치 하나에 받는 허가. */
-    private static final Map<RiotMethod, Integer> MATCH_COST = Map.of(RiotMethod.MATCH, 1, RiotMethod.MATCH_TIMELINE, 1);
 
     private final RenewalRecordPort recordPort;
     private final MatchApiPort matchApiPort;
@@ -107,11 +105,16 @@ public class RenewalMatchStep {
 
         List<String> ids;
         try {
-            ids = fetchMatchIds(puuid, platformName, message.startTime());
+            Optional<List<String>> fetched = fetchMatchIds(puuid, platformName, message.startTime());
+            if (fetched.isEmpty()) {
+                failures.denied(puuid, renewalId,
+                        () -> stepPublisher.requeueLater(RabbitMqBinding.RENEWAL_MATCH, message));
+                return;
+            }
+            ids = fetched.get();
         } catch (Exception e) {
             failures.fetchFailed(puuid, renewalId, message.attempt(), e,
-                    () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_MATCH, message.nextAttempt()),
-                    () -> stepPublisher.requeueLater(RabbitMqBinding.RENEWAL_MATCH, message));
+                    () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_MATCH, message.nextAttempt()));
             return;
         }
 
@@ -131,14 +134,16 @@ public class RenewalMatchStep {
         }
     }
 
-    /** USER 허가 1건을 받아 부른다. 거절은 {@link RiotPermitDeniedException} 으로 예약 실패와 같게 다룬다. */
-    private List<String> fetchMatchIds(String puuid, String platformName, long startTime) {
-        RiotPermits permits = permitPort
-                .tryAcquire(platformName, RiotCallPriority.USER, Map.of(RiotMethod.MATCH_IDS_BY_PUUID, 1))
-                .orElseThrow(() -> new RiotPermitDeniedException(platformName, RiotCallPriority.USER));
+    /** USER 허가 1건을 받아 부른다. 허가가 거절되면 비어 있다. */
+    private Optional<List<String>> fetchMatchIds(String puuid, String platformName, long startTime) {
+        Optional<RiotPermits> permits = permitPort
+                .tryAcquire(platformName, RiotCallPriority.USER, Map.of(RiotMethod.MATCH_IDS_BY_PUUID, 1));
+        if (permits.isEmpty()) {
+            return Optional.empty();
+        }
         List<String> ids = matchApiPort.fetchMatchIdsByPuuid(
-                puuid, platformName, startTime, 0, MATCH_COUNT, permits, requestExecutor).join();
-        return ids == null ? List.of() : ids;
+                puuid, platformName, startTime, 0, MATCH_COUNT, permits.get(), requestExecutor).join();
+        return Optional.of(ids == null ? List.of() : ids);
     }
 
     /**
@@ -188,20 +193,22 @@ public class RenewalMatchStep {
     }
 
     /**
-     * 매치마다 따로 USER 허가(match·timeline 1건씩)를 받아 둘을 시작한다. 거절되거나 허가를 묻지 못하면 부르지 않고
-     * 그 예외로 실패한 것으로 둔다 — {@link #await} 가 HAND_OFF 로 넘긴다.
+     * 매치마다 따로 USER 허가(match·timeline 1건씩)를 받아 둘을 시작한다. 거절되면 부르지 않고 {@link PendingFetch#denied}
+     * 로 두어 {@link #await} 가 HAND_OFF 로 넘기게 한다. 허가를 묻지 못해도 그 예외로 실패한 것으로 두어 같다.
      */
     private PendingFetch start(String matchId, String platformName) {
-        RiotPermits permits;
+        Optional<RiotPermits> permits;
         try {
-            permits = permitPort.tryAcquire(platformName, RiotCallPriority.USER, MATCH_COST)
-                    .orElseThrow(() -> new RiotPermitDeniedException(platformName, RiotCallPriority.USER));
+            permits = permitPort.tryAcquire(platformName, RiotCallPriority.USER, MatchApiPort.MATCH_COST);
         } catch (RuntimeException e) {
             return new PendingFetch(matchId, CompletableFuture.failedFuture(e), CompletableFuture.failedFuture(e));
         }
+        if (permits.isEmpty()) {
+            return PendingFetch.denied(matchId);
+        }
         return new PendingFetch(matchId,
-                matchApiPort.fetchMatchById(matchId, platformName, permits, requestExecutor),
-                matchApiPort.fetchTimelineById(matchId, platformName, permits, requestExecutor));
+                matchApiPort.fetchMatchById(matchId, platformName, permits.get(), requestExecutor),
+                matchApiPort.fetchTimelineById(matchId, platformName, permits.get(), requestExecutor));
     }
 
     /**
@@ -209,6 +216,10 @@ public class RenewalMatchStep {
      * 그 밖의 실패(429·허가 거절·5xx·시간 초과·IO·역직렬화 등)는 HAND_OFF.
      */
     private static MatchFetch await(PendingFetch pending) {
+        if (pending.match() == null) {
+            log.warn("갱신 매치 허가 거절. matchId={}, outcome={}", pending.matchId(), Outcome.HAND_OFF);
+            return new MatchFetch(pending.matchId(), Outcome.HAND_OFF, null, null);
+        }
         Throwable matchFailure = failureOf(pending.match());
         Throwable timelineFailure = failureOf(pending.timeline());
         if (matchFailure == null && timelineFailure == null) {
@@ -318,8 +329,13 @@ public class RenewalMatchStep {
     /** FETCHED: 저장한다. CLIENT_ERROR: 4xx 라 실패 표시. HAND_OFF: 매치 적재 큐에 사용자 재시도 순위로. */
     private enum Outcome { FETCHED, CLIENT_ERROR, HAND_OFF }
 
+    /** 허가가 거절돼 부르지 않은 매치는 match·timeline 이 null 이다. */
     private record PendingFetch(String matchId, CompletableFuture<MatchDto> match,
                                 CompletableFuture<TimelineDto> timeline) {
+
+        static PendingFetch denied(String matchId) {
+            return new PendingFetch(matchId, null, null);
+        }
     }
 
     /** FETCHED 일 때만 match·timeline 이 있다. */

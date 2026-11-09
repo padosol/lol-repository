@@ -2,10 +2,11 @@ package com.mmrtr.lol.domain.champion.application;
 
 import com.mmrtr.lol.domain.champion.application.port.ChampionApiPort;
 import com.mmrtr.lol.domain.champion.domain.ChampionRotation;
+import com.mmrtr.lol.support.error.CoreException;
+import com.mmrtr.lol.support.error.ErrorType;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import org.junit.jupiter.api.DisplayName;
@@ -49,13 +50,15 @@ class ChampionRotateServiceTest {
     }
 
     @Test
-    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 RiotPermitDeniedException 이 올라간다")
-    void getChampionRotate_permitDenied_throws() {
+    @DisplayName("허가가 거절되면 Riot 을 부르지 않고 TOO_MANY_REQUESTS 를 던진다")
+    void deniedThrowsTooManyRequests() {
         // given
         given(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).willReturn(Optional.empty());
 
         // when // then
-        assertThatThrownBy(() -> service.getChampionRotate("kr")).isInstanceOf(RiotPermitDeniedException.class);
+        assertThatThrownBy(() -> service.getChampionRotate("kr"))
+                .isInstanceOfSatisfying(CoreException.class,
+                        e -> assertThat(e.getErrorType()).isEqualTo(ErrorType.TOO_MANY_REQUESTS));
         verifyNoInteractions(championApiPort);
     }
 }

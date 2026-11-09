@@ -45,6 +45,22 @@ class RenewalStepPublisherTest {
     }
 
     @Test
+    @DisplayName("requeueMatchFindLater 는 1초 기다린 뒤 매치 검색 큐로 보낸다")
+    void requeueMatchFindLater_waitsOneSecondThenPublishes() {
+        // given
+        SummonerRenewalMessage findMessage = new SummonerRenewalMessage("p1", "KR", 100L, 220);
+
+        // when
+        publisher.requeueMatchFindLater(findMessage);
+
+        // then
+        assertThat(sleeps).containsExactly(Duration.ofSeconds(1));
+        verify(rabbitTemplate).convertAndSend(
+                RabbitMqBinding.RENEWAL_MATCH_FIND.getExchange(), RabbitMqBinding.RENEWAL_MATCH_FIND.getRoutingKey(),
+                findMessage);
+    }
+
+    @Test
     @DisplayName("publishMatchFind 는 renewal.topic.exchange/renewal.match.find 로 보낸다")
     void publishMatchFind_sendsToMatchFindQueue() {
         // given

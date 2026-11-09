@@ -304,7 +304,7 @@ class SummonerQueryServiceTest {
 
     @DisplayName("허가가 거절되면 Riot 을 부르지 않고 TOO_MANY_REQUESTS (어댑터가 429 를 바꾸는 것과 같다)")
     @Test
-    void getSummonerByRiotId_permitDenied_throwsTooManyRequests() {
+    void deniedThrowsTooManyRequests() {
         // given
         given(summonerQueryPort.findSummonersBySearchName(anyString(), anyString(), anyInt())).willReturn(List.of());
         runLockedActions();

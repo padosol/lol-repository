@@ -4,7 +4,6 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.logging.LogLevel;
@@ -21,19 +20,6 @@ import java.util.concurrent.TimeoutException;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RenewalFailureReasonTest {
-
-    @Test
-    @DisplayName("허가 거절은 budget_exceeded 다")
-    void of_허가거절_budget_exceeded() {
-        // given
-        Throwable t = new RiotPermitDeniedException("KR", RiotCallPriority.USER);
-
-        // when
-        String reason = RenewalFailureReason.of(t);
-
-        // then
-        assertThat(reason).isEqualTo("budget_exceeded");
-    }
 
     @Test
     @DisplayName("Riot 404 는 riot_404 다")

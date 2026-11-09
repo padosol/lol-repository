@@ -449,7 +449,7 @@ class RenewalMatchStepTest {
 
     @Test
     @DisplayName("id 조회 허가가 거절되면 Riot 을 부르지 않고 시도 수를 올리지 않은 채 잠시 뒤 다시 넣는다")
-    void run_idsPermitDenied_requeuesLater() {
+    void deniedRequeuesLaterWithoutAttempt() {
         // given
         RiotPermitFixtures.denyAll(permitPort);
 
@@ -458,6 +458,7 @@ class RenewalMatchStepTest {
 
         // then
         verify(stepPublisher).requeueLater(RabbitMqBinding.RENEWAL_MATCH, msg("r1", START_TIME));
+        verify(stepPublisher, never()).publish(any(), any());
         verifyNoInteractions(matchApiPort);
         verify(recordPort, never()).recordTargets(anyString(), anyString(), anyCollection());
     }

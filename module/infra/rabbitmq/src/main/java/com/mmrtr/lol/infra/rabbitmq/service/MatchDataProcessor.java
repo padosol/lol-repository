@@ -6,8 +6,6 @@ import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.infra.redis.service.MatchRedisService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotMethod;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -19,7 +17,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -32,8 +30,6 @@ public class MatchDataProcessor {
 
     /** match·timeline 을 받을 때까지 기다리는 상한. executor 가 밀린 경우까지 넉넉히 잡는다. */
     private static final Duration FETCH_TIMEOUT = Duration.ofSeconds(90);
-    /** 매치 하나에 받는 허가. */
-    private static final Map<RiotMethod, Integer> MATCH_COST = Map.of(RiotMethod.MATCH, 1, RiotMethod.MATCH_TIMELINE, 1);
 
     private final MatchApiPort matchApiPort;
     private final RiotPermitPort permitPort;
@@ -70,7 +66,9 @@ public class MatchDataProcessor {
         DUPLICATE,
         SUCCESS,
         FAILURE,
-        QUEUE_FULL
+        QUEUE_FULL,
+        /** Riot 호출 허가가 거절됐다. 처리 표시를 풀었고, 리스너가 잠시 쉰 뒤 다시 큐에 넣는다. */
+        DENIED
     }
 
     public Result process(String matchId, String platformName, MatchQueueRank rank) {
@@ -100,21 +98,22 @@ public class MatchDataProcessor {
             return Result.DUPLICATE;
         }
 
-        // 순위의 우선순위로 match·timeline 허가를 함께 받는다. 거절은 예약 실패와 같게 다시 큐에 넣는다
+        // 순위의 우선순위로 match·timeline 허가를 함께 받는다. 거절이면 표시를 풀고 DENIED 로 돌려준다
         RiotCallPriority priority = rank.riotPriority();
-        RiotPermits permits;
+        Optional<RiotPermits> granted;
         try {
-            permits = permitPort.tryAcquire(platformName, priority, MATCH_COST)
-                    .orElseThrow(() -> new RiotPermitDeniedException(platformName, priority));
-        } catch (RiotPermitDeniedException e) {
-            log.warn("Riot permit denied, requeueing matchId {}", matchId);
-            matchRedisService.releaseProcessing(matchId);
-            return Result.QUEUE_FULL;
+            granted = permitPort.tryAcquire(platformName, priority, MatchApiPort.MATCH_COST);
         } catch (RuntimeException e) {
             log.warn("Riot permit check failed for matchId {}: {}", matchId, e.toString());
             matchRedisService.releaseProcessing(matchId);
             return Result.FAILURE;
         }
+        if (granted.isEmpty()) {
+            log.debug("Riot permit denied for matchId {}", matchId);
+            matchRedisService.releaseProcessing(matchId);
+            return Result.DENIED;
+        }
+        RiotPermits permits = granted.get();
         CompletableFuture<MatchDto> matchFuture =
                 matchApiPort.fetchMatchById(matchId, platformName, permits, riotApiExecutor);
         CompletableFuture<TimelineDto> timelineFuture =

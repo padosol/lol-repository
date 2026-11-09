@@ -12,7 +12,6 @@ import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
-import com.mmrtr.lol.support.riot.RiotPermitDeniedException;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
@@ -62,12 +61,17 @@ public class ActiveGameQueryService implements ActiveGameQueryUseCase {
 
         Optional<ActiveGame> game;
         try {
-            RiotPermits permits = riotPermitPort
-                    .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.ACTIVE_GAME, 1))
-                    .orElseThrow(() -> new RiotPermitDeniedException(platform.name(), RiotCallPriority.USER));
-            game = spectatorApiPort.fetchActiveGameByPuuid(puuid, platform.name(), permits, requestExecutor).join();
+            Optional<RiotPermits> permits = riotPermitPort
+                    .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.ACTIVE_GAME, 1));
+            if (permits.isEmpty()) {
+                // 허가 거절은 오류를 삼킬 때와 같이 "게임 없음"으로 응답하되 캐싱하지 않는다
+                log.warn("관전 조회 허가 거절. platform={}", platform.name());
+                return Optional.empty();
+            }
+            game = spectatorApiPort
+                    .fetchActiveGameByPuuid(puuid, platform.name(), permits.get(), requestExecutor).join();
         } catch (RuntimeException e) {
-            // 허가 거절도 포함해 lol-server 와 같이 "게임 없음"으로 응답하되 캐싱하지 않는다 — 다음 조회가 다시 Riot 을 본다
+            // lol-server 와 같이 "게임 없음"으로 응답하되 캐싱하지 않는다 — 다음 조회가 다시 Riot 을 본다
             log.warn("관전 조회 실패: {}", e.getMessage());
             return Optional.empty();
         }

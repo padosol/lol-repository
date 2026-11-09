@@ -181,7 +181,7 @@ class ActiveGameQueryServiceTest {
 
     @DisplayName("Riot 호출 허가가 거절되면 Riot 을 부르지 않고 게임 없음으로 응답하며 캐싱하지 않는다")
     @Test
-    void getActiveGame_permitDenied_returnsEmptyWithoutRiotCall() {
+    void deniedReturnsEmpty() {
         // given
         given(spectatorTargetPort.findTarget(PUUID)).willReturn(Optional.of(new SpectatorTarget("KR", BEFORE_GAME)));
         given(activeGameCachePort.findGame("KR", PUUID)).willReturn(Optional.empty());

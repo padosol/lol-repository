@@ -10,8 +10,12 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.support.converter.SimpleMessageConverter;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -66,6 +70,24 @@ class MatchListenerTest {
         // when & then
         assertThatCode(() -> listener.receiveMessage(message(2), channel)).doesNotThrowAnyException();
         verify(channel).basicNack(7L, false, false);
+        verify(channel, never()).basicAck(anyLong(), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("허가가 거절되면 1초 쉰 뒤 requeue 로 nack 한다")
+    void deniedSleepsOneSecondThenRequeues() throws IOException {
+        // given
+        List<Duration> sleeps = new ArrayList<>();
+        MatchListener sleepingListener = new MatchListener(new SimpleMessageConverter(), processor, sleeps::add);
+        when(processor.process(anyString(), anyString(), any())).thenReturn(MatchDataProcessor.Result.DENIED);
+        when(channel.isOpen()).thenReturn(true);
+
+        // when
+        sleepingListener.receiveMessage(message(1), channel);
+
+        // then
+        assertThat(sleeps).containsExactly(Duration.ofMillis(1000));
+        verify(channel).basicNack(7L, false, true);
         verify(channel, never()).basicAck(anyLong(), anyBoolean());
     }
 

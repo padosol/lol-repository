@@ -25,6 +25,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -79,7 +81,7 @@ class SummonerRankingCalculationServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).thenAnswer(inv -> {
+        when(riotPermitPort.acquireWithRetry(anyString(), any(), anyMap(), anyInt(), any())).thenAnswer(inv -> {
             String platform = inv.getArgument(0);
             RiotCallPriority priority = inv.getArgument(1);
             Map<RiotMethod, Integer> counts = inv.getArgument(2);
@@ -150,7 +152,8 @@ class SummonerRankingCalculationServiceTest {
         summonerRankingCalculationService.processQueueRanking(QUEUE, false);
 
         // then
-        verify(riotPermitPort).tryAcquire("KR", RiotCallPriority.BACKGROUND, LeagueApiPort.APEX_COST);
+        verify(riotPermitPort).acquireWithRetry(
+                "KR", RiotCallPriority.BACKGROUND, LeagueApiPort.APEX_COST, 10, Duration.ofSeconds(1));
         ArgumentCaptor<RiotPermits> permits = ArgumentCaptor.forClass(RiotPermits.class);
         verify(leagueApiPort).getApexEntries(eq(QUEUE), eq("KR"), permits.capture());
         assertThat(permits.getValue().remaining(RiotMethod.CHALLENGER_LEAGUE)).isEqualTo(1);
@@ -159,10 +162,11 @@ class SummonerRankingCalculationServiceTest {
     }
 
     @Test
-    @DisplayName("최상위 리그 허가가 거절되면 Riot 을 부르지 않고 랭킹을 교체하지 않으며 백업을 정리한다")
-    void processQueueRanking_apexPermitDenied_skipsAndCleansUp() {
+    @DisplayName("최상위 리그 허가를 다시 물어도 거절이면 이번 계산을 건너뛴다 — Riot 도 DB 도 건드리지 않는다")
+    void schedulerRetriesThenSkips() {
         // given
-        when(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).thenReturn(Optional.empty());
+        when(riotPermitPort.acquireWithRetry(anyString(), any(), anyMap(), anyInt(), any()))
+                .thenReturn(Optional.empty());
 
         // when
         summonerRankingCalculationService.processQueueRanking(QUEUE, false);
@@ -170,7 +174,7 @@ class SummonerRankingCalculationServiceTest {
         // then
         verify(leagueApiPort, never()).getApexEntries(anyString(), anyString(), any());
         verify(summonerRankingRepositoryPort, never()).replaceAllRankings(anyString(), anyList());
-        verify(summonerRankingRepositoryPort, org.mockito.Mockito.times(2)).clearBackup(QUEUE);
+        verifyNoInteractions(summonerRankingRepositoryPort, tierCutoffRepositoryPort);
     }
 
     private static LeagueEntry entry(String puuid, int leaguePoints) {
