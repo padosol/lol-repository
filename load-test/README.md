@@ -7,6 +7,7 @@
 | `renewal-steady.js` | 초당 `RATE`(기본 1)명을 `DURATION`(기본 5m) 동안 갱신. 갱신 요청 → 완료 응답이 한 사이클, 3초 이내 SUCCESS 면 성공 |
 | `renewal.js` | Riot ID 몇 개로 조회 → 갱신 → 매치 목록을 한 번씩 확인 |
 | `run.sh` | k6 를 돌리며 지표를 모니터링 Prometheus 로 보낸다 (실행마다 `testid` 태그) |
+| `reset-db.sh` | 부하 전에 데이터를 "갱신 안 된 소환사" 상태로 되돌린다 (아래 "초기화") |
 | `data.js` | 갱신할 소환사 목록. git 에 넣지 않는다 (아래 "데이터셋") |
 
 ## 실행
@@ -24,6 +25,25 @@ RATE=2 DURATION=3m bash load-test/run.sh renewal-steady.js
 ```
 
 Grafana: http://localhost:13000 (로그인 없음), 대시보드 "갱신 부하 테스트". 위의 "k6 실행" 목록에서 `testid` 를 골라 실행끼리 나눠 본다. 포트는 `PROMETHEUS_PORT`·`GRAFANA_PORT` 로 바꾼다 (`run.sh` 도 `PROMETHEUS_PORT` 를 본다).
+
+## 초기화 (`reset-db.sh`)
+
+같은 조건으로 다시 돌리려면 부하 전에 앱을 끄고 초기화한다. 앱이 떠 있으면 스크립트가 멈춘다 (배경 적재가 지우는 사이에 다시 쓰므로).
+
+```bash
+bash load-test/reset-db.sh --dry-run   # 지울 양만 본다
+bash load-test/reset-db.sh             # yes 를 입력하면 초기화 (--yes 는 확인 없이)
+```
+
+| 대상 | 하는 일 |
+|---|---|
+| `summoner` | 행은 남기고 갱신 일시(`revision_date`·`last_riot_call_date`)를 2026-01-01 로 되돌린다. 앱이 소환사를 처음 등록할 때 넣는 값이라 모두 첫 갱신이 된다 |
+| 리그 | `league`, `league_summoner(_history)`, `summoner_ranking(_backup)`, `tier_cutoff(_backup)` 를 비운다 |
+| 매치 | `match`·참가자·팀·밴, 타임라인(`participant_frame`·`timeline_event_frame`), 이벤트 테이블을 비운다 |
+| Redis db 0 | 비운다 (Riot 한도 상태, 매치 처리 중복 키) |
+| RabbitMQ vhost `/` | 큐 메시지를 비운다 (큐는 남긴다) |
+
+`item_meta`(Flyway V1 기준 데이터), 게임 데이터, esports, batch, `flyway_schema_history` 는 건드리지 않는다. 비울 테이블이 스키마에 없으면 아무것도 하지 않고 멈춘다.
 
 ## 데이터셋 (`data.js`)
 
