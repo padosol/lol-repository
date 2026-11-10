@@ -182,18 +182,16 @@ PostgreSQL 적재는 두 단계로 흡수:
 ### 인프라 (Docker Compose)
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d postgres rabbitmq redis
+docker compose -f docker/infra/compose.yml up -d --wait      # PostgreSQL · RabbitMQ · Redis
+docker compose -f docker/monitoring/compose.yml up -d        # Prometheus · Grafana (인프라 다음에)
 ```
 
-기본 포트: PostgreSQL `5432`, RabbitMQ `5672` (관리 UI `15672`), Redis `6379`.
+기본 포트: PostgreSQL `5432` (DB `lol_local`), RabbitMQ `5672` (관리 UI `15672`), Redis `6379`, Prometheus `19090`, Grafana `13000`.
+모니터링은 호스트에서 뜬 앱(`:8111`)과 RabbitMQ 를 수집한다.
 
-### Riot API 실험실 (가짜 Riot 서버로 부하 시험)
+### 부하 테스트 (실제 Riot API)
 
-```bash
-cd docker/lab && docker compose up -d --build   # 인프라·앱·가짜 서버·관측 스택이 모두 뜬다
-```
-
-seed·run 절차와 판정은 [docker/lab/README.md](docker/lab/README.md) 를 본다.
+k6 스크립트와 데이터셋은 `load-test/` 에 있다. 실행 절차는 [load-test/README.md](load-test/README.md) 를 본다.
 
 ### 빌드
 

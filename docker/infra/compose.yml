@@ -1,0 +1,55 @@
+# 로컬 인프라: PostgreSQL · RabbitMQ · Redis. 앱은 호스트에서 local 프로파일로 띄운다.
+#   docker compose -f docker/infra/compose.yml up -d --wait
+# 접속: PostgreSQL localhost:5432 (postgres/1234, DB lol_local, 스키마 riot), RabbitMQ localhost:5672 (guest/guest, vhost /, 관리 UI 15672), Redis localhost:6379.
+# 모니터링(docker/monitoring)이 이 프로젝트의 네트워크(lol-repository_default)로 RabbitMQ 지표(15692)를 수집하므로 이쪽을 먼저 띄운다.
+name: lol-repository
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: lol-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      # 볼륨이 비었을 때 처음 한 번만 만든다. 테이블은 앱 기동 때 Flyway 가 riot 스키마에 만든다
+      POSTGRES_DB: lol_local
+    # compose down 뒤에도 DB 가 남게 이름 있는 볼륨에 둔다. postgres 18 이미지의 VOLUME 은 /var/lib/postgresql 이다 (PGDATA 는 그 아래 18/docker)
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    # 첫 기동의 initdb 임시 서버는 TCP 를 열지 않으므로, TCP 로 물어야 진짜 서버가 뜬 뒤에 healthy 가 된다
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: lol-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    # AMQP·관리 API(15672)·지표(15692) 리스너가 모두 열려야 healthy 다. rabbitmq_prometheus 는 이미지가 기본으로 켠다.
+    # 볼륨이 없어 컨테이너를 다시 만들면 큐와 메시지가 사라진다
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      start_period: 20s
+      retries: 24
+
+  redis:
+    image: redis:latest
+    container_name: lol-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  # compose down 으로는 지워지지 않는다 (down -v 를 하면 지워진다)
+  postgres-data:
+    name: lol-postgres-data

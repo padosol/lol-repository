@@ -41,10 +41,15 @@ out/
 docker/*/
 !docker/clickhouse/
 !docker/clickhouse/init/
-!docker/lab/
+!docker/infra/
+!docker/monitoring/
 docker/clickhouse/init/01_pg_source_tables.sql
 *.env
 !*.env.example
+
+### Load test ###
+# 부하 데이터셋(실제 소환사 puuid)은 로컬에만 둔다. 형식은 load-test/README.md
+load-test/data.js
 
 ### Plans ###
 plans/

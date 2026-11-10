@@ -10,10 +10,10 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="${1:?스크립트 이름을 주세요 (예: renewal-steady.js)}"
 shift
-PROM_PORT="${LT_PROMETHEUS_PORT:-19090}"
+PROM_PORT="${PROMETHEUS_PORT:-19090}"
 
 if ! curl -fs -o /dev/null "http://localhost:${PROM_PORT}/-/ready"; then
-  echo "Prometheus(:${PROM_PORT}) 가 떠 있지 않습니다. 먼저: docker compose -f load-test/monitoring/compose.yml up -d" >&2
+  echo "Prometheus(:${PROM_PORT}) 가 떠 있지 않습니다. 먼저: docker compose -f docker/monitoring/compose.yml up -d" >&2
   exit 1
 fi
 
