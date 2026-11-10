@@ -1,8 +1,8 @@
-// 일정한 갱신 부하: 초당 RATE(기본 1)명을 DURATION 동안 갱신한다. 대상은 setup.sh 가 준비한 targets.json 의 소환사다.
+// 일정한 갱신 부하: 초당 RATE(기본 1)명을 DURATION 동안 갱신한다. 대상은 data.js 의 실제 소환사다.
 //
 // 한 사이클 = 갱신 요청(POST) → 완료될 때까지 상태 조회(GET). 완료 응답이 SUCCESS 이고 POST 부터 3초 이내면 성공이다.
+// 갱신은 DB 에 있는 소환사만 받는다. DB 에 없는 소환사는 POST 가 404 라 error 로 센다.
 //
-//   bash load-test/setup.sh                                 # 먼저 한 번: 대상 소환사를 DB 에 등록하고 targets.json 을 쓴다
 //   bash load-test/run.sh renewal-steady.js                 # 모니터링(Prometheus)으로 지표를 보내며 돈다
 //   k6 run -e RATE=2 -e DURATION=3m load-test/renewal-steady.js   # 지표를 보내지 않고 돈다
 //
@@ -22,26 +22,18 @@ const SUCCESS_SECONDS = Number(__ENV.SUCCESS_SECONDS || 3);
 const POLL_INTERVAL = Number(__ENV.POLL_INTERVAL || 0.5);
 // 이 시간이 지나도 PROGRESS 면 timeout 으로 센다.
 const POLL_CAP_SECONDS = Number(__ENV.POLL_CAP_SECONDS || 10);
-const COOLDOWN_SECONDS = 120;
 
 if (!(RATE > 0)) {
   throw new Error(`RATE 는 양수여야 합니다: ${__ENV.RATE}`);
 }
 
-// setup.sh 가 쓴 대상 목록 ({ puuids: [...] }). DB 에 있는 것까지 확인된 소환사만 들어 있다. 다른 파일은 -e TARGETS=/절대/경로 로 준다.
-const TARGETS_FILE = __ENV.TARGETS || './targets.json';
+// data.js 는 `const userInfo = { ..., entries: [{ puuid, ... }] }` 형식이다. export 가 없어 import 하지 않고 본문의 객체만 읽는다.
+// 같은 형식의 다른 파일은 -e DATA=/절대/경로 로 준다.
+const DATA_FILE = __ENV.DATA || './data.js';
 const PUUIDS = new SharedArray('puuids', () => {
-  let raw;
-  try {
-    raw = open(TARGETS_FILE);
-  } catch (e) {
-    throw new Error(`${TARGETS_FILE} 가 없습니다. 먼저 bash load-test/setup.sh 를 돌리세요.`);
-  }
-  const puuids = JSON.parse(raw).puuids || [];
-  if (puuids.length === 0) {
-    throw new Error(`${TARGETS_FILE} 에 소환사가 없습니다. bash load-test/setup.sh 를 다시 돌리세요.`);
-  }
-  return puuids;
+  const raw = open(DATA_FILE);
+  const info = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+  return info.entries.map((e) => e.puuid);
 });
 
 const cycleSeconds = new Trend('renewal_cycle_seconds');
@@ -65,15 +57,6 @@ export const options = {
     [`renewal_cycle_success`]: [`rate>=${__ENV.SUCCESS_RATE || 0.99}`],
   },
 };
-
-/** 대상 수만 알린다. 소환사 등록은 setup.sh 가 미리 한다 (부하 직전에 Riot 을 부르지 않는다). */
-export function setup() {
-  console.log(`대상 ${PUUIDS.length}명 (${TARGETS_FILE})`);
-  const revisitSeconds = PUUIDS.length / RATE;
-  if (revisitSeconds < COOLDOWN_SECONDS) {
-    console.warn(`같은 소환사를 ${revisitSeconds.toFixed(0)}초마다 다시 부릅니다. ${COOLDOWN_SECONDS}초 쿨다운에 걸려 rejected 가 나옵니다.`);
-  }
-}
 
 function statusOf(res) {
   try {
