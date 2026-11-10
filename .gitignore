@@ -50,6 +50,8 @@ docker/clickhouse/init/01_pg_source_tables.sql
 ### Load test ###
 # 부하 데이터셋(실제 소환사 puuid)은 로컬에만 둔다. 형식은 load-test/README.md
 load-test/data.js
+# setup.sh 가 쓰는 대상 puuid 목록
+load-test/targets.json
 
 ### Plans ###
 plans/
