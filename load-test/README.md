@@ -5,7 +5,7 @@
 | 파일 | 내용 |
 |---|---|
 | `renewal-steady.js` | 초당 `RATE`(기본 1)명을 `DURATION`(`run.sh` 기본 5m) 동안 갱신. 대상은 `targets.json`. 갱신 요청 → 완료 응답이 한 사이클, 3초 이내 SUCCESS 면 성공 |
-| `renewal.js` | Riot ID 몇 개로 조회 → 갱신 → 매치 목록을 한 번씩 확인 |
+| `renewal.js` | `targets.json` 앞의 `COUNT`(기본 1)명을 한 번씩 갱신 → 매치 목록 확인 |
 | `setup.sh` | 데이터셋 소환사를 DB 에 등록하고 쓸 수 있는 puuid 를 `targets.json` 에 적는다 (아래 "대상 준비") |
 | `run.sh` | k6 를 돌리며 지표를 모니터링 Prometheus 로 보낸다 (실행마다 `testid` 태그) |
 | `reset-db.sh` | 부하 전에 데이터를 "갱신 안 된 소환사" 상태로 되돌린다 (아래 "초기화") |
