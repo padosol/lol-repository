@@ -1,4 +1,4 @@
-// 일정한 갱신 부하: 초당 RATE(기본 1)명을 DURATION 동안 갱신한다. 대상은 setup.sh 가 준비한 targets.json 의 소환사다.
+// 여러 건 갱신 측정: 초당 RATE(기본 1)명을 DURATION 동안 갱신한다. 대상은 setup.sh 가 준비한 targets.json 의 소환사다. 단건은 renewal.js.
 //
 // 한 사이클 = 갱신 요청(POST) → 0.5초마다 상태 조회(GET), 최대 5초. 완료 응답이 SUCCESS 이고 POST 부터 3초 이내면 성공이다 (lib/renewal.js).
 //

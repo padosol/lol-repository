@@ -4,8 +4,8 @@
 
 | 파일 | 내용 |
 |---|---|
-| `renewal-steady.js` | 초당 `RATE`(기본 1)명을 `DURATION`(`run.sh` 기본 5m) 동안 갱신. 대상은 `targets.json`. 갱신 요청 → 완료 응답이 한 사이클, 3초 이내 SUCCESS 면 성공 |
-| `renewal.js` | `targets.json` 앞의 `COUNT`(기본 1)명을 한 번씩 갱신 → 매치 목록 확인 |
+| `renewal-steady.js` | 여러 건 측정. 초당 `RATE`(기본 1)명을 `DURATION`(`run.sh` 기본 5m) 동안 갱신. 대상은 `targets.json`. 갱신 요청 → 완료 응답이 한 사이클, 3초 이내 SUCCESS 면 성공 |
+| `renewal.js` | 단건 측정. 소환사 한 명(`-e PUUID=...`, 없으면 `targets.json` 첫 소환사)을 한 번 갱신 → 걸린 시간과 매치 목록 확인 |
 | `lib/renewal.js` | 두 스크립트가 같이 쓰는 갱신 한 사이클(요청 → 0.5초마다 상태 조회, 최대 5초). 성공 기준 3초 |
 | `setup.sh` | 데이터셋 소환사를 DB 에 등록하고 쓸 수 있는 puuid 를 `targets.json` 에 적는다 (아래 "대상 준비") |
 | `run.sh` | k6 를 돌리며 지표를 모니터링 Prometheus 로 보낸다 (실행마다 `testid` 태그) |
