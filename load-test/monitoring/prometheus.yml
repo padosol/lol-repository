@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 1s
+  evaluation_interval: 1s
+
+scrape_configs:
+  # 호스트에서 local 프로파일로 뜬 앱 (build/local-real/start.sh 또는 bootRun)
+  - job_name: lol-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8111"]
+  # 큐별 지표(대기·처리 중 메시지)는 per-object 경로에만 있다
+  - job_name: rabbitmq
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets: ["lol-rabbitmq:15692"]

@@ -1,0 +1,49 @@
+# 부하 테스트 모니터링: Prometheus + Grafana. 앱은 호스트에서 local 프로파일로 떠 있다고 본다(:8111).
+#   docker compose -f load-test/monitoring/compose.yml up -d
+# RabbitMQ 는 기본 compose(프로젝트 lol-repository)의 lol-rabbitmq 를 그 네트워크로 붙어 수집한다. 인프라를 먼저 띄운다.
+# 포트 기본값은 다른 프로젝트의 9090·3000 과 겹치지 않게 19090·13000 이다.
+name: lol-load-test
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    container_name: lol-lt-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # k6 가 -o experimental-prometheus-rw 로 지표를 밀어 넣는다
+      - --web.enable-remote-write-receiver
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [default, lol]
+    ports:
+      - "127.0.0.1:${LT_PROMETHEUS_PORT:-19090}:9090"
+
+  grafana:
+    image: grafana/grafana:13.2.5
+    container_name: lol-lt-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/renewal-load-test.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:${LT_GRAFANA_PORT:-13000}:3000"
+    depends_on:
+      - prometheus
+
+networks:
+  lol:
+    external: true
+    name: lol-repository_default
+
+volumes:
+  prometheus-data:
+    name: lol-lt-prometheus-data
