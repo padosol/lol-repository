@@ -14,8 +14,8 @@
 ```bash
 # 1. 인프라 (postgres·rabbitmq·redis)
 docker compose -f docker/infra/compose.yml up -d --wait
-# 2. 앱 — 호스트에서 local 프로파일, 실제 RIOT_API_KEY. 대시보드의 서버 갱신 시간 분위수는
-#    --management.metrics.distribution.percentiles-histogram.lol.renewal.duration=true 로 띄워야 나온다
+# 2. 앱 — 호스트에서 LolRepositoryApplication 을 루트 .env.example 의 환경 변수로 띄운다 (실제 RIOT_API_KEY).
+#    랭킹 스케줄러 끄기와 서버 갱신 시간 histogram 도 거기에 들어 있다
 # 3. 모니터링 (Prometheus·Grafana)
 docker compose -f docker/monitoring/compose.yml up -d
 # 4. 부하
@@ -58,4 +58,4 @@ const userInfo = {
 
 - setup 이 데이터셋의 소환사를 DB 에서 찾고, 없으면 Riot 에서 등록한다. 등록도 안 되는 소환사는 뺀다.
 - 처음 갱신하는 소환사는 최근 20경기를 받고, 뒤이어 추가 매치 찾기가 시즌 매치를 수백 건 받는다. 두 번째 갱신부터는 새 매치만 받아 훨씬 빠르다. 첫 갱신과 재갱신을 섞지 않으려면 같은 소환사로 바로 다시 돌리지 않는다.
-- 앱이 뜨고 1분 뒤, 그 뒤 2시간마다 랭킹 스케줄러가 상위 티어 미등록 소환사 약 1000명을 Riot 에서 조회한다. 부하 중이면 같은 Riot 한도를 쓰므로, 부하 테스트 때는 앱을 `--lol.ranking.scheduler.enabled=false` 로 띄워 끈다 (관리자 API 수동 실행은 그대로 된다).
+- 앱이 뜨고 1분 뒤, 그 뒤 2시간마다 랭킹 스케줄러가 상위 티어 미등록 소환사 약 1000명을 Riot 에서 조회한다. 부하 중이면 같은 Riot 한도를 쓰므로, 부하 테스트 때는 `LOL_RANKING_SCHEDULER_ENABLED=false`(또는 `--lol.ranking.scheduler.enabled=false`)로 띄워 끈다 (관리자 API 수동 실행은 그대로 된다).
