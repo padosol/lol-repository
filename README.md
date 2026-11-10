@@ -198,7 +198,7 @@ k6 스크립트와 데이터셋은 `load-test/` 에 있다. 실행 절차는 [lo
 ```bash
 ./gradlew build                 # 전체 모듈 (compile + checkstyle + test)
 ./gradlew check                 # 컴파일 + Checkstyle + 테스트만
-./gradlew :app:bootJar          # 실행 가능한 jar
+./gradlew :module:app:application:bootJar   # 실행 가능한 jar (module/app/application/build/libs)
 ```
 
 > Checkstyle 위반은 빌드 실패 (`maxWarnings=0`). Java 변경 후엔 반드시 `./gradlew check` 통과 확인.
@@ -218,8 +218,8 @@ cp .env.example .env                        # 처음 한 번. RIOT_API_KEY 를 �
 
 ```bash
 ./gradlew test                                # 전체
-./gradlew :infra:persistence:test             # 단일 모듈
-./gradlew :infra:persistence:test --tests <ClassName>
+./gradlew :module:infra:persistence:test     # 단일 모듈
+./gradlew :module:infra:persistence:test --tests <ClassName>
 ```
 
 JPA 통합 테스트는 Testcontainers (`postgresql:16-alpine`) 위에서 Flyway 마이그레이션을 적용해 실행됩니다.
@@ -244,7 +244,7 @@ JPA 통합 테스트는 Testcontainers (`postgresql:16-alpine`) 위에서 Flyway
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | Redis (prod) | - |
 | `LOL_VT_ENABLED` | Virtual Thread 사용 여부 | `true` |
 | `LOL_VT_EXECUTORS_ENABLED` | Virtual Thread 기반 Executor 사용 | `LOL_VT_ENABLED` |
-| `BACKFILL_*` | 매치 백필 잡 옵션 (`START_ID`, `END_ID`, `CHUNK_SIZE`, `PARALLELISM`, `FETCH_SIZE`, `SEASON`, `QUEUE_IDS`, `GCS_BUCKET`) | `app/src/main/resources/application.yml` 참조 |
+| `BACKFILL_*` | 매치 백필 잡 옵션 (`START_ID`, `END_ID`, `CHUNK_SIZE`, `PARALLELISM`, `FETCH_SIZE`, `SEASON`, `QUEUE_IDS`, `GCS_BUCKET`) | local 은 `module/app/application/src/main/resources/application-local.yml` 참조 (dev·prod 는 기본값 없음) |
 | `MANAGEMENT_ENDPOINTS_EXPOSURE_INCLUDE` | Actuator 노출 엔드포인트 | `health,info,metrics,prometheus,threaddump` |
 
 ### `application-local.yml` 예시
