@@ -206,12 +206,13 @@ k6 스크립트와 데이터셋은 `load-test/` 에 있다. 실행 절차는 [lo
 ### 실행
 
 ```bash
-# 로컬 (gradle 로 실행)
-./gradlew :app:bootRun -Dspring.profiles.active=local
-
-# 또는 빌드된 jar 로 실행 (.env 자동 로드)
-./run-local.sh
+cp .env.example .env                        # 처음 한 번. RIOT_API_KEY 를 채운다
+./gradlew :module:app:application:bootRun   # 인프라(docker/infra)를 먼저 띄운다
 ```
+
+- `bootRun` 이 루트 `.env` 를 읽어 앱 환경 변수로 넣는다 (루트 `build.gradle` 의 `bootRun`). `.env.example` 의 기본값은 `docker/infra` 인프라에 맞춰 두었다.
+- 프로파일은 `.env` 의 `SPRING_PROFILES_ACTIVE` 로 정한다. `.env` 없이 띄우면 `-Dspring.profiles.active=local` 을 붙인다.
+- 공개 API `:8111`, 내부 API `:8112`. 끌 때는 `Ctrl+C`.
 
 ### 테스트
 
