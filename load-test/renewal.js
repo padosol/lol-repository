@@ -1,4 +1,4 @@
-// 실제 Riot API 갱신 확인용 k6 스크립트: 소환사 몇 명을 한 번씩 갱신 요청 → 상태 폴링 → 매치 목록 확인.
+// 실제 Riot API 갱신 확인용 k6 스크립트: 소환사 몇 명을 한 번씩 갱신 요청 → 상태 조회(0.5초마다, 최대 5초) → 매치 목록 확인.
 // 대상은 setup.sh 가 준비한 targets.json 의 앞에서부터 COUNT(기본 1)명이다.
 //
 //   bash load-test/setup.sh                # 먼저 한 번: 대상 소환사를 DB 에 등록하고 targets.json 을 쓴다
@@ -11,13 +11,13 @@
 // 그래서 소환사마다 한 번씩만 돈다.
 // 여기서 갱신한 소환사는 첫 갱신이 아니게 된다. renewal-steady.js 를 첫 갱신 조건으로 돌리려면 그 전에 reset-db.sh 를 돌린다.
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { check } from 'k6';
 import { SharedArray } from 'k6/data';
 import { Trend, Counter } from 'k6/metrics';
+import { SUCCESS_SECONDS, renew } from './lib/renewal.js';
 
 const BASE = __ENV.BASE_URL || 'http://localhost:8111';
 const COUNT = Number(__ENV.COUNT || 1);
-const POLL_TIMEOUT_S = Number(__ENV.POLL_TIMEOUT_S || 30);
 
 if (!(Number.isInteger(COUNT) && COUNT > 0)) {
   throw new Error(`COUNT 는 양의 정수여야 합니다: ${__ENV.COUNT}`);
@@ -55,29 +55,18 @@ export const options = {
 
 export default function () {
   const puuid = PUUIDS[(__VU - 1) % PUUIDS.length];
-
-  const url = `${BASE}/api/v1/summoners/${puuid}/renewal`;
-  const started = Date.now();
-  const post = http.post(url, null, { tags: { name: 'renewal-post' } });
-  if (post.status === 200 && post.json('data.status') === 'FAILED') {
-    renewalOutcome.add(1, { outcome: 'cooldown' });
+  const { status, seconds } = renew(BASE, puuid);
+  renewalOutcome.add(1, { outcome: status });
+  if (status === 'COOLDOWN') {
     console.log(`${puuid.slice(0, 12)}… 쿨다운이라 갱신하지 않음 (갱신 뒤 2분, 클릭 뒤 10초)`);
     return;
   }
-  check(post, { 'renewal 202': (r) => r.status === 202 });
-
-  let status = 'PROGRESS';
-  while (status === 'PROGRESS' && Date.now() - started < POLL_TIMEOUT_S * 1000) {
-    sleep(0.5);
-    const poll = http.get(url, { tags: { name: 'renewal-poll' } });
-    status = poll.status === 200 ? poll.json('data.status') : `HTTP ${poll.status}`;
-  }
-  renewalSeconds.add((Date.now() - started) / 1000);
-  renewalOutcome.add(1, { outcome: status === 'SUCCESS' ? 'done' : String(status) });
+  renewalSeconds.add(seconds);
   check(status, { '갱신 SUCCESS': (s) => s === 'SUCCESS' });
+  check(seconds, { [`갱신 ${SUCCESS_SECONDS}초 이내`]: (s) => status === 'SUCCESS' && s <= SUCCESS_SECONDS });
 
   const matches = http.get(`${BASE}/api/v1/summoners/${puuid}/matches`, { tags: { name: 'matches' } });
   const count = matches.status === 200 ? (matches.json('data.content') || []).length : -1;
   check(count, { '매치 목록 있음': (n) => n > 0 });
-  console.log(`${puuid.slice(0, 12)}… 갱신 ${status}, 매치 ${count}건`);
+  console.log(`${puuid.slice(0, 12)}… 갱신 ${status} (${seconds.toFixed(1)}초), 매치 ${count}건`);
 }

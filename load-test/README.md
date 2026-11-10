@@ -6,6 +6,7 @@
 |---|---|
 | `renewal-steady.js` | 초당 `RATE`(기본 1)명을 `DURATION`(`run.sh` 기본 5m) 동안 갱신. 대상은 `targets.json`. 갱신 요청 → 완료 응답이 한 사이클, 3초 이내 SUCCESS 면 성공 |
 | `renewal.js` | `targets.json` 앞의 `COUNT`(기본 1)명을 한 번씩 갱신 → 매치 목록 확인 |
+| `lib/renewal.js` | 두 스크립트가 같이 쓰는 갱신 한 사이클(요청 → 0.5초마다 상태 조회, 최대 5초). 성공 기준 3초 |
 | `setup.sh` | 데이터셋 소환사를 DB 에 등록하고 쓸 수 있는 puuid 를 `targets.json` 에 적는다 (아래 "대상 준비") |
 | `run.sh` | k6 를 돌리며 지표를 모니터링 Prometheus 로 보낸다 (실행마다 `testid` 태그) |
 | `reset-db.sh` | 부하 전에 데이터를 "갱신 안 된 소환사" 상태로 되돌린다 (아래 "초기화") |
@@ -86,11 +87,11 @@ const userInfo = {
 | `success` | 완료 응답 SUCCESS, POST 부터 3초 이내 | 성공 |
 | `slow` | SUCCESS 지만 3초 초과 | 실패 |
 | `failed` | 완료 응답이 FAILED (갱신 실패·기한 초과) | 실패 |
-| `timeout` | 10초(`POLL_CAP_SECONDS`) 넘게 PROGRESS | 실패 |
+| `timeout` | 5초 동안 조회해도 PROGRESS | 실패 |
 | `error` | POST 가 202 가 아니거나 응답이 이상함 | 실패 |
 | `rejected` | 쿨다운(같은 소환사 2분)으로 거절 | 넣지 않음 |
 
-상태 조회 간격은 0.5초(`POLL_INTERVAL`)라 사이클 시간은 0.5초 단위로 잡힌다. 서버가 잰 시간은 대시보드의 "서버 갱신 시간" 이다.
+갱신 요청 뒤 0.5초마다 최대 10번(5초) 상태를 본다. 성공 기준 3초와 최대 대기 5초는 `lib/renewal.js` 에 고정돼 있고 두 스크립트가 같이 쓴다. 사이클 시간은 0.5초 단위로 잡힌다. 서버가 잰 시간은 대시보드의 "서버 갱신 시간" 이다.
 
 ## 알아 둘 것
 
