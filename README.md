@@ -138,10 +138,13 @@ domain/
 ## Rate Limiting & 배치 삽입
 
 Riot API 호출 한도는 **호출하는 쪽이 먼저 허가를 받아** 지킨다. `RiotPermitPort.tryAcquire(platform, priority, counts)` 가
-routing 마다 Lua `riot-permit.lua` 한 번으로 app·method 규칙을 모두 보고(전부 되거나 전부 안 되거나), 기다리지 않고 승인·거절만 답한다.
+routing 마다 Lua `riot-permit.lua` 한 번으로 정지 → app → method → 백필 순서로 규칙을 보고(전부 되거나 전부 안 되거나), 기다리지 않고 허가·거절만 답한다.
+한도는 설정 `riot.rate-limit.app-limits`·`method-limits`(프로파일별 `riot-*.yml`)에 적고, 같은 값을 routing(asia·kr …)마다 따로 센다.
+설정에 없는 method 는 app 한도만 본다. 개발 키를 쓰면 `.env` 에 `RIOT_RATELIMIT_APPLIMITS=20:1,100:120` 을 넣는다.
 카운터는 Redis(ZSET, 키 `riot:rl:*`)에 있어 모든 인스턴스가 같은 예산을 나눠 쓰고, 재시작해도 이어서 센다.
 `RiotApiService` 의 모든 메서드와 도메인 포트가 이 허가를 인자로 받는다. 인터셉터 체인(`RetryInterceptor`·`RiotRateLimitInterceptor`)은 없다.
-설계는 `docs/superpowers/specs/2026-11-09-riot-permit-check-design.md` (앞선 `2026-11-05-sliding-rate-limiter-design.md` 의 4.4 를 대체) 참고.
+설계는 `docs/superpowers/specs/2026-11-09-riot-permit-check-design.md` (앞선 `2026-11-05-sliding-rate-limiter-design.md` 의 4.4 를 대체)와
+`docs/superpowers/specs/2026-11-11-riot-permit-only-design.md` (허가 Lua 하나와 429 정지만 남김) 참고.
 
 1. **호출 우선순위** — 허가를 받을 때 `USER`·`DEFERRED`·`BACKGROUND` 중 하나를 준다.
 
@@ -164,14 +167,14 @@ routing 마다 Lua `riot-permit.lua` 한 번으로 app·method 규칙을 모두 
    | 스케줄러 | `acquireWithRetry` (1초 간격 10번) |
    | 매치 찾기 | 거절된 offset 부터 requeue |
 
-4. **응답 뒤 기록** — `RiotCallRecorder` 가 응답(또는 IO 예외)을 받으면 기록을 허가 시각에서 응답 시각으로 옮기고(Riot 이 센 시각에 맞춘다),
-   응답 헤더(`X-App-Rate-Limit`·`X-Method-Rate-Limit`)에서 한도를 배우며, Count 가 한도의 95% 이상이면 1초,
-   429 면 `Retry-After` 동안 해당 버킷을 Redis 키로 정지시킨다(모든 인스턴스가 함께 멈춘다). **어떤 응답도 다시 보내지 않는다.**
+4. **응답 뒤** — `RiotCallRecorder` 는 응답 상태를 세고, 429 면 `Retry-After`(없으면 1초) 동안 정지 키 `riot:rl:pause:{bucket}` 을 SET 한다
+   (`X-Rate-Limit-Type` 이 `application` 이면 routing 전체, 그 밖이면 그 method). 허가 Lua 가 그 키를 보고 거절하므로 모든 인스턴스가 함께 멈춘다.
+   한도는 허가 시각으로만 센다(응답 시각으로 옮기지 않고, 응답 헤더로 배우지 않는다). **어떤 응답도 다시 보내지 않는다.**
    429·5xx·IO·시간 초과는 호출하는 쪽이 메시지 단위로 1초 뒤 시도 수를 올려 다시 넣는다 (갱신 단계 `attempt`, 매치 적재 큐 `x-attempt` 헤더, 매치 찾기 `attempt`). 상한에 닿으면 갱신은 실패, 매치 적재는 DLX, 매치 찾기는 버린다.
 5. **갱신 매치 단계** — 사용자 경로는 최근 3게임의 타임라인만 받는다. 나머지는 매치 적재 큐의 `TIMELINE_LATER` 순위(`DEFERRED`, 타임라인만, 배치 저장)로 보내 나중에 채운다.
    최근 3게임 타임라인은 갱신 성공 조건이 아니다.
-6. **메트릭** — `riot.permit.requests{routing,priority,result=granted|denied}`(허가 요청 수), `riot.api.responses{status,host}`,
-   `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별), `riot.ratelimit.near_limit{routing,scope}`.
+6. **메트릭** — `riot.permit.requests{routing,priority,result}`(허가 요청 수. result 는 `granted` 또는 거절 사유 `app`·`method`·`paused`·`background`·`unknown`),
+   `riot.api.responses{status,host}`, `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별).
 
 PostgreSQL 적재는 두 단계로 흡수:
 - **인-메모리 큐 + 1 초 flush** — `MatchBatchProcessor` 가 매치를 모아 `@Scheduled(fixedRate=1000)` 로 일괄 flush.

@@ -1296,7 +1296,7 @@
     {
       "type": "stat",
       "title": "허가 거절 (기간)",
-      "description": "Lua 허가 확인에서 자리가 없어 거절된 수",
+      "description": "Lua 허가 확인에서 거절된 수 (정지·app·method·백필 모두). 사유는 아래 '허가 요청 / 초' 의 result",
       "id": 25,
       "datasource": {
         "type": "prometheus",
@@ -1304,7 +1304,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 8,
         "x": 0,
         "y": 48
       },
@@ -1314,7 +1314,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(riot_permit_requests_total{result=\"denied\"}[$__range]))",
+          "expr": "sum(increase(riot_permit_requests_total{result!=\"granted\"}[$__range]))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -1365,8 +1365,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 8,
+        "x": 8,
         "y": 48
       },
       "targets": [
@@ -1375,7 +1375,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(riot_permit_requests_total{result=\"denied\",priority=\"USER\"}[$__range]))",
+          "expr": "sum(increase(riot_permit_requests_total{result!=\"granted\",priority=\"USER\"}[$__range]))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -1426,8 +1426,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 8,
+        "x": 16,
         "y": 48
       },
       "targets": [
@@ -1456,67 +1456,6 @@
               },
               {
                 "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "한도 근접 멈춤 (기간)",
-      "description": "",
-      "id": 28,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 48
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(riot_ratelimit_near_limit_total[$__range]))",
-          "legendFormat": "",
-          "refId": "A",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "0",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
                 "value": 1
               }
             ]
@@ -1647,7 +1586,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Riot 429 · 한도 근접 / 분",
+      "title": "Riot 429 / 분",
       "description": "",
       "id": 31,
       "datasource": {
@@ -1669,15 +1608,6 @@
           "expr": "sum by (routing, type) (increase(riot_api_rate_limited_total[1m]))",
           "legendFormat": "429 {{routing}} {{type}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (routing, scope) (increase(riot_ratelimit_near_limit_total[1m]))",
-          "legendFormat": "근접 {{routing}} {{scope}}",
-          "refId": "B"
         }
       ],
       "fieldConfig": {
