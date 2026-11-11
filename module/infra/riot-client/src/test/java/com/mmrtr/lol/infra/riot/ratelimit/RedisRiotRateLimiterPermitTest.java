@@ -7,8 +7,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermits;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.redisson.Redisson;
+import org.redisson.api.RBucket;
 import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
@@ -46,6 +50,7 @@ class RedisRiotRateLimiterPermitTest {
     private static RedissonClient redisson;
 
     private final AtomicLong clock = new AtomicLong(NOW);
+    private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private RedisRiotRateLimiter limiter;
 
     @BeforeAll
@@ -63,7 +68,7 @@ class RedisRiotRateLimiterPermitTest {
     @BeforeEach
     void setUp() {
         redisson.getKeys().flushall();
-        limiter = new RedisRiotRateLimiter(redisson, new RiotAPIProperties(), clock::get);
+        limiter = new RedisRiotRateLimiter(redisson, new RiotAPIProperties(), clock::get, registry);
     }
 
     @Test
@@ -81,6 +86,7 @@ class RedisRiotRateLimiterPermitTest {
         assertThat(zset(ASIA_MATCH).size()).isEqualTo(3);
         assertThat(zset(ASIA_MATCH).readAll()).allMatch(t -> t.contains(":match-v5.match:"));
         assertThat(zset(ASIA_TIMELINE).size()).isEqualTo(2);
+        assertThat(result(USER, "granted")).isEqualTo(1);
     }
 
     @Test
@@ -97,14 +103,104 @@ class RedisRiotRateLimiterPermitTest {
     }
 
     @Test
-    @DisplayName("정지 중이면 거절한다")
-    void deniesWhilePaused() {
+    @DisplayName("app 창이 차면 app 으로 거절하고 아무것도 기록하지 않는다")
+    void appFull_returnsAppResult_andRecordsNothing() {
+        limiter = withMethodLimits(Map.of("match-v5.match", "2000:10"));
+        fill(ASIA_APP, 450);
+
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isEmpty();
+
+        assertThat(result(USER, "app")).isEqualTo(1);
+        assertThat(zset(ASIA_APP).size()).isEqualTo(450);
+        assertThat(zset(ASIA_MATCH).size()).isZero();
+    }
+
+    @Test
+    @DisplayName("app 은 남고 method 창이 차면 method 로 거절하고 app 에도 기록하지 않는다")
+    void methodFull_returnsMethodResult_andLeavesAppUntouched() {
+        // 4:10 → method 상한 3
+        limiter = withMethodLimits(Map.of("match-v5.match", "4:10"));
+        fill(ASIA_MATCH, 3);
+
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isEmpty();
+
+        assertThat(result(USER, "method")).isEqualTo(1);
+        assertThat(zset(ASIA_APP).size()).isZero();
+    }
+
+    @Test
+    @DisplayName("app 과 method 가 모두 차면 app 을 먼저 본다")
+    void appAndMethodFull_reportsAppFirst() {
+        limiter = withMethodLimits(Map.of("match-v5.match", "4:10"));
+        fill(ASIA_APP, 450);
+        fill(ASIA_MATCH, 3);
+
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isEmpty();
+
+        assertThat(result(USER, "app")).isEqualTo(1);
+        assertThat(result(USER, "method")).isZero();
+    }
+
+    @Test
+    @DisplayName("routing 정지나 묶음 method 의 정지는 paused 로 거절하고, 다른 method 정지는 막지 않는다")
+    void pausedRoutingOrBatchMethod_returnsPaused() {
+        limiter.pause("asia", null, Duration.ofSeconds(5));
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isEmpty();
+        assertThat(result(USER, "paused")).isEqualTo(1);
+        pauseKey("asia|app").delete();
+
+        limiter.pause("asia", "match-v5.match", Duration.ofSeconds(5));
+
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isEmpty();
+        assertThat(result(USER, "paused")).isEqualTo(2);
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH_TIMELINE, 1))).isPresent();
+        assertThat(zset(ASIA_APP).size()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("BACKGROUND 가 초당 40 을 넘으면 background 로 거절하고, USER 는 백필 규칙을 보지 않는다")
+    void backgroundOverPerSecond_returnsBackground() {
+        fill(ASIA_BG, 40);
+
+        assertThat(limiter.tryAcquire("KR", BACKGROUND, Map.of(RiotMethod.MATCH, 1))).isEmpty();
+
+        assertThat(result(BACKGROUND, "background")).isEqualTo(1);
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isPresent();
+    }
+
+    @Test
+    @DisplayName("값이 끝나는 시각인 옛 정지 키도 정지로 본다")
+    void oldFormatPauseKey_stillPauses() {
+        pauseKey("asia|app").set(String.valueOf(NOW + 2_000), Duration.ofSeconds(2));
+
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isEmpty();
+
+        assertThat(result(USER, "paused")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("정지는 키 하나를 정지 시간 만료로 쓰고, 나중 정지가 덮어쓴다")
+    void pauseWritesKeyWithTtl_laterOverwrites() {
         limiter.pause("asia", null, Duration.ofSeconds(5));
 
+        assertThat(pauseKey("asia|app").get()).isEqualTo("1");
+        assertThat(pauseKey("asia|app").remainTimeToLive()).isBetween(1L, 5_000L);
+
+        limiter.pause("asia", null, Duration.ofSeconds(1));
+
+        assertThat(pauseKey("asia|app").remainTimeToLive()).isBetween(1L, 1_000L);
+    }
+
+    @Test
+    @DisplayName("정지 키가 사라지면 다시 허가한다")
+    void pauseKeyGone_grantsAgain() {
+        limiter.pause("asia", null, Duration.ofSeconds(5));
         assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isEmpty();
         assertThat(zset(ASIA_APP).size()).isZero();
 
-        clock.addAndGet(5_001);
+        // 정지가 끝나는 때는 키 만료가 정한다 (테스트 시계와 무관). 만료를 키 삭제로 대신한다
+        pauseKey("asia|app").delete();
+
         assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1))).isPresent();
     }
 
@@ -184,7 +280,18 @@ class RedisRiotRateLimiterPermitTest {
     private RedisRiotRateLimiter withMethodLimits(Map<String, String> methodLimits) {
         RiotAPIProperties properties = new RiotAPIProperties();
         properties.getRateLimit().setMethodLimits(methodLimits);
-        return new RedisRiotRateLimiter(redisson, properties, clock::get);
+        return new RedisRiotRateLimiter(redisson, properties, clock::get, registry);
+    }
+
+    /** riot.permit.requests{routing=asia, priority, result} 의 값. 없으면 0. */
+    private double result(RiotCallPriority priority, String result) {
+        Counter counter = registry.find("riot.permit.requests")
+                .tags("routing", "asia", "priority", priority.name(), "result", result).counter();
+        return counter == null ? 0 : counter.count();
+    }
+
+    private static RBucket<String> pauseKey(String bucket) {
+        return redisson.getBucket("riot:rl:pause:" + bucket, StringCodec.INSTANCE);
     }
 
     private void fill(String key, int count) {

@@ -55,7 +55,6 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
     private final MeterRegistry meterRegistry;
     private final RiotLimits limits;
     private final LuaScript permitScript = new LuaScript("ratelimit/riot-permit.lua");
-    private final LuaScript pauseScript = new LuaScript("ratelimit/riot-pause.lua");
 
     @Autowired
     public RedisRiotRateLimiter(RedissonClient redissonClient, RiotAPIProperties properties,
@@ -120,11 +119,11 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
             String routing = group.getKey();
             String batchId = UUID.randomUUID().toString();
             List<PermitRule> rules = permitRules(routing, group.getValue().keySet(), priority);
-            boolean ok = permitScript.eval(permitKeys(routing, group.getValue(), rules),
-                    permitArgs(batchId, group.getValue(), priority, rules)) == 1;
+            long code = permitScript.eval(permitKeys(routing, group.getValue(), rules),
+                    permitArgs(batchId, group.getValue(), priority, rules));
             meterRegistry.counter("riot.permit.requests", "routing", routing,
-                    "priority", priority.name(), "result", ok ? "granted" : "denied").increment();
-            if (!ok) {
+                    "priority", priority.name(), "result", resultTag(code)).increment();
+            if (code != 1) {
                 return Optional.empty();
             }
             group.getValue().forEach((method, count) -> {
@@ -135,6 +134,18 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
             });
         }
         return Optional.of(RiotPermits.of(granted));
+    }
+
+    /** riot-permit.lua 의 반환값 → 지표 result 태그. 모르는 값은 거절로 보고 unknown 이다. */
+    static String resultTag(long code) {
+        return switch ((int) code) {
+            case 1 -> "granted";
+            case -1 -> "app";
+            case -2 -> "method";
+            case -3 -> "paused";
+            case -4 -> "background";
+            default -> "unknown";
+        };
     }
 
     /** platform 이름(대소문자 무관). 모르는 이름이면 IllegalArgumentException. */
@@ -181,7 +192,7 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         for (PermitRule pr : rules) {
             args.add(String.valueOf(pr.rule().cap()));
             args.add(String.valueOf(pr.rule().windowMs()));
-            args.add(pr.rule().lowered() ? "1" : "0");
+            args.add(pr.kind().arg());
             args.add(pr.target());
         }
         return args.toArray();
@@ -193,19 +204,21 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
      */
     private List<PermitRule> permitRules(String routing, Collection<RiotMethod> methods, RiotCallPriority priority) {
         List<PermitRule> result = new ArrayList<>();
-        windowRules(appBucket(routing), limits.app()).forEach(r -> result.add(new PermitRule(r, "")));
+        windowRules(appBucket(routing), limits.app())
+                .forEach(r -> result.add(new PermitRule(r, RuleKind.APP, "")));
         for (RiotMethod method : methods) {
             windowRules(methodBucket(routing, method.methodName()), limits.windowsOf(method))
-                    .forEach(r -> result.add(new PermitRule(r, method.methodName())));
+                    .forEach(r -> result.add(new PermitRule(r, RuleKind.METHOD, method.methodName())));
         }
         int backgroundMax = config.getBackgroundMaxPerSecond();
         if (priority == RiotCallPriority.BACKGROUND && backgroundMax > 0) {
             result.add(new PermitRule(new Rule(ruleKey(backgroundBucket(routing), BACKGROUND_WINDOW_SECONDS),
-                    backgroundMax, BACKGROUND_WINDOW_SECONDS * 1000L, false), ""));
+                    backgroundMax, BACKGROUND_WINDOW_SECONDS * 1000L), RuleKind.BACKGROUND, ""));
         }
         return result;
     }
 
+    /** 정지 키 하나를 duration 만료로 쓴다 (값은 "1"). 허가 Lua 는 키가 있는지만 본다. 나중 정지가 앞 정지를 덮어쓴다. */
     @Override
     public void pause(String routing, String methodOrNull, Duration duration) {
         long millis = duration.toMillis();
@@ -213,7 +226,7 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
             return;
         }
         String bucket = methodOrNull == null ? appBucket(routing) : methodBucket(routing, methodOrNull);
-        pauseScript.eval(List.of(pauseKey(bucket)), String.valueOf(millis), nowArg());
+        redissonClient.getBucket(pauseKey(bucket), StringCodec.INSTANCE).set("1", Duration.ofMillis(millis));
     }
 
     /** 규칙 ZSET 키. bucket 은 {@code {routing}|app}, {@code {routing}|m|{method}}, {@code {routing}|bg} 다. */
@@ -226,7 +239,7 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         List<Rule> rules = new ArrayList<>();
         for (RateLimitWindow window : windows) {
             int cap = Math.max(1, (int) Math.floor(window.limit() * config.getSafetyRatio()));
-            rules.add(new Rule(ruleKey(bucket, window.windowSeconds()), cap, window.windowSeconds() * 1000L, true));
+            rules.add(new Rule(ruleKey(bucket, window.windowSeconds()), cap, window.windowSeconds() * 1000L));
         }
         return rules;
     }
@@ -270,12 +283,29 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return false;
     }
 
-    /** lowered = 유저 활동 중 우선순위별 비율로 상한을 낮추는 규칙(app·method). 백필 전용 규칙은 false. */
-    private record Rule(String key, int cap, long windowMs, boolean lowered) {
+    private record Rule(String key, int cap, long windowMs) {
     }
 
-    /** target 이 빈 문자열이면 묶음의 모든 method 에 적용되는 규칙(app·백필). */
-    private record PermitRule(Rule rule, String target) {
+    /**
+     * 규칙 종류. Lua 는 이 순서(app → method → 백필)로 검사해 막힌 종류를 반환값으로 알려 준다. 유저 활동 중 낮춤은
+     * app·method 에만 한다.
+     */
+    private enum RuleKind {
+        APP("app"), METHOD("method"), BACKGROUND("background");
+
+        private final String arg;
+
+        RuleKind(String arg) {
+            this.arg = arg;
+        }
+
+        String arg() {
+            return arg;
+        }
+    }
+
+    /** target 은 method 규칙의 대상 method, 그 밖(app·백필)은 빈 문자열이다. */
+    private record PermitRule(Rule rule, RuleKind kind, String target) {
     }
 
     /** 처음 쓸 때 scriptLoad 하고 evalSha 로 부른다. Redis 재시작으로 캐시가 비면(NOSCRIPT) 다시 올려 한 번 더 부른다. */

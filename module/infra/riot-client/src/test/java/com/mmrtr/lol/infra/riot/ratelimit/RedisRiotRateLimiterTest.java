@@ -52,7 +52,7 @@ class RedisRiotRateLimiterTest {
 
     private static RedissonClient redisson;
 
-    /** 테스트 시계. 정지·유저 활동처럼 "끝나는 시각" 값으로 판정하는 것도 이 시계를 따른다. */
+    /** 테스트 시계. 창과 유저 활동("끝나는 시각" 값)은 이 시계를 따르고, 정지는 Redis 키 만료를 따른다. */
     private final AtomicLong clock = new AtomicLong(NOW);
 
     @BeforeAll
@@ -217,20 +217,6 @@ class RedisRiotRateLimiterTest {
     }
 
     @Test
-    @DisplayName("짧은 정지가 더 긴 정지를 줄이지 않는다")
-    void shorterPause_doesNotShortenLonger() {
-        RedisRiotRateLimiter limiter = limiter();
-        limiter.pause(ROUTING, null, Duration.ofSeconds(3));
-        limiter.pause(ROUTING, null, Duration.ofSeconds(1));
-
-        clock.addAndGet(2_000);
-        assertThat(acquire(limiter, USER)).isEmpty();
-
-        clock.addAndGet(1_001);
-        assertThat(acquire(limiter, USER)).isPresent();
-    }
-
-    @Test
     @DisplayName("모르는 platform 이면 허가가 IllegalArgumentException")
     void unknownPlatform_isIllegalArgument() {
         RedisRiotRateLimiter limiter = limiter();
@@ -306,12 +292,6 @@ class RedisRiotRateLimiterTest {
 
         assertThat(acquire(limiter, USER)).isPresent();
         assertThat(zset(APP_10).size()).isEqualTo(2);
-
-        limiter.pause(ROUTING, null, Duration.ofSeconds(1));
-        redisson.getScript().scriptFlush();
-        limiter.pause(ROUTING, null, Duration.ofSeconds(2));
-        clock.addAndGet(1_500);
-        assertThat(acquire(limiter, USER)).isEmpty();
     }
 
     @Test
