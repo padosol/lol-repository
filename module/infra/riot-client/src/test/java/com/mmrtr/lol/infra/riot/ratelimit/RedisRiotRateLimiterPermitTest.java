@@ -8,7 +8,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
 import com.mmrtr.lol.support.riot.RiotMethod;
-import com.mmrtr.lol.support.riot.RiotPermit;
 import com.mmrtr.lol.support.riot.RiotPermits;
 import java.time.Duration;
 import java.util.Map;
@@ -29,7 +28,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-/** 기본 app-default "500:10" 이면 app 규칙 상한은 450, DEFERRED 가 유저 활동 중이면 360 이다. */
+/** 기본 app-limits "500:10" 이면 app 규칙 상한은 450, DEFERRED 가 유저 활동 중이면 360 이다. */
 @Testcontainers
 class RedisRiotRateLimiterPermitTest {
 
@@ -70,8 +69,7 @@ class RedisRiotRateLimiterPermitTest {
     @Test
     @DisplayName("묶음을 허가하고 app·method 규칙마다 토큰을 기록한다")
     void grantsBatchAndRecordsTokensPerRule() {
-        limiter.learnLimits("asia", "match-v5.match", "500:10", "2000:10");
-        limiter.learnLimits("asia", "match-v5.timeline", "500:10", "2000:10");
+        limiter = withMethodLimits(Map.of("match-v5.match", "2000:10", "match-v5.timeline", "2000:10"));
 
         Optional<RiotPermits> granted = limiter.tryAcquire("KR", USER,
                 Map.of(RiotMethod.MATCH, 3, RiotMethod.MATCH_TIMELINE, 2));
@@ -88,7 +86,7 @@ class RedisRiotRateLimiterPermitTest {
     @Test
     @DisplayName("한 규칙이라도 넘치면 거절하고 아무것도 기록하지 않는다")
     void deniesWhenAnyRuleWouldOverflow_andRecordsNothing() {
-        limiter.learnLimits("asia", "match-v5.match", null, "2000:10");
+        limiter = withMethodLimits(Map.of("match-v5.match", "2000:10"));
         fill(ASIA_APP, 448);
 
         Optional<RiotPermits> granted = limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 3));
@@ -132,7 +130,7 @@ class RedisRiotRateLimiterPermitTest {
     @DisplayName("상한(18)보다 큰 요청은 언제나 거절한다")
     void needLargerThanCapAlwaysDenied() {
         RiotAPIProperties properties = new RiotAPIProperties();
-        properties.getRateLimit().setAppDefault("20:1");
+        properties.getRateLimit().setAppLimits("20:1");
         RedisRiotRateLimiter small = new RedisRiotRateLimiter(redisson, properties, clock::get);
 
         assertThat(small.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 19))).isEmpty();
@@ -166,20 +164,6 @@ class RedisRiotRateLimiterPermitTest {
     }
 
     @Test
-    @DisplayName("complete 는 토큰의 점수를 응답 시각으로 옮긴다")
-    void completeMovesTokenScoreToResponseTime() {
-        limiter.learnLimits("asia", "match-v5.match", null, "2000:10");
-        RiotPermits permits = limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1)).orElseThrow();
-        RiotPermit permit = permits.take(RiotMethod.MATCH);
-
-        clock.set(1_000L + NOW);
-        limiter.complete(permit);
-
-        assertThat(zset(ASIA_APP).getScore(permit.token())).isEqualTo((double) (NOW + 1_000));
-        assertThat(zset(ASIA_MATCH).getScore(permit.token())).isEqualTo((double) (NOW + 1_000));
-    }
-
-    @Test
     @DisplayName("빈 요청이나 1 미만 건수는 IllegalArgumentException")
     void rejectsEmptyOrNonPositiveCounts() {
         assertThatThrownBy(() -> limiter.tryAcquire("KR", USER, Map.of()))
@@ -195,6 +179,12 @@ class RedisRiotRateLimiterPermitTest {
                 RiotMethod.Routing.REGIONAL)).isEqualTo("asia");
         assertThat(RedisRiotRateLimiter.routingOf(com.mmrtr.lol.common.type.Platform.EUW,
                 RiotMethod.Routing.PLATFORM)).isEqualTo("euw1");
+    }
+
+    private RedisRiotRateLimiter withMethodLimits(Map<String, String> methodLimits) {
+        RiotAPIProperties properties = new RiotAPIProperties();
+        properties.getRateLimit().setMethodLimits(methodLimits);
+        return new RedisRiotRateLimiter(redisson, properties, clock::get);
     }
 
     private void fill(String key, int count) {

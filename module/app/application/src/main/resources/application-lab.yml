@@ -17,7 +17,16 @@ riot:
   mock:
     base-url: ${RIOT_MOCK_BASE_URL:http://localhost:8099}
   rate-limit:
-    app-default: "500:10"
+    # 가짜 Riot 서버(tools/riot-mock) 한도와 같게 둔다
+    app-limits: "500:10"
+    method-limits:
+      "[account-v1.by-riot-id]": "1000:60"
+      "[account-v1.by-puuid]": "1000:60"
+      "[summoner-v4.by-puuid]": "1600:60"
+      "[league-v4.entries-by-puuid]": "20000:10"
+      "[match-v5.ids-by-puuid]": "2000:10"
+      "[match-v5.match]": "2000:10"
+      "[match-v5.timeline]": "2000:10"
 
 management:
   info:

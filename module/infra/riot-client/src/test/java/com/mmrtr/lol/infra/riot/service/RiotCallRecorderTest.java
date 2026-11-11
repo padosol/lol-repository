@@ -36,92 +36,31 @@ class RiotCallRecorderTest {
     private final RiotCallRecorder recorder = new RiotCallRecorder(limiter, new RiotAPIProperties(), meterRegistry);
 
     @Test
-    @DisplayName("200·500·IO 예외 어느 경우든 그 permit 을 한 번 complete 한다")
-    void completesPermitOnSuccessAndOnFailure() {
+    @DisplayName("429 가 아닌 응답(200·404·500·IO 예외) 뒤에는 한도 관리자를 부르지 않는다")
+    void nonRateLimitedResponses_doNotTouchLimiter() {
         // given
-        RiotPermit ok = permit("ok");
-        RiotPermit serverError = permit("5xx");
-        RiotPermit io = permit("io");
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-App-Rate-Limit", "500:10");
+        headers.add("X-App-Rate-Limit-Count", "499:10");
 
         // when
-        String body = recorder.exchange(ok, HOST, () -> ResponseEntity.ok("body"));
-        assertThatThrownBy(() -> recorder.exchange(serverError, HOST, () -> {
+        String body = recorder.exchange(permit("ok"), HOST, () -> ResponseEntity.ok().headers(headers).body("body"));
+        assertThatThrownBy(() -> recorder.exchange(permit("404"), HOST, () -> {
+            throw new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "x", LogLevel.WARN, headers);
+        })).isInstanceOf(RiotClientNotFoundException.class);
+        assertThatThrownBy(() -> recorder.exchange(permit("5xx"), HOST, () -> {
             throw new RiotServerException(HttpStatus.INTERNAL_SERVER_ERROR, "x");
         })).isInstanceOf(RiotServerException.class);
-        assertThatThrownBy(() -> recorder.exchange(io, HOST, () -> {
+        assertThatThrownBy(() -> recorder.exchange(permit("io"), HOST, () -> {
             throw new ResourceAccessException("I/O error", new IOException("reset"));
         })).isInstanceOf(ResourceAccessException.class);
 
         // then
         assertThat(body).isEqualTo("body");
-        assertThat(limiter.completed).containsExactly(ok, serverError, io);
+        assertThat(limiter.pauses).isEmpty();
         assertThat(responses("200")).isEqualTo(1);
-        assertThat(responses("500")).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("complete 가 실패해도 응답 본문을 돌려준다")
-    void completeFailure_stillReturnsBody() {
-        // given
-        limiter.completeFailure = new IllegalStateException("redis down");
-
-        // when
-        String body = recorder.exchange(permit("ok"), HOST, () -> ResponseEntity.ok("body"));
-
-        // then
-        assertThat(body).isEqualTo("body");
-    }
-
-    @Test
-    @DisplayName("응답 헤더의 app·method 한도를 배운다")
-    void learnsLimitsFromHeaders() {
-        // given
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("X-App-Rate-Limit", "500:10");
-        headers.add("X-Method-Rate-Limit", "2000:10");
-
-        // when
-        recorder.exchange(permit("ok"), HOST, () -> ResponseEntity.ok().headers(headers).body("body"));
-
-        // then
-        assertThat(limiter.learned).containsExactly("asia|" + METHOD + "|500:10|2000:10");
-    }
-
-    @Test
-    @DisplayName("4xx 응답의 헤더로도 한도를 배운다")
-    void learnsLimitsFromErrorResponseHeaders() {
-        // given
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("X-App-Rate-Limit", "500:10");
-
-        // when
-        assertThatThrownBy(() -> recorder.exchange(permit("404"), HOST, () -> {
-            throw new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "x", LogLevel.WARN, headers);
-        })).isInstanceOf(RiotClientNotFoundException.class);
-
-        // then
-        assertThat(limiter.learned).containsExactly("asia|" + METHOD + "|500:10|null");
         assertThat(responses("404")).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("count 가 한도의 95% 이상이면 그 버킷을 1초 정지하고 scope 별로 센다")
-    void pausesNearLimit() {
-        // given
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("X-App-Rate-Limit", "500:10");
-        headers.add("X-App-Rate-Limit-Count", "476:10");
-        headers.add("X-Method-Rate-Limit", "2000:10");
-        headers.add("X-Method-Rate-Limit-Count", "1:10");
-
-        // when
-        recorder.exchange(permit("ok"), HOST, () -> ResponseEntity.ok().headers(headers).body("body"));
-
-        // then
-        assertThat(limiter.pauses).containsExactly("asia|null|PT1S");
-        assertThat(meterRegistry.get("riot.ratelimit.near_limit").tags("routing", "asia", "scope", "app")
-                .counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.find("riot.ratelimit.near_limit").tags("scope", "method").counter()).isNull();
+        assertThat(responses("500")).isEqualTo(1);
     }
 
     @Test
@@ -155,7 +94,6 @@ class RiotCallRecorderTest {
         assertThatThrownBy(() -> recorder.exchange(permit("429"), HOST, () -> {
             throw rateLimited(Duration.ofSeconds(7), "application");
         })).isInstanceOf(RiotRateLimitException.class);
-        assertThat(limiter.completed).hasSize(1);
     }
 
     @Test
@@ -209,24 +147,8 @@ class RiotCallRecorderTest {
     }
 
     static class FakeLimiter implements RiotRateLimiter {
-        final List<RiotPermit> completed = new ArrayList<>();
-        final List<String> learned = new ArrayList<>();
         final List<String> pauses = new ArrayList<>();
-        RuntimeException completeFailure;
         RuntimeException pauseFailure;
-
-        @Override
-        public synchronized void complete(RiotPermit permit) {
-            completed.add(permit);
-            if (completeFailure != null) {
-                throw completeFailure;
-            }
-        }
-
-        @Override
-        public synchronized void learnLimits(String routing, String method, String app, String methodHeader) {
-            learned.add(routing + "|" + method + "|" + app + "|" + methodHeader);
-        }
 
         @Override
         public synchronized void pause(String routing, String methodOrNull, Duration duration) {

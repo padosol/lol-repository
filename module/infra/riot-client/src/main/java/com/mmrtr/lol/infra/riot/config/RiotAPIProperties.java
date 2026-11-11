@@ -1,6 +1,8 @@
 package com.mmrtr.lol.infra.riot.config;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -28,12 +30,12 @@ public class RiotAPIProperties {
     @Getter
     @Setter
     public static class RateLimit {
-        /** 응답 헤더로 배우기 전 app 한도. */
-        private String appDefault = "500:10";
+        /** Riot app 한도 ("500:10,30000:600" 형식). routing 마다 따로 센다. */
+        private String appLimits = "500:10";
+        /** method 이름({@code RiotMethod.methodName()}) → 한도. 없는 method 는 app 한도만 본다. */
+        private Map<String, String> methodLimits = new LinkedHashMap<>();
         /** 규칙(버킷 × 창)의 상한 = max(1, floor(한도 × 이 비율)). */
         private double safetyRatio = 0.9;
-        /** 응답 Count 헤더가 한도의 이 비율 이상이면 버킷을 잠시 멈춘다. */
-        private double countPauseRatio = 0.95;
         /** 마지막 USER 요청 뒤 이만큼은 그 routing 을 유저 활동 중으로 본다. */
         private Duration userActiveWindow = Duration.ofSeconds(10);
         /** 유저 활동 중 DEFERRED·BACKGROUND 가 쓸 수 있는 app·method 규칙 상한의 비율. */
@@ -41,8 +43,6 @@ public class RiotAPIProperties {
         private double backgroundCeilingRatio = 0.5;
         /** BACKGROUND 전용 1초 창 규칙의 상한(안전율 곱하지 않음). 0 이하면 규칙을 두지 않는다. */
         private int backgroundMaxPerSecond = 40;
-        /** 다른 인스턴스가 배운 한도를 Redis 에서 다시 읽는 주기. */
-        private Duration limitsRefresh = Duration.ofSeconds(10);
         /** 429 에 Retry-After 가 없을 때 정지 시간. */
         private Duration defaultPause = Duration.ofSeconds(1);
     }

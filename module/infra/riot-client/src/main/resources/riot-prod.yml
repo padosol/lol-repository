@@ -1,4 +1,13 @@
 riot:
   api-key: ${RIOT_API_KEY}
   rate-limit:
-    app-default: "500:10"
+    # 운영 키 한도 (2026-11-11 응답 헤더로 확인). 키를 바꾸면 같이 바꾼다
+    app-limits: "500:10,30000:600"
+    # 이름에 점이 있어 대괄호 표기를 쓴다 (없으면 바인더가 중첩 키로 쪼갠다). 없는 method 는 app 한도만 본다
+    method-limits:
+      "[account-v1.by-puuid]": "1000:60"
+      "[summoner-v4.by-puuid]": "2000:60"
+      "[league-v4.entries-by-puuid]": "20000:10,1200000:600"
+      "[match-v5.ids-by-puuid]": "2000:10"
+      "[match-v5.match]": "2000:10"
+      "[match-v5.timeline]": "2000:10"

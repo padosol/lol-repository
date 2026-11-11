@@ -22,11 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RMap;
 import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.RedisException;
@@ -38,9 +35,9 @@ import org.springframework.stereotype.Component;
  * Redis ZSET 슬라이딩 창으로 버킷 한도를 지키는 {@link RiotPermitPort}·{@link RiotRateLimiter}. 키는 모두 {@code riot:rl:}
  * 아래에 있다.
  *
- * <p>규칙(버킷 × 창)마다 ZSET 하나에 허가된 호출의 토큰을 허가 시각으로 기록하고, {@link #complete} 가 Riot 한도
- * 규칙(app·method)의 기록만 응답 시각으로 옮긴다. 허가는 routing 마다 Lua 하나가 모든 규칙을 검사한 뒤 전부 통과할 때만
- * 모든 규칙에 기록한다. 한도는 Java 가 버킷별로 알고 인자로 넘긴다.
+ * <p>규칙(버킷 × 창)마다 ZSET 하나에 허가된 호출의 토큰을 허가 시각으로 기록한다. 허가는 routing 마다 Lua 하나가 모든
+ * 규칙을 검사한 뒤 전부 통과할 때만 모든 규칙에 기록한다. 한도는 설정({@link RiotLimits})에서 읽어 인자로 넘기고, 같은 값을
+ * routing 마다 따로 센다.
  *
  * <p>기록은 재시작해도 지우지 않는다. 기동 시 초기화를 하지 않으므로 여러 인스턴스가 같은 예산을 나눠 쓴다.
  */
@@ -49,9 +46,6 @@ import org.springframework.stereotype.Component;
 public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
 
     private static final String PREFIX = "riot:rl:";
-    private static final String LIMITS_KEY = PREFIX + "limits";
-    /** 같은 한도라도 마지막으로 쓴 지 이만큼 지나면 다시 쓴다. Redis 가 limits 해시를 잃어도 복구된다. */
-    private static final long LIMIT_REFRESH_MILLIS = 30_000;
     /** 백필 전용 규칙의 창(초). */
     private static final int BACKGROUND_WINDOW_SECONDS = 1;
 
@@ -59,14 +53,9 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
     private final RiotAPIProperties.RateLimit config;
     private final LongSupplier nowMillisOverride;
     private final MeterRegistry meterRegistry;
-    private final String appDefault;
+    private final RiotLimits limits;
     private final LuaScript permitScript = new LuaScript("ratelimit/riot-permit.lua");
-    private final LuaScript completeScript = new LuaScript("ratelimit/riot-complete.lua");
     private final LuaScript pauseScript = new LuaScript("ratelimit/riot-pause.lua");
-    /** 이 인스턴스가 필드별로 마지막에 쓴 한도와 그 시각. */
-    private final Map<String, WrittenLimit> lastWrittenLimits = new ConcurrentHashMap<>();
-    /** 버킷별로 아는 한도(정규화된 문자열, 배운 값이 없으면 null)와 그 값을 얻은 시각. */
-    private final Map<String, CachedLimit> cachedLimits = new ConcurrentHashMap<>();
 
     @Autowired
     public RedisRiotRateLimiter(RedissonClient redissonClient, RiotAPIProperties properties,
@@ -89,9 +78,11 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         this.redissonClient = redissonClient;
         this.config = properties.getRateLimit();
         this.nowMillisOverride = nowMillisOverride;
-        this.appDefault = normalize(config.getAppDefault());
-        if (appDefault == null) {
-            throw new IllegalArgumentException("riot.rate-limit.app-default 형식이 잘못되었습니다: " + config.getAppDefault());
+        this.limits = RiotLimits.from(config);
+        List<RiotMethod> unconfigured = limits.unconfigured();
+        if (!unconfigured.isEmpty()) {
+            log.info("Riot method 한도 설정 없음 (app 한도만 본다): {}",
+                    unconfigured.stream().map(RiotMethod::methodName).toList());
         }
     }
 
@@ -146,28 +137,6 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return Optional.of(RiotPermits.of(granted));
     }
 
-    /**
-     * 허가된 token 의 기록을 허가 때와 같은 규칙 중 Riot 한도 규칙(낮춤 규칙 = app·method)에서만 지금 시각으로 옮긴다.
-     * 응답 시각으로 옮기는 것은 Riot 이 센 도착 시각에 맞추려는 것이라, 우리가 정한 백필 전용 규칙은 허가 시각에 둔다.
-     * 옮기면 백필이 초당 40 / (1 + 응답 지연) 회로 준다. 그 토큰이 없는 규칙은 Lua 가 건너뛴다.
-     */
-    @Override
-    public void complete(RiotPermit permit) {
-        String routing = routingOf(platformOf(permit.platform()), permit.method().routing());
-        List<Object> keys = new ArrayList<>();
-        List<Object> args = new ArrayList<>();
-        args.add(permit.token());
-        args.add(nowArg());
-        for (PermitRule pr : permitRules(routing, List.of(permit.method()), permit.priority())) {
-            if (!pr.rule().lowered()) {
-                continue;
-            }
-            keys.add(pr.rule().key());
-            args.add(String.valueOf(pr.rule().windowMs()));
-        }
-        completeScript.eval(keys, args.toArray());
-    }
-
     /** platform 이름(대소문자 무관). 모르는 이름이면 IllegalArgumentException. */
     private static Platform platformOf(String platform) {
         Platform target = Platform.valueOfName(platform);
@@ -219,24 +188,15 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
     }
 
     /**
-     * 묶음에 적용할 규칙. app 한도(배운 값, 없으면 app-default)와 method 한도(배운 값이 있을 때만)의 창마다 낮춤 규칙 하나씩이고,
-     * BACKGROUND 면 백필 전용 1초 규칙을 더한다. 허가({@link #tryAcquire})와 기록 옮기기({@link #complete})가 같이 쓴다.
+     * 묶음에 적용할 규칙. app 한도와 method 한도(설정에 있을 때만)의 창마다 낮춤 규칙 하나씩이고, BACKGROUND 면 백필 전용
+     * 1초 규칙을 더한다. 순서는 app → method({@link RiotMethod} 순서) → 백필이다.
      */
     private List<PermitRule> permitRules(String routing, Collection<RiotMethod> methods, RiotCallPriority priority) {
         List<PermitRule> result = new ArrayList<>();
-        String app = appBucket(routing);
-        String appLimits = knownLimits(app);
-        List<Rule> appRules = new ArrayList<>();
-        addRules(appRules, app, appLimits != null ? appLimits : appDefault);
-        appRules.forEach(r -> result.add(new PermitRule(r, "")));
+        windowRules(appBucket(routing), limits.app()).forEach(r -> result.add(new PermitRule(r, "")));
         for (RiotMethod method : methods) {
-            String bucket = methodBucket(routing, method.methodName());
-            String limits = knownLimits(bucket);
-            if (limits != null) {
-                List<Rule> methodRules = new ArrayList<>();
-                addRules(methodRules, bucket, limits);
-                methodRules.forEach(r -> result.add(new PermitRule(r, method.methodName())));
-            }
+            windowRules(methodBucket(routing, method.methodName()), limits.windowsOf(method))
+                    .forEach(r -> result.add(new PermitRule(r, method.methodName())));
         }
         int backgroundMax = config.getBackgroundMaxPerSecond();
         if (priority == RiotCallPriority.BACKGROUND && backgroundMax > 0) {
@@ -244,12 +204,6 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
                     backgroundMax, BACKGROUND_WINDOW_SECONDS * 1000L, false), ""));
         }
         return result;
-    }
-
-    @Override
-    public void learnLimits(String routing, String method, String appLimitHeader, String methodLimitHeader) {
-        learn(appBucket(routing), appLimitHeader);
-        learn(methodBucket(routing, method), methodLimitHeader);
     }
 
     @Override
@@ -267,12 +221,14 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return PREFIX + "w:" + bucket + ":" + windowSeconds;
     }
 
-    /** 한도의 창마다 상한 max(1, floor(한도 × safetyRatio)) 인 낮춤 규칙을 더한다. */
-    private void addRules(List<Rule> rules, String bucket, String limits) {
-        for (RateLimitWindow window : RateLimitWindow.parse(limits)) {
+    /** 한도의 창마다 상한 max(1, floor(한도 × safetyRatio)) 인 낮춤 규칙. */
+    private List<Rule> windowRules(String bucket, List<RateLimitWindow> windows) {
+        List<Rule> rules = new ArrayList<>();
+        for (RateLimitWindow window : windows) {
             int cap = Math.max(1, (int) Math.floor(window.limit() * config.getSafetyRatio()));
             rules.add(new Rule(ruleKey(bucket, window.windowSeconds()), cap, window.windowSeconds() * 1000L, true));
         }
+        return rules;
     }
 
     /** 유저 활동 중 낮춤 규칙의 상한에 곱할 비율. 설정이 [0, 1] 밖이면 그 끝으로 자른다 (상한을 넘겨 쓰지 않게). */
@@ -285,70 +241,8 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return Math.max(0.0, Math.min(1.0, ratio));
     }
 
-    /**
-     * 버킷의 한도(배운 값이 없으면 null). 캐시가 없거나 얻은 지 limits-refresh 가 지났으면 Redis 에서 다시 읽어
-     * 다른 인스턴스가 배운 값을 반영한다. 읽는 사이 {@link #learn} 이 넣은 값은 덮어쓰지 않는다.
-     */
-    private String knownLimits(String bucket) {
-        long now = localNowMillis();
-        CachedLimit cached = cachedLimits.get(bucket);
-        if (cached != null && now - cached.readAtMillis() <= config.getLimitsRefresh().toMillis()) {
-            return cached.limits();
-        }
-        CachedLimit fresh = new CachedLimit(normalize(limits().get(bucket)), now);
-        boolean stored = cached == null
-                ? cachedLimits.putIfAbsent(bucket, fresh) == null
-                : cachedLimits.replace(bucket, cached, fresh);
-        return stored ? fresh.limits() : cachedLimits.get(bucket).limits();
-    }
-
-    /**
-     * 배운 한도를 캐시에 바로 넣고, 마지막에 쓴 값과 다르거나 쓴 지 {@link #LIMIT_REFRESH_MILLIS} 가 지났으면 HSET 한다.
-     * 필드별 판단은 원자적이다. 캐시는 Redis 쓰기 여부와 관계없이 갱신한다.
-     *
-     * <p>compute 안에서는 판단만 하고 Redis 쓰기는 밖에서 한다. 빈 락을 쥔 채 I/O 하면 가상 스레드가 캐리어에 고정된다.
-     * 쓰기가 실패하면 기록을 지워 다음 응답이 다시 쓰게 한다.
-     */
-    private void learn(String field, String header) {
-        String limits = normalize(header);
-        if (limits == null) {
-            return;
-        }
-        long now = localNowMillis();
-        cachedLimits.put(field, new CachedLimit(limits, now));
-        WrittenLimit fresh = new WrittenLimit(limits, now);
-        boolean[] changed = new boolean[1];
-        WrittenLimit current = lastWrittenLimits.compute(field, (key, written) -> {
-            changed[0] = written == null || !written.limits().equals(limits);
-            if (!changed[0] && fresh.writtenAtMillis() - written.writtenAtMillis() <= LIMIT_REFRESH_MILLIS) {
-                return written;
-            }
-            return fresh;
-        });
-        if (current != fresh) {
-            return;
-        }
-        try {
-            limits().fastPut(field, limits);
-        } catch (RuntimeException e) {
-            lastWrittenLimits.remove(field, fresh);
-            throw e;
-        }
-        if (changed[0]) {
-            log.info("Riot 한도 갱신 [{}] {}", field, limits);
-        }
-    }
-
-    private RMap<String, String> limits() {
-        return redissonClient.getMap(LIMITS_KEY, StringCodec.INSTANCE);
-    }
-
     private String nowArg() {
         return nowMillisOverride != null ? String.valueOf(nowMillisOverride.getAsLong()) : "";
-    }
-
-    private long localNowMillis() {
-        return nowMillisOverride != null ? nowMillisOverride.getAsLong() : System.currentTimeMillis();
     }
 
     private static String appBucket(String routing) {
@@ -367,17 +261,6 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return PREFIX + "pause:" + bucket;
     }
 
-    /** 헤더를 "limit:W,..." 로 정규화한다. 유효한 창이 없으면 null. Redis 해시와 한도 캐시에 이 형식으로 둔다. */
-    private static String normalize(String header) {
-        List<RateLimitWindow> windows = RateLimitWindow.parse(header);
-        if (windows.isEmpty()) {
-            return null;
-        }
-        return windows.stream()
-                .map(w -> w.limit() + ":" + w.windowSeconds())
-                .collect(Collectors.joining(","));
-    }
-
     private static boolean isNoScript(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
             if (t.getMessage() != null && t.getMessage().contains("NOSCRIPT")) {
@@ -385,13 +268,6 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
             }
         }
         return false;
-    }
-
-    private record WrittenLimit(String limits, long writtenAtMillis) {
-    }
-
-    /** limits 는 정규화된 한도 문자열, 배운 값이 없으면 null. */
-    private record CachedLimit(String limits, long readAtMillis) {
     }
 
     /** lowered = 유저 활동 중 우선순위별 비율로 상한을 낮추는 규칙(app·method). 백필 전용 규칙은 false. */

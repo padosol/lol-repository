@@ -107,7 +107,6 @@ class RiotApiServiceTest {
         assertThatThrownBy(() -> service.getMatchById("KR_1", Platform.KR, timeline, executor))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(wm.getAllServeEvents()).isEmpty();
-        assertThat(limiter.completed).isEmpty();
     }
 
     @DisplayName("다른 platform 의 허가로 부르면 보내지 않고 IllegalArgumentException")
@@ -147,8 +146,6 @@ class RiotApiServiceTest {
         assertThat(permits.remaining(RiotMethod.SUMMONER_BY_PUUID)).isZero();
         assertThat(permits.remaining(RiotMethod.LEAGUE_ENTRIES_BY_PUUID)).isZero();
         assertThat(wm.getAllServeEvents()).hasSize(3);
-        assertThat(limiter.completed).extracting(RiotPermit::method).containsExactlyInAnyOrder(
-                RiotMethod.ACCOUNT_BY_RIOT_ID, RiotMethod.SUMMONER_BY_PUUID, RiotMethod.LEAGUE_ENTRIES_BY_PUUID);
     }
 
     @DisplayName("429 는 Retry-After·X-Rate-Limit-Type 으로 정지하고 다시 보내지 않는다")
@@ -170,7 +167,6 @@ class RiotApiServiceTest {
         });
         wm.verify(1, getRequestedFor(urlEqualTo("/asia/lol/match/v5/matches/KR_1")));
         assertThat(limiter.pauses).containsExactly("asia|null|PT7S");
-        assertThat(limiter.completed).hasSize(1);
     }
 
     @DisplayName("429 의 Retry-After 가 양의 정수가 아니면 없는 것으로 보고 method 를 기본 정지 시간만큼 멈춘다")
@@ -206,12 +202,11 @@ class RiotApiServiceTest {
         // then
         assertThat(thrown).isInstanceOf(RiotServerException.class);
         wm.verify(1, getRequestedFor(urlEqualTo("/asia/lol/match/v5/matches/KR_1/timeline")));
-        assertThat(limiter.completed).hasSize(1);
     }
 
-    @DisplayName("404 는 RiotClientNotFoundException, 그 밖의 4xx 는 RiotClientException 이고 응답 헤더로 한도를 배운다")
+    @DisplayName("404 는 RiotClientNotFoundException, 그 밖의 4xx 는 RiotClientException 이다")
     @Test
-    void clientErrors_mappedInOrderAndLearned() {
+    void clientErrors_mappedInOrder() {
         // given
         wm.stubFor(get(urlEqualTo("/kr/lol/spectator/v5/active-games/by-summoner/p-1"))
                 .willReturn(aResponse().withStatus(404).withHeader("X-App-Rate-Limit", "500:10")));
@@ -227,10 +222,6 @@ class RiotApiServiceTest {
         // then
         assertThat(notFound).isInstanceOf(RiotClientNotFoundException.class);
         assertThat(badRequest).isExactlyInstanceOf(RiotClientException.class);
-        // 404 응답 헤더로 배우고, 헤더가 없는 400 응답도 (빈 값으로) 배우기를 거친다
-        assertThat(limiter.learned).containsExactly(
-                "kr|spectator-v5.active-games|500:10|null",
-                "kr|spectator-v5.active-games|null|null");
     }
 
     @DisplayName("apex 리그는 permit 의 method 로 티어 경로를 고르고, apex 가 아닌 method 는 거절한다")

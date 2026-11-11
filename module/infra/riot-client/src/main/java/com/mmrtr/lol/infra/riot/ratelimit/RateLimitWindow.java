@@ -31,17 +31,4 @@ public record RateLimitWindow(int limit, int windowSeconds) {
         }
         return windows;
     }
-
-    /** 같은 창끼리 비교해 사용량이 한도의 ratio 이상인 창이 있는지. */
-    public static boolean nearLimit(
-            List<RateLimitWindow> limits, List<RateLimitWindow> counts, double ratio) {
-        for (RateLimitWindow l : limits) {
-            for (RateLimitWindow c : counts) {
-                if (c.windowSeconds == l.windowSeconds && c.limit >= l.limit * ratio) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
 }

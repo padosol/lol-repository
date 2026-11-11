@@ -22,7 +22,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.redisson.Redisson;
-import org.redisson.api.RMap;
 import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
@@ -33,7 +32,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * 단건 허가로 본 한도 규칙·학습·정지·기록 옮기기. 기본 app-default "500:10" 이면 app 규칙 상한은 floor(500 × 0.9) = 450 이다.
+ * 단건 허가로 본 한도 규칙·정지. 한도는 설정에서 읽고, 기본 app-limits "500:10" 이면 app 규칙 상한은 floor(500 × 0.9) = 450 이다.
  * platform KR 의 match 호출은 routing asia 다. 묶음 허가는 {@link RedisRiotRateLimiterPermitTest} 가 본다.
  */
 @Testcontainers
@@ -96,9 +95,8 @@ class RedisRiotRateLimiterTest {
     @Test
     @DisplayName("method 규칙이 막으면 app 규칙에도 기록하지 않는다")
     void methodRule_blocksAndNothingRecorded() {
-        RedisRiotRateLimiter limiter = limiter();
         // 2:10 → method 상한 1
-        limiter.learnLimits(ROUTING, METHOD.methodName(), null, "2:10");
+        RedisRiotRateLimiter limiter = limiter(rateLimit -> rateLimit.setMethodLimits(Map.of(METHOD.methodName(), "2:10")));
 
         assertThat(acquire(limiter, USER)).isPresent();
         assertThat(acquire(limiter, USER)).isEmpty();
@@ -109,7 +107,7 @@ class RedisRiotRateLimiterTest {
     @DisplayName("창이 둘(10초·600초)이면 둘 다 본다")
     void twoWindows_bothChecked() {
         // 상한 90 (10초), 135 (600초)
-        RedisRiotRateLimiter limiter = limiter(rateLimit -> rateLimit.setAppDefault("100:10,150:600"));
+        RedisRiotRateLimiter limiter = limiter(rateLimit -> rateLimit.setAppLimits("100:10,150:600"));
         assertGranted(limiter, USER, 90);
 
         clock.addAndGet(10_000);
@@ -185,7 +183,7 @@ class RedisRiotRateLimiterTest {
     void tinyLimit_loweredCapIsAtLeastOne() {
         // 2:10 → 상한 1. 유저 활동 중이면 floor(1 × 0.5) = 0 → 1
         RedisRiotRateLimiter limiter = limiter(rateLimit -> {
-            rateLimit.setAppDefault("2:10");
+            rateLimit.setAppLimits("2:10");
             rateLimit.setUserActiveWindow(Duration.ofSeconds(20));
         });
         assertGranted(limiter, USER, 1);
@@ -233,92 +231,50 @@ class RedisRiotRateLimiterTest {
     }
 
     @Test
-    @DisplayName("실행 중 새 창을 배우면 빈 새 창 ZSET 과 기존 ZSET 에 모두 기록한다")
-    void learnedNewWindow_recordsInBothKeys() {
-        RedisRiotRateLimiter limiter = limiter();
-        assertThat(acquire(limiter, USER)).isPresent();
-
-        limiter.learnLimits(ROUTING, METHOD.methodName(), "500:10,30000:600", null);
-
-        String token = acquire(limiter, USER).orElseThrow().take(METHOD).token();
-        assertThat(zset(APP_10).getScore(token)).isEqualTo((double) NOW);
-        assertThat(zset(RedisRiotRateLimiter.ruleKey("asia|app", 600)).getScore(token)).isEqualTo((double) NOW);
-    }
-
-    @Test
-    @DisplayName("complete 는 그 토큰의 기록을 지금 시각으로 옮기고, 없는 토큰은 건드리지 않는다")
-    void complete_movesRecordToNow() {
-        RedisRiotRateLimiter limiter = limiter();
-        RiotPermit permit = acquire(limiter, USER).orElseThrow().take(METHOD);
-
-        clock.addAndGet(300);
-        limiter.complete(permit);
-
-        assertThat(zset(APP_10).getScore(permit.token())).isEqualTo((double) (NOW + 300));
-
-        limiter.complete(new RiotPermit("nope", PLATFORM, METHOD, USER));
-
-        assertThat(zset(APP_10).size()).isEqualTo(1);
-        assertThat(zset(APP_10).getScore("nope")).isNull();
-    }
-
-    @Test
-    @DisplayName("BACKGROUND 의 complete 는 app 규칙 기록만 옮기고 백필 규칙 기록은 허가 시각에 둔다")
-    void complete_doesNotMoveBackgroundRule() {
-        RedisRiotRateLimiter limiter = limiter();
-        RiotPermit permit = acquire(limiter, BACKGROUND).orElseThrow().take(METHOD);
-
-        clock.addAndGet(300);
-        limiter.complete(permit);
-
-        assertThat(zset(BG_1).getScore(permit.token())).isEqualTo((double) NOW);
-        assertThat(zset(APP_10).getScore(permit.token())).isEqualTo((double) (NOW + 300));
-    }
-
-    @Test
-    @DisplayName("complete 로 옮긴 기록은 응답 지연만큼 늦게 창을 빠진다")
-    void complete_delaysNextSlotByLatency() {
-        // 2:10 → 상한 1
-        RedisRiotRateLimiter limiter = limiter(rateLimit -> rateLimit.setAppDefault("2:10"));
-        RiotPermit permit = acquire(limiter, USER).orElseThrow().take(METHOD);
-        clock.addAndGet(300);
-        limiter.complete(permit);
-
-        clock.set(NOW + 10_000);
-        assertThat(acquire(limiter, USER)).isEmpty();
-
-        clock.set(NOW + 10_300);
-        assertThat(acquire(limiter, USER)).isPresent();
-    }
-
-    @Test
-    @DisplayName("모르는 platform 이면 허가·complete 모두 IllegalArgumentException")
+    @DisplayName("모르는 platform 이면 허가가 IllegalArgumentException")
     void unknownPlatform_isIllegalArgument() {
         RedisRiotRateLimiter limiter = limiter();
 
         assertThatThrownBy(() -> limiter.tryAcquire("XX", USER, Map.of(METHOD, 1)))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> limiter.complete(new RiotPermit("t", "XX", METHOD, USER)))
-                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("다른 인스턴스가 배운 한도는 limits-refresh 가 지난 뒤 읽는다")
-    void otherInstanceLearnedLimit_readAfterRefresh() {
-        RedisRiotRateLimiter a = limiter();
-        RedisRiotRateLimiter b = limiter();
-        // B 가 한도 캐시를 채운다 (배운 값 없음 → 기본값, 상한 450)
-        assertGranted(b, USER, 1);
-        a.learnLimits(ROUTING, METHOD.methodName(), "100:10", null);
+    @DisplayName("method 한도는 설정에서 읽고 routing 마다 따로 센다")
+    void methodLimitFromConfig_countedPerRouting() {
+        // 4:10 → method 상한 3
+        RedisRiotRateLimiter limiter = limiter(rateLimit -> rateLimit.setMethodLimits(Map.of(METHOD.methodName(), "4:10")));
 
-        clock.addAndGet(1);
-        // B 는 아직 상한 450 으로 센다
-        assertGranted(b, USER, 100);
+        assertGranted(limiter, USER, 3);
+        assertThat(acquire(limiter, USER)).isEmpty();
+        // NA 의 match 는 americas 라 따로 센다
+        assertThat(limiter.tryAcquire("NA", USER, Map.of(METHOD, 1))).isPresent();
+        assertThat(zset(RedisRiotRateLimiter.ruleKey("americas|m|match-v5.match", 10)).size()).isEqualTo(1);
+    }
 
-        // 캐시 갱신 주기(10초)가 지났고, 앞 기록 101건은 10초 창을 빠졌다
-        clock.set(NOW + 10_001);
-        assertGranted(b, USER, 90);
-        assertThat(acquire(b, USER)).isEmpty();
+    @Test
+    @DisplayName("kr 의 app 창이 차도 jp1 은 허가된다")
+    void appCountedPerRouting_krFullDoesNotBlockJp() {
+        RScoredSortedSet<String> krApp = zset(RedisRiotRateLimiter.ruleKey("kr|app", 10));
+        for (int i = 0; i < 450; i++) {
+            krApp.add(NOW, "pre-" + i);
+        }
+        RedisRiotRateLimiter limiter = limiter();
+
+        assertThat(limiter.tryAcquire("KR", USER, Map.of(RiotMethod.SUMMONER_BY_PUUID, 1))).isEmpty();
+        assertThat(limiter.tryAcquire("JP", USER, Map.of(RiotMethod.SUMMONER_BY_PUUID, 1))).isPresent();
+    }
+
+    @Test
+    @DisplayName("한 묶음에서 한도가 있는 method 만 method 규칙을 갖는다")
+    void mixedBatch_onlyConfiguredMethodHasMethodRule() {
+        RedisRiotRateLimiter limiter = limiter(rateLimit -> rateLimit.setMethodLimits(Map.of(METHOD.methodName(), "4:10")));
+
+        assertThat(limiter.tryAcquire(PLATFORM, USER, Map.of(METHOD, 3, OTHER, 5))).isPresent();
+
+        assertThat(zset(RedisRiotRateLimiter.ruleKey("asia|m|match-v5.match", 10)).size()).isEqualTo(3);
+        assertThat(zset(RedisRiotRateLimiter.ruleKey("asia|m|match-v5.timeline", 10)).isExists()).isFalse();
+        assertThat(zset(APP_10).size()).isEqualTo(8);
     }
 
     @Test
@@ -330,21 +286,10 @@ class RedisRiotRateLimiterTest {
     }
 
     @Test
-    @DisplayName("배운 app 한도가 기본값을 덮어쓴다")
-    void learnedAppLimit_overridesDefault() {
-        RedisRiotRateLimiter limiter = limiter();
-        limiter.learnLimits(ROUTING, METHOD.methodName(), "100:10", null);
-
-        assertGranted(limiter, USER, 90);
-        assertThat(acquire(limiter, USER)).isEmpty();
-    }
-
-    @Test
     @DisplayName("method 한도는 그 method 에만 적용된다")
     void methodLimit_appliesPerMethod() {
-        RedisRiotRateLimiter limiter = limiter();
         // 200:10 → method 상한 180
-        limiter.learnLimits(ROUTING, METHOD.methodName(), null, "200:10");
+        RedisRiotRateLimiter limiter = limiter(rateLimit -> rateLimit.setMethodLimits(Map.of(METHOD.methodName(), "200:10")));
 
         assertGranted(limiter, USER, 180);
         assertThat(acquire(limiter, USER)).isEmpty();
@@ -352,48 +297,15 @@ class RedisRiotRateLimiterTest {
     }
 
     @Test
-    @DisplayName("빈 헤더·잘못된 헤더는 무시하고 이전 한도를 유지한다")
-    void learnLimits_ignoresBlankHeader() {
-        RedisRiotRateLimiter limiter = limiter();
-        limiter.learnLimits(ROUTING, METHOD.methodName(), "100:10", null);
-        limiter.learnLimits(ROUTING, METHOD.methodName(), "", "");
-        limiter.learnLimits(ROUTING, METHOD.methodName(), null, null);
-        limiter.learnLimits(ROUTING, METHOD.methodName(), "500", "500:0");
-
-        assertGranted(limiter, USER, 90);
-        assertThat(acquire(limiter, USER)).isEmpty();
-    }
-
-    @Test
-    @DisplayName("같은 한도는 30초 안에는 다시 쓰지 않고, 30초가 지나면 다시 써서 잃어버린 한도를 복구한다")
-    void learnLimits_rewritesUnchangedLimitAfterRefreshInterval() {
-        RedisRiotRateLimiter limiter = limiter();
-        limiter.learnLimits(ROUTING, METHOD.methodName(), "100:10", null);
-        limitsHash().delete();
-
-        clock.addAndGet(29_999);
-        limiter.learnLimits(ROUTING, METHOD.methodName(), "100:10", null);
-        assertThat(limitsHash().isExists()).isFalse();
-
-        clock.addAndGet(2);
-        limiter.learnLimits(ROUTING, METHOD.methodName(), "100:10", null);
-        assertThat(limitsHash().get("asia|app")).isEqualTo("100:10");
-    }
-
-    @Test
     @DisplayName("Redis 스크립트 캐시가 비워지면 다시 올리고 호출한다")
     void scriptCacheFlushed_reloadsScript() {
         RedisRiotRateLimiter limiter = limiter();
-        RiotPermit first = acquire(limiter, USER).orElseThrow().take(METHOD);
-        limiter.complete(first);
+        assertThat(acquire(limiter, USER)).isPresent();
 
         redisson.getScript().scriptFlush();
 
         assertThat(acquire(limiter, USER)).isPresent();
         assertThat(zset(APP_10).size()).isEqualTo(2);
-        clock.addAndGet(300);
-        limiter.complete(first);
-        assertThat(zset(APP_10).getScore(first.token())).isEqualTo((double) (NOW + 300));
 
         limiter.pause(ROUTING, null, Duration.ofSeconds(1));
         redisson.getScript().scriptFlush();
@@ -439,9 +351,5 @@ class RedisRiotRateLimiterTest {
 
     private static RScoredSortedSet<String> zset(String key) {
         return redisson.getScoredSortedSet(key, StringCodec.INSTANCE);
-    }
-
-    private static RMap<String, String> limitsHash() {
-        return redisson.getMap("riot:rl:limits", StringCodec.INSTANCE);
     }
 }
