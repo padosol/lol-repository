@@ -96,4 +96,8 @@ const userInfo = {
 ## 알아 둘 것
 
 - 처음 갱신하는 소환사는 최근 20경기를 받고, 뒤이어 추가 매치 찾기가 시즌 매치를 수백 건 받는다. 두 번째 갱신부터는 새 매치만 받아 훨씬 빠르다. 첫 갱신과 재갱신을 섞지 않으려면 같은 소환사로 바로 다시 돌리지 않는다.
+- 추가 매치 찾기와 그 뒤 백필 매치 적재는 `LOL_RENEWAL_BACKGROUND_ENABLED=false`(`.env.example` 기본, 또는 `--lol.renewal.background.enabled=false`)로 끈다.
+  - 갱신이 추가 매치 찾기·백필로 넘기지 않는다.
+  - 추가 매치 찾기 리스너가 시작하지 않는다. `renewal.match.find.queue` 에 쌓인 메시지는 버리지 않고 남는다.
+  - 매치 적재 큐의 사용자 재시도와 나중 타임라인은 그대로 돈다. 이미 큐에 들어 있는 백필 메시지도 처리되므로, 없애려면 `reset-db.sh` 로 큐를 비운다.
 - 앱이 뜨고 1분 뒤, 그 뒤 2시간마다 랭킹 스케줄러가 상위 티어 미등록 소환사 약 1000명을 Riot 에서 조회한다. 부하 중이면 같은 Riot 한도를 쓰므로, 부하 테스트 때는 `LOL_RANKING_SCHEDULER_ENABLED=false`(또는 `--lol.ranking.scheduler.enabled=false`)로 띄워 끈다 (관리자 API 수동 실행은 그대로 된다).

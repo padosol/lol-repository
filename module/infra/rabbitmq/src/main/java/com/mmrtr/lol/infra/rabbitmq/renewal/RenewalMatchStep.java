@@ -35,6 +35,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -49,6 +50,9 @@ import org.springframework.stereotype.Component;
  * 매치 대상이 전부 저장되면 매치 비트를 켜고(최신 3게임 타임라인은 조건이 아니다), 아니면 판정기가 DB 를 보고 켠다.
  * 나중 타임라인 발행은 매치 비트 판단 뒤에 하고, 실패해도 갱신을 실패시키지 않는다.
  * 밖으로 던지는 예외는 첫 전달의 저장 실패뿐이다 (재전달받아 DB 에 쓴 뒤에만 ack 한다).
+ *
+ * <p>{@code lol.renewal.background.enabled=false} 면 추가 갱신(추가 매치 찾기·백필)으로 넘기지 않는다: 20개를 채워도 매치
+ * 검색 큐에 넘기지 않고, 계속 실패해 뺀 매치도 백필로 넘기지 않는다(대상에서만 뺀다). 사용자 재시도·나중 타임라인은 그대로다.
  */
 @Slf4j
 @Component
@@ -72,13 +76,15 @@ public class RenewalMatchStep {
     private final MeterRegistry meterRegistry;
     private final Executor requestExecutor;
     private final RenewalStepFailures failures;
+    private final boolean backgroundEnabled;
 
     public RenewalMatchStep(RenewalRecordPort recordPort, MatchApiPort matchApiPort, RiotPermitPort permitPort,
                             RenewalMatchFetcher fetcher, MatchRepositoryPort matchRepositoryPort,
                             SaveMatchDataUseCase saveMatchDataUseCase, MatchCacheWritePort matchCacheWritePort,
                             RenewalMatchClaimService claimService, MessageSender messageSender,
                             RenewalStepPublisher stepPublisher, RenewalFinisher finisher,
-                            MeterRegistry meterRegistry, Executor requestExecutor) {
+                            MeterRegistry meterRegistry, Executor requestExecutor,
+                            @Value("${lol.renewal.background.enabled:true}") boolean backgroundEnabled) {
         this.recordPort = recordPort;
         this.matchApiPort = matchApiPort;
         this.permitPort = permitPort;
@@ -93,6 +99,7 @@ public class RenewalMatchStep {
         this.meterRegistry = meterRegistry;
         this.requestExecutor = requestExecutor;
         this.failures = new RenewalStepFailures("match", recordPort, finisher, meterRegistry);
+        this.backgroundEnabled = backgroundEnabled;
     }
 
     public void run(RenewalStepMessage message, boolean redelivered) {
@@ -173,10 +180,13 @@ public class RenewalMatchStep {
         Set<String> candidates = new LinkedHashSet<>(ids);
         candidates.removeAll(existing);
         Set<String> excluded = candidates.isEmpty() ? Set.of() : claimService.findExcluded(candidates);
-        if (!excluded.isEmpty()) {
+        if (!excluded.isEmpty() && backgroundEnabled) {
             log.warn("계속 실패한 매치를 갱신 대상에서 빼고 매치 적재 큐에 백필로 넘긴다. puuid={}, renewalId={}, matchIds={}",
                     puuid, renewalId, excluded);
             excluded.forEach(matchId -> messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.BACKFILL));
+        } else if (!excluded.isEmpty()) {
+            log.warn("계속 실패한 매치를 갱신 대상에서 뺀다. 추가 갱신이 꺼져 있어 백필로 넘기지 않는다. puuid={}, renewalId={}, matchIds={}",
+                    puuid, renewalId, excluded);
         }
         meterRegistry.counter(EXCLUDED_METRIC).increment(excluded.size());
         List<String> recent = ids.subList(0, Math.min(RenewalMatchPlan.TIMELINE_COUNT, ids.size()));
@@ -262,9 +272,9 @@ public class RenewalMatchStep {
         }
     }
 
-    /** 20개를 꽉 채웠으면 21번째부터는 백그라운드 매치 검색이 찾는다. */
+    /** 20개를 꽉 채웠으면 21번째부터는 백그라운드 매치 검색이 찾는다. 추가 갱신이 꺼져 있으면 넘기지 않는다. */
     private void handOffRest(RenewalStepMessage message, String platformName, List<String> ids) {
-        if (ids.size() == MATCH_COUNT) {
+        if (backgroundEnabled && ids.size() == MATCH_COUNT) {
             stepPublisher.publishMatchFind(
                     new SummonerRenewalMessage(message.puuid(), platformName, message.startTime(), MATCH_COUNT));
         }

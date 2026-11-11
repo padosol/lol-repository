@@ -81,10 +81,15 @@ class RenewalMatchStepTest {
     private final RenewalFinisher finisher = mock(RenewalFinisher.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
-    private final RenewalMatchStep step = new RenewalMatchStep(
-            recordPort, matchApiPort, permitPort, new RenewalMatchFetcher(matchApiPort, permitPort, executor),
-            matchRepositoryPort, saveMatchDataUseCase, matchCacheWritePort, claimService, messageSender,
-            stepPublisher, finisher, meterRegistry, executor);
+    private final RenewalMatchStep step = step(true);
+
+    /** backgroundEnabled = lol.renewal.background.enabled (추가 매치 찾기·백필 넘기기). */
+    private RenewalMatchStep step(boolean backgroundEnabled) {
+        return new RenewalMatchStep(
+                recordPort, matchApiPort, permitPort, new RenewalMatchFetcher(matchApiPort, permitPort, executor),
+                matchRepositoryPort, saveMatchDataUseCase, matchCacheWritePort, claimService, messageSender,
+                stepPublisher, finisher, meterRegistry, executor, backgroundEnabled);
+    }
 
     private final Map<String, MatchDto> matches = new HashMap<>();
     private final Map<String, TimelineDto> timelines = new HashMap<>();
@@ -422,6 +427,23 @@ class RenewalMatchStepTest {
     }
 
     @Test
+    @DisplayName("추가 갱신을 끄면 계속 실패해 빠진 매치는 대상에서만 빼고 백필로 넘기지 않는다")
+    void run_backgroundDisabled_excludedMatchNotHandedOff() {
+        // given
+        given(claimService.findExcluded(anyCollection())).willReturn(Set.of("m1"));
+
+        // when
+        step(false).run(msg("r1", 0), false);
+
+        // then
+        verify(recordPort).recordTargets("p1", "r1", Set.of("m2"));
+        verify(matchApiPort, never()).fetchMatchById(eq("m1"), any(), any(), any());
+        verify(messageSender, never()).sendMessageByMatchId(eq("m1"), anyString(), any());
+        verify(recordPort).markSteps("p1", "r1", MATCH);
+        assertThat(count("lol.renewal.match_excluded")).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("빠진 매치를 넘기지 못하면 갱신을 실패시켜 커서가 그 매치를 지나가지 않게 한다")
     void run_excludedHandOffFails_failsRenewal() {
         // given
@@ -447,6 +469,20 @@ class RenewalMatchStepTest {
 
         // then
         verify(stepPublisher).publishMatchFind(new SummonerRenewalMessage("p1", "KR", START_TIME, 20));
+    }
+
+    @Test
+    @DisplayName("추가 갱신을 끄면 id 가 20개여도 매치 검색 큐에 넘기지 않는다")
+    void run_backgroundDisabled_twentyIds_doesNotHandOffToMatchFind() {
+        // given
+        givenIds(TWENTY);
+        given(matchRepositoryPort.findExistingMatchIds(anyList())).willReturn(TWENTY);
+
+        // when
+        step(false).run(msg("r1", START_TIME), false);
+
+        // then
+        verify(stepPublisher, never()).publishMatchFind(any());
     }
 
     @Test

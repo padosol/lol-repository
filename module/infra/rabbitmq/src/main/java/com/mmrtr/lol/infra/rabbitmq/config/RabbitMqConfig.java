@@ -285,12 +285,17 @@ public class RabbitMqConfig {
         return simpleFactory;
     }
 
+    /**
+     * 추가 매치 찾기 큐(renewal.match.find.queue) 전용. {@code lol.renewal.background.enabled=false} 면 리스너를 자동으로 시작하지
+     * 않는다 — 추가 갱신을 잠시 끄는 동안 메시지는 버리지 않고 큐에 남는다.
+     */
     @Bean
     public SimpleRabbitListenerContainerFactory findQueueSimpleRabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory factory,
             @Qualifier("rabbitListenerTaskExecutor")
-            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider,
+            @Value("${lol.renewal.background.enabled:true}") boolean backgroundEnabled
     ) {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
@@ -301,6 +306,7 @@ public class RabbitMqConfig {
 
         simpleFactory.setPrefetchCount(1);
         simpleFactory.setReceiveTimeout(1000L);
+        simpleFactory.setAutoStartup(backgroundEnabled);
 
         return simpleFactory;
     }
