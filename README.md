@@ -182,8 +182,9 @@ routing 마다 Lua `riot-permit.lua` 한 번으로 정지 → app → method →
    `riot.ratelimit.pause.remaining{routing,bucket}`(429 정지 남은 초).
    Riot 이 알려 준 값은 `riot.ratelimit.observed.limit{routing,bucket,window}`(한도)와 `riot.ratelimit.observed.count{...}`(그 창의
    집계 수. 받은 뒤 그 창이 지나면 나오지 않는다)다.
-   bucket 은 `app`·method 이름·`background` 이고, Redis 에 기록이 있는 것만 나온다. 대시보드 "남은 한도" 패널은 `cap - used` 이고,
-   "한도·사용량 비교" 표와 "사용량 비교" 그래프가 설정·우리 값과 Riot 값을 나란히 보여 준다. 두 사용량은 똑같지 않다
+   bucket 은 `app`·method 이름·`background` 이고, Redis 에 기록이 있는 것만 나온다. 대시보드는 두 행으로 나눠 보여 준다.
+   "Riot 한도 — 앱 기준" 행은 설정 한도·상한·허가 수와 남은 한도(`cap - used`)·429 정지를, "Riot 한도 — 실제" 행은 Riot 한도·집계 수와
+   남은 보유량(`observed.limit - observed.count`)을 같은 배치로 보여 준다. 두 사용량은 똑같지 않다
    (우리는 지금부터 거슬러 세고 Riot 은 창을 끊어 센다). Riot 쪽이 꾸준히 크면 같은 API 키를 다른 곳에서도 쓰고 있다는 단서다.
 
 PostgreSQL 적재는 두 단계로 흡수:

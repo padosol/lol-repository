@@ -1639,8 +1639,134 @@
       }
     },
     {
+      "type": "row",
+      "title": "Riot 한도 — 앱 기준 (우리 설정·허가)",
+      "id": 40,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 60
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "앱 · 한도와 허가",
+      "description": "이 서비스가 지키는 값. 설정 한도는 riot-*.yml 값, 상한은 설정 한도 × 0.9 (백필은 초당 40), 허가 수는 창 안에서 허가된 호출 수, 남은 수는 상한 - 허가 수다. Redis 에 기록이 있는 규칙만 보인다",
+      "id": 41,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 0,
+        "y": 61
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "expr": "max by (routing, bucket, window) (riot_ratelimit_limit)",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "B",
+          "expr": "max by (routing, bucket, window) (riot_ratelimit_cap)",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "C",
+          "expr": "max by (routing, bucket, window) (riot_ratelimit_used)",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "D",
+          "expr": "max by (routing, bucket, window) (riot_ratelimit_cap) - max by (routing, bucket, window) (riot_ratelimit_used)",
+          "format": "table",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "routing": "라우팅",
+              "bucket": "버킷",
+              "window": "창(초)",
+              "Value #A": "설정 한도",
+              "Value #B": "상한",
+              "Value #C": "허가 수",
+              "Value #D": "남은 수"
+            },
+            "indexByName": {
+              "routing": 0,
+              "bucket": 1,
+              "window": 2,
+              "Value #A": 3,
+              "Value #B": 4,
+              "Value #C": 5,
+              "Value #D": 6
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "-",
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "라우팅",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
       "type": "timeseries",
-      "title": "남은 한도 % (라우팅·버킷·창)",
+      "title": "앱 · 남은 한도 %",
       "description": "(상한 - 창 안 허가 수) / 상한. 상한은 설정 한도 × 0.9 (백필은 초당 40)이고, 유저 활동 중 DEFERRED·BACKGROUND 가 쓰는 낮춘 상한은 아니다. Redis 에 기록이 있는 규칙만 보인다",
       "id": 35,
       "datasource": {
@@ -1649,9 +1775,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 60
+        "w": 7,
+        "x": 10,
+        "y": 61
       },
       "targets": [
         {
@@ -1695,7 +1821,7 @@
     },
     {
       "type": "timeseries",
-      "title": "남은 한도 (건)",
+      "title": "앱 · 남은 한도 (건)",
       "description": "규칙마다 상한 - 창 안 허가 수",
       "id": 36,
       "datasource": {
@@ -1704,9 +1830,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 12,
-        "y": 60
+        "w": 4,
+        "x": 17,
+        "y": 61
       },
       "targets": [
         {
@@ -1749,7 +1875,7 @@
     },
     {
       "type": "stat",
-      "title": "429 정지 중 (남은 초)",
+      "title": "앱 · 429 정지 중 (남은 초)",
       "description": "429 로 멈춘 버킷과 정지가 끝날 때까지 남은 시간. 정지가 없으면 '없음'",
       "id": 37,
       "datasource": {
@@ -1758,9 +1884,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 4,
-        "x": 20,
-        "y": 60
+        "w": 3,
+        "x": 21,
+        "y": 61
       },
       "targets": [
         {
@@ -1807,19 +1933,32 @@
       }
     },
     {
+      "type": "row",
+      "title": "Riot 한도 — 실제 (Riot 응답 헤더)",
+      "id": 42,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 69
+      },
+      "panels": []
+    },
+    {
       "type": "table",
-      "title": "한도·사용량 비교 (설정 · Riot)",
-      "description": "설정 한도·우리 상한·우리 허가 수는 이 서비스가 지키는 값이고, Riot 한도·Riot 집계 수는 Riot 이 마지막 응답 헤더로 알려 준 값이다. 설정 한도와 Riot 한도가 다르면 설정을 고친다. 한도 설정이 없는 method 는 Riot 칸만 찬다. Riot 집계 수는 받은 뒤 그 창이 지나면 비고, Riot 값은 마지막 응답 뒤 하루 동안 남는다",
-      "id": 38,
+      "title": "실제 · Riot 한도와 집계",
+      "description": "Riot 이 마지막 응답 헤더로 알려 준 값이다. 집계 수는 받은 뒤 그 창이 지나면 비므로 호출이 없으면 비어 보인다. Riot 값은 마지막 응답 뒤 하루 동안 남는다. 남은 수는 Riot 한도 - 집계 수다",
+      "id": 43,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
+        "h": 8,
+        "w": 10,
         "x": 0,
-        "y": 68
+        "y": 70
       },
       "targets": [
         {
@@ -1828,28 +1967,6 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "max by (routing, bucket, window) (riot_ratelimit_limit{bucket!=\"background\"})",
-          "format": "table",
-          "instant": true,
-          "range": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "B",
-          "expr": "max by (routing, bucket, window) (riot_ratelimit_cap{bucket!=\"background\"})",
-          "format": "table",
-          "instant": true,
-          "range": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "C",
           "expr": "max by (routing, bucket, window) (riot_ratelimit_observed_limit)",
           "format": "table",
           "instant": true,
@@ -1860,8 +1977,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "D",
-          "expr": "max by (routing, bucket, window) (riot_ratelimit_used{bucket!=\"background\"})",
+          "refId": "B",
+          "expr": "max by (routing, bucket, window) (riot_ratelimit_observed_count)",
           "format": "table",
           "instant": true,
           "range": false
@@ -1871,8 +1988,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "E",
-          "expr": "max by (routing, bucket, window) (riot_ratelimit_observed_count)",
+          "refId": "C",
+          "expr": "max by (routing, bucket, window) (riot_ratelimit_observed_limit) - max by (routing, bucket, window) (riot_ratelimit_observed_count)",
           "format": "table",
           "instant": true,
           "range": false
@@ -1893,11 +2010,9 @@
               "routing": "라우팅",
               "bucket": "버킷",
               "window": "창(초)",
-              "Value #A": "설정 한도",
-              "Value #B": "우리 상한",
-              "Value #C": "Riot 한도",
-              "Value #D": "우리 허가 수",
-              "Value #E": "Riot 집계 수"
+              "Value #A": "Riot 한도",
+              "Value #B": "Riot 집계 수",
+              "Value #C": "남은 수"
             },
             "indexByName": {
               "routing": 0,
@@ -1905,9 +2020,7 @@
               "window": 2,
               "Value #A": 3,
               "Value #B": 4,
-              "Value #C": 5,
-              "Value #D": 6,
-              "Value #E": 7
+              "Value #C": 5
             }
           }
         }
@@ -1934,18 +2047,18 @@
     },
     {
       "type": "timeseries",
-      "title": "사용량 비교 (우리 허가 · Riot 집계)",
-      "description": "우리 허가 수는 지금부터 창 길이만큼 거슬러 센 값이고, Riot 집계 수는 마지막 응답 때 Riot 이 센 값이다. Riot 은 창을 첫 호출부터 끊어 세는 것으로 알려져 있어 두 값이 똑같지는 않다. Riot 쪽이 꾸준히 크면 같은 API 키로 다른 곳에서도 호출하고 있다는 단서다",
-      "id": 39,
+      "title": "실제 · 남은 보유량 %",
+      "description": "(Riot 한도 - Riot 집계 수) / Riot 한도. Riot 이 마지막 응답 헤더로 알려 준 값이다. 집계 수는 받은 뒤 그 창이 지나면 비므로 호출이 없으면 비어 보인다. Riot 값은 마지막 응답 뒤 하루 동안 남는다",
+      "id": 44,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 68
+        "h": 8,
+        "w": 7,
+        "x": 10,
+        "y": 70
       },
       "targets": [
         {
@@ -1954,17 +2067,63 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "max by (routing, bucket, window) (riot_ratelimit_used{bucket!=\"background\"})",
-          "legendFormat": "우리 {{routing}} {{bucket}} {{window}}s"
+          "expr": "100 * (1 - max by (routing, bucket, window) (riot_ratelimit_observed_count) / max by (routing, bucket, window) (riot_ratelimit_observed_limit))",
+          "legendFormat": "{{routing}} {{bucket}} {{window}}s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "min": 0,
+          "max": 100
         },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "min"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "실제 · 남은 보유량 (건)",
+      "description": "Riot 한도 - Riot 집계 수. Riot 이 마지막 응답 헤더로 알려 준 값이다. 집계 수는 받은 뒤 그 창이 지나면 비므로 호출이 없으면 비어 보인다. Riot 값은 마지막 응답 뒤 하루 동안 남는다",
+      "id": 45,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 7,
+        "x": 17,
+        "y": 70
+      },
+      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "B",
-          "expr": "max by (routing, bucket, window) (riot_ratelimit_observed_count)",
-          "legendFormat": "Riot {{routing}} {{bucket}} {{window}}s"
+          "refId": "A",
+          "expr": "max by (routing, bucket, window) (riot_ratelimit_observed_limit) - max by (routing, bucket, window) (riot_ratelimit_observed_count)",
+          "legendFormat": "{{routing}} {{bucket}} {{window}}s"
         }
       ],
       "fieldConfig": {
@@ -1985,7 +2144,7 @@
           "placement": "right",
           "calcs": [
             "lastNotNull",
-            "max"
+            "min"
           ]
         },
         "tooltip": {
@@ -2003,7 +2162,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 77
+        "y": 78
       },
       "panels": []
     },
@@ -2020,7 +2179,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 78
+        "y": 79
       },
       "targets": [
         {
@@ -2092,7 +2251,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 78
+        "y": 79
       },
       "targets": [
         {
