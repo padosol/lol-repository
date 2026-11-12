@@ -28,7 +28,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-/** 한도 지표: Redis 의 규칙 ZSET·정지 키를 읽어 routing·버킷·창별 사용 수·상한, 정지 남은 시간을 낸다. */
+/**
+ * 한도 지표: Redis 의 규칙 ZSET·정지 키·Riot 헤더 기록을 읽어 routing·버킷·창별 사용 수·상한·설정 한도, 정지 남은 시간,
+ * Riot 이 알려 준 한도·집계 수를 낸다.
+ */
 @Testcontainers
 class RiotRateLimitMetricsTest {
 
@@ -137,6 +140,79 @@ class RiotRateLimitMetricsTest {
     }
 
     @Test
+    @DisplayName("Riot 이 알려 준 한도·집계 수를 routing·버킷·창별로 내고, 설정 한도도 함께 낸다")
+    void reportsRiotLimitsAndCounts_besideConfiguredLimit() {
+        limiter.tryAcquire("KR", USER, Map.of(RiotMethod.MATCH, 1));
+        limiter.observe("asia", "match-v5.match",
+                new RiotLimitHeaders("20:1,100:120", "1:1,7:120", "2000:10", "1:10"));
+
+        metrics.refresh();
+
+        assertThat(observedLimit("asia", "app", "1")).isEqualTo(20);
+        assertThat(observedLimit("asia", "app", "120")).isEqualTo(100);
+        assertThat(observedCount("asia", "app", "1")).isEqualTo(1);
+        assertThat(observedCount("asia", "app", "120")).isEqualTo(7);
+        assertThat(observedLimit("asia", "match-v5.match", "10")).isEqualTo(2000);
+        assertThat(observedCount("asia", "match-v5.match", "10")).isEqualTo(1);
+        assertThat(limit("asia", "app", "10")).isEqualTo(500);
+        assertThat(limit("asia", "app", "600")).isEqualTo(30000);
+        assertThat(limit("asia", "match-v5.match", "10")).isEqualTo(2000);
+    }
+
+    @Test
+    @DisplayName("Riot 집계 수는 받은 뒤 그 창이 지나면 내지 않고, 한도는 계속 낸다")
+    void staleRiotCountDropped_limitKept() {
+        limiter.observe("asia", "match-v5.match",
+                new RiotLimitHeaders("500:10,30000:600", "3:10,40:600", null, null));
+        clock.addAndGet(10_000);
+
+        metrics.refresh();
+
+        assertThat(gauge("riot.ratelimit.observed.count", "asia", "app", "10")).isNull();
+        assertThat(observedCount("asia", "app", "600")).isEqualTo(40);
+        assertThat(observedLimit("asia", "app", "10")).isEqualTo(500);
+        assertThat(gauge("riot.ratelimit.observed.limit", "asia", "match-v5.match", "10")).isNull();
+    }
+
+    @Test
+    @DisplayName("나중 응답의 헤더가 앞 값을 덮어쓰고, 한도 설정이 없는 method 도 Riot 값은 낸다")
+    void laterObservationOverwrites_unconfiguredMethodReported() {
+        limiter.observe("kr", "league-v4.entries", new RiotLimitHeaders("500:10", "1:10", "50:10", "1:10"));
+        limiter.observe("kr", "league-v4.entries", new RiotLimitHeaders("500:10", "2:10", "50:10", "2:10"));
+
+        metrics.refresh();
+
+        assertThat(observedCount("kr", "app", "10")).isEqualTo(2);
+        assertThat(observedLimit("kr", "league-v4.entries", "10")).isEqualTo(50);
+        assertThat(observedCount("kr", "league-v4.entries", "10")).isEqualTo(2);
+        assertThat(gauge("riot.ratelimit.limit", "kr", "league-v4.entries", "10")).isNull();
+    }
+
+    @Test
+    @DisplayName("시계를 주지 않으면 기록·읽기 모두 Redis TIME 을 써서 방금 받은 집계 수를 낸다")
+    void redisClock_freshCountReported() {
+        RiotAPIProperties properties = new RiotAPIProperties();
+        RedisRiotRateLimiter redisClockLimiter = new RedisRiotRateLimiter(redisson, properties, null, registry);
+        RiotRateLimitMetrics redisClockMetrics = new RiotRateLimitMetrics(redisClockLimiter, redisson, registry, null);
+        redisClockLimiter.observe("asia", "match-v5.match", new RiotLimitHeaders("500:10", "4:10", null, null));
+
+        redisClockMetrics.refresh();
+
+        assertThat(observedCount("asia", "app", "10")).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("Riot 값은 마지막으로 받은 뒤 하루가 지나면 Redis 에서 사라진다")
+    void observedKeysExpireAfterADay() {
+        limiter.observe("asia", "match-v5.match", new RiotLimitHeaders("500:10", "1:10", "2000:10", "1:10"));
+
+        assertThat(redisson.getKeys().remainTimeToLive("riot:rl:observed:asia|app"))
+                .isBetween(86_000_000L, 86_400_000L);
+        assertThat(redisson.getKeys().remainTimeToLive("riot:rl:observed:asia|m|match-v5.match"))
+                .isBetween(86_000_000L, 86_400_000L);
+    }
+
+    @Test
     @DisplayName("Redis 를 읽지 못해도 예외를 던지지 않는다")
     void redisFailure_doesNotThrow() {
         RedissonClient broken = mock(RedissonClient.class);
@@ -152,6 +228,18 @@ class RiotRateLimitMetricsTest {
 
     private double cap(String routing, String bucket, String window) {
         return value("riot.ratelimit.cap", routing, bucket, window);
+    }
+
+    private double limit(String routing, String bucket, String window) {
+        return value("riot.ratelimit.limit", routing, bucket, window);
+    }
+
+    private double observedLimit(String routing, String bucket, String window) {
+        return value("riot.ratelimit.observed.limit", routing, bucket, window);
+    }
+
+    private double observedCount(String routing, String bucket, String window) {
+        return value("riot.ratelimit.observed.count", routing, bucket, window);
     }
 
     private double value(String name, String routing, String bucket, String window) {

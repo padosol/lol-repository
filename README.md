@@ -170,14 +170,21 @@ routing 마다 Lua `riot-permit.lua` 한 번으로 정지 → app → method →
 4. **응답 뒤** — `RiotCallRecorder` 는 응답 상태를 세고, 429 면 `Retry-After`(없으면 1초) 동안 정지 키 `riot:rl:pause:{bucket}` 을 SET 한다
    (`X-Rate-Limit-Type` 이 `application` 이면 routing 전체, 그 밖이면 그 method). 허가 Lua 가 그 키를 보고 거절하므로 모든 인스턴스가 함께 멈춘다.
    한도는 허가 시각으로만 센다(응답 시각으로 옮기지 않고, 응답 헤더로 배우지 않는다). **어떤 응답도 다시 보내지 않는다.**
+   응답에 한도 헤더(`X-App-Rate-Limit`·`X-Method-Rate-Limit` 와 각 `-Count`)가 있으면 버킷마다 해시 `riot:rl:observed:{bucket}` 에
+   원문과 받은 시각을 덮어쓴다(마지막 응답 뒤 하루 동안 남는다). 비교용이고 허가 상한은 바꾸지 않는다.
    429·5xx·IO·시간 초과는 호출하는 쪽이 메시지 단위로 1초 뒤 시도 수를 올려 다시 넣는다 (갱신 단계 `attempt`, 매치 적재 큐 `x-attempt` 헤더, 매치 찾기 `attempt`). 상한에 닿으면 갱신은 실패, 매치 적재는 DLX, 매치 찾기는 버린다.
 5. **갱신 매치 단계** — 사용자 경로는 최근 3게임의 타임라인만 받는다. 나머지는 매치 적재 큐의 `TIMELINE_LATER` 순위(`DEFERRED`, 타임라인만, 배치 저장)로 보내 나중에 채운다.
    최근 3게임 타임라인은 갱신 성공 조건이 아니다.
 6. **메트릭** — `riot.permit.requests{routing,priority,result}`(허가 요청 수. result 는 `granted` 또는 거절 사유 `app`·`method`·`paused`·`background`·`unknown`),
    `riot.api.responses{status,host}`, `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별).
    남은 한도는 `RiotRateLimitMetrics` 가 1초마다 Redis 를 읽어 낸다: `riot.ratelimit.used{routing,bucket,window}`(창 안 허가 수),
-   `riot.ratelimit.cap{...}`(상한, 유저 활동 중 낮춤 전), `riot.ratelimit.pause.remaining{routing,bucket}`(429 정지 남은 초).
-   bucket 은 `app`·method 이름·`background` 이고, Redis 에 기록이 있는 규칙·정지만 나온다. 대시보드 "남은 한도" 패널은 `cap - used` 다.
+   `riot.ratelimit.cap{...}`(상한, 유저 활동 중 낮춤 전), `riot.ratelimit.limit{...}`(설정 한도),
+   `riot.ratelimit.pause.remaining{routing,bucket}`(429 정지 남은 초).
+   Riot 이 알려 준 값은 `riot.ratelimit.observed.limit{routing,bucket,window}`(한도)와 `riot.ratelimit.observed.count{...}`(그 창의
+   집계 수. 받은 뒤 그 창이 지나면 나오지 않는다)다.
+   bucket 은 `app`·method 이름·`background` 이고, Redis 에 기록이 있는 것만 나온다. 대시보드 "남은 한도" 패널은 `cap - used` 이고,
+   "한도·사용량 비교" 표와 "사용량 비교" 그래프가 설정·우리 값과 Riot 값을 나란히 보여 준다. 두 사용량은 똑같지 않다
+   (우리는 지금부터 거슬러 세고 Riot 은 창을 끊어 센다). Riot 쪽이 꾸준히 크면 같은 API 키를 다른 곳에서도 쓰고 있다는 단서다.
 
 PostgreSQL 적재는 두 단계로 흡수:
 - **인-메모리 큐 + 1 초 flush** — `MatchBatchProcessor` 가 매치를 모아 `@Scheduled(fixedRate=1000)` 로 일괄 flush.

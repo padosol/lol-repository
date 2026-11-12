@@ -7,6 +7,7 @@ import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
+import com.mmrtr.lol.infra.riot.ratelimit.RiotLimitHeaders;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
@@ -36,8 +37,8 @@ class RiotCallRecorderTest {
     private final RiotCallRecorder recorder = new RiotCallRecorder(limiter, new RiotAPIProperties(), meterRegistry);
 
     @Test
-    @DisplayName("429 가 아닌 응답(200·404·500·IO 예외) 뒤에는 한도 관리자를 부르지 않는다")
-    void nonRateLimitedResponses_doNotTouchLimiter() {
+    @DisplayName("429 가 아닌 응답(200·404·500·IO 예외) 뒤에는 정지하지 않는다")
+    void nonRateLimitedResponses_doNotPause() {
         // given
         HttpHeaders headers = new HttpHeaders();
         headers.add("X-App-Rate-Limit", "500:10");
@@ -61,6 +62,63 @@ class RiotCallRecorderTest {
         assertThat(responses("200")).isEqualTo(1);
         assertThat(responses("404")).isEqualTo(1);
         assertThat(responses("500")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("한도 헤더가 있는 응답(200·404·429·500)마다 routing·method 와 헤더 네 개를 한도 관리자에 넘긴다")
+    void forwardsRateLimitHeaders_onEveryResponseWithHeaders() {
+        // given
+        HttpHeaders headers = limitHeaders();
+
+        // when
+        recorder.exchange(permit("ok"), HOST, () -> ResponseEntity.ok().headers(headers).body("body"));
+        assertThatThrownBy(() -> recorder.exchange(permit("404"), HOST, () -> {
+            throw new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "x", LogLevel.WARN, headers);
+        })).isInstanceOf(RiotClientNotFoundException.class);
+        assertThatThrownBy(() -> recorder.exchange(permit("429"), HOST, () -> {
+            throw new RiotRateLimitException(Duration.ofSeconds(1), "method", HttpStatus.TOO_MANY_REQUESTS, "",
+                    LogLevel.WARN, headers);
+        })).isInstanceOf(RiotRateLimitException.class);
+        assertThatThrownBy(() -> recorder.exchange(permit("5xx"), HOST, () -> {
+            throw new RiotServerException(HttpStatus.INTERNAL_SERVER_ERROR, "x", headers);
+        })).isInstanceOf(RiotServerException.class);
+
+        // then
+        String expected = "asia|" + METHOD + "|500:10,30000:600|3:10,40:600|2000:10|3:10";
+        assertThat(limiter.observations).containsExactly(expected, expected, expected, expected);
+    }
+
+    @Test
+    @DisplayName("한도 헤더가 하나도 없는 응답과 IO 예외는 넘기지 않고, 일부만 있으면 없는 값은 null 로 넘긴다")
+    void missingRateLimitHeaders() {
+        // given
+        HttpHeaders appOnly = new HttpHeaders();
+        appOnly.add("X-App-Rate-Limit", "20:1");
+
+        // when
+        recorder.exchange(permit("plain"), HOST, () -> ResponseEntity.ok().body("body"));
+        assertThatThrownBy(() -> recorder.exchange(permit("io"), HOST, () -> {
+            throw new ResourceAccessException("I/O error", new IOException("reset"));
+        })).isInstanceOf(ResourceAccessException.class);
+        recorder.exchange(permit("app-only"), HOST, () -> ResponseEntity.ok().headers(appOnly).body("body"));
+
+        // then
+        assertThat(limiter.observations).containsExactly("asia|" + METHOD + "|20:1|null|null|null");
+    }
+
+    @Test
+    @DisplayName("한도 헤더 기록이 실패해도 응답 본문은 그대로 돌려준다")
+    void observeFailure_stillReturnsBody() {
+        // given
+        limiter.observeFailure = new IllegalStateException("redis down");
+
+        // when
+        String body = recorder.exchange(permit("ok"), HOST,
+                () -> ResponseEntity.ok().headers(limitHeaders()).body("body"));
+
+        // then
+        assertThat(body).isEqualTo("body");
+        assertThat(responses("200")).isEqualTo(1);
     }
 
     @Test
@@ -120,6 +178,15 @@ class RiotCallRecorderTest {
         })).isInstanceOf(RiotRateLimitException.class);
     }
 
+    private static HttpHeaders limitHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-App-Rate-Limit", "500:10,30000:600");
+        headers.add("X-App-Rate-Limit-Count", "3:10,40:600");
+        headers.add("X-Method-Rate-Limit", "2000:10");
+        headers.add("X-Method-Rate-Limit-Count", "3:10");
+        return headers;
+    }
+
     private static RiotRateLimitException rateLimited(Duration retryAfter, String type) {
         return new RiotRateLimitException(retryAfter, type, HttpStatus.TOO_MANY_REQUESTS, "", LogLevel.WARN);
     }
@@ -148,7 +215,18 @@ class RiotCallRecorderTest {
 
     static class FakeLimiter implements RiotRateLimiter {
         final List<String> pauses = new ArrayList<>();
+        final List<String> observations = new ArrayList<>();
         RuntimeException pauseFailure;
+        RuntimeException observeFailure;
+
+        @Override
+        public synchronized void observe(String routing, String method, RiotLimitHeaders headers) {
+            if (observeFailure != null) {
+                throw observeFailure;
+            }
+            observations.add(String.join("|", routing, method, headers.appLimit(), headers.appCount(),
+                    headers.methodLimit(), headers.methodCount()));
+        }
 
         @Override
         public synchronized void pause(String routing, String methodOrNull, Duration duration) {

@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.LongSupplier;
+import java.util.function.UnaryOperator;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
@@ -40,6 +41,9 @@ import org.springframework.stereotype.Component;
  * routing 마다 따로 센다.
  *
  * <p>기록은 재시작해도 지우지 않는다. 기동 시 초기화를 하지 않으므로 여러 인스턴스가 같은 예산을 나눠 쓴다.
+ *
+ * <p>Riot 이 응답 헤더로 알려 준 한도·집계 수는 버킷마다 해시({@code riot:rl:observed:{bucket}})에 덮어써 지표로 비교만 한다.
+ * 허가 상한은 설정 값 그대로다.
  */
 @Slf4j
 @Component
@@ -48,6 +52,8 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
     private static final String PREFIX = "riot:rl:";
     /** 백필 전용 규칙의 창(초). */
     private static final int BACKGROUND_WINDOW_SECONDS = 1;
+    /** Riot 헤더 기록 해시의 수명. 응답을 받을 때마다 다시 늘린다. */
+    private static final Duration OBSERVED_TTL = Duration.ofDays(1);
 
     private final RedissonClient redissonClient;
     private final RiotAPIProperties.RateLimit config;
@@ -55,6 +61,7 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
     private final MeterRegistry meterRegistry;
     private final RiotLimits limits;
     private final LuaScript permitScript = new LuaScript("ratelimit/riot-permit.lua");
+    private final LuaScript observeScript = new LuaScript("ratelimit/riot-observe.lua");
 
     @Autowired
     public RedisRiotRateLimiter(RedissonClient redissonClient, RiotAPIProperties properties,
@@ -212,15 +219,14 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         }
         int backgroundMax = config.getBackgroundMaxPerSecond();
         if (priority == RiotCallPriority.BACKGROUND && backgroundMax > 0) {
-            result.add(new PermitRule(new Rule(ruleKey(backgroundBucket(routing), BACKGROUND_WINDOW_SECONDS),
-                    backgroundMax, BACKGROUND_WINDOW_SECONDS * 1000L), RuleKind.BACKGROUND, ""));
+            result.add(new PermitRule(backgroundRule(routing, backgroundMax), RuleKind.BACKGROUND, ""));
         }
         return result;
     }
 
     /**
      * 지표용: 모든 routing(Platform 의 regional·platform 호스트)에서 쓸 수 있는 규칙. 순서는 routing → app → method → 백필이다.
-     * 상한은 허가 때와 같고(유저 활동 중 낮춤 전), 설정에서 만들므로 실행 중에 바뀌지 않는다.
+     * 한도는 설정 값, 상한은 허가 때와 같고(유저 활동 중 낮춤 전), 설정에서 만들므로 실행 중에 바뀌지 않는다.
      */
     List<MonitoredRule> monitoredRules() {
         List<MonitoredRule> result = new ArrayList<>();
@@ -234,22 +240,30 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
                 }
             }
             if (backgroundMax > 0) {
-                result.add(new MonitoredRule(routing, "background", BACKGROUND_WINDOW_SECONDS,
-                        ruleKey(backgroundBucket(routing), BACKGROUND_WINDOW_SECONDS), backgroundMax));
+                result.add(MonitoredRule.of(routing, "background", backgroundRule(routing, backgroundMax)));
             }
         });
         return result;
     }
 
     /** 지표용: 모든 routing 의 정지 키 (app, 그 routing 으로 가는 각 method). 한도 설정이 없는 method 도 429 로 정지될 수 있다. */
-    List<MonitoredPause> monitoredPauses() {
-        List<MonitoredPause> result = new ArrayList<>();
+    List<MonitoredBucket> monitoredPauses() {
+        return monitoredBuckets(RedisRiotRateLimiter::pauseKey);
+    }
+
+    /** 지표용: 모든 routing 의 Riot 헤더 기록 해시 (app, 그 routing 으로 가는 각 method). 한도 설정이 없는 method 도 있다. */
+    List<MonitoredBucket> monitoredObservations() {
+        return monitoredBuckets(RedisRiotRateLimiter::observedKey);
+    }
+
+    private static List<MonitoredBucket> monitoredBuckets(UnaryOperator<String> keyOf) {
+        List<MonitoredBucket> result = new ArrayList<>();
         allRoutings().forEach((routing, kind) -> {
-            result.add(new MonitoredPause(routing, "app", pauseKey(appBucket(routing))));
+            result.add(new MonitoredBucket(routing, "app", keyOf.apply(appBucket(routing))));
             for (RiotMethod method : RiotMethod.values()) {
                 if (method.routing() == kind) {
-                    result.add(new MonitoredPause(routing, method.methodName(),
-                            pauseKey(methodBucket(routing, method.methodName()))));
+                    result.add(new MonitoredBucket(routing, method.methodName(),
+                            keyOf.apply(methodBucket(routing, method.methodName()))));
                 }
             }
         });
@@ -278,6 +292,32 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         redissonClient.getBucket(pauseKey(bucket), StringCodec.INSTANCE).set("1", Duration.ofMillis(millis));
     }
 
+    /** 헤더가 있는 버킷(app, method)마다 해시 하나에 limit·count 원문과 받은 시각을 덮어쓰고 수명을 {@link #OBSERVED_TTL} 로 늘린다. */
+    @Override
+    public void observe(String routing, String method, RiotLimitHeaders headers) {
+        List<Object> keys = new ArrayList<>();
+        List<Object> args = new ArrayList<>();
+        args.add(nowArg());
+        args.add(String.valueOf(OBSERVED_TTL.toMillis()));
+        if (headers.hasApp()) {
+            keys.add(observedKey(appBucket(routing)));
+            args.add(orEmpty(headers.appLimit()));
+            args.add(orEmpty(headers.appCount()));
+        }
+        if (method != null && headers.hasMethod()) {
+            keys.add(observedKey(methodBucket(routing, method)));
+            args.add(orEmpty(headers.methodLimit()));
+            args.add(orEmpty(headers.methodCount()));
+        }
+        if (!keys.isEmpty()) {
+            observeScript.eval(keys, args.toArray());
+        }
+    }
+
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
     /** 규칙 ZSET 키. bucket 은 {@code {routing}|app}, {@code {routing}|m|{method}}, {@code {routing}|bg} 다. */
     static String ruleKey(String bucket, int windowSeconds) {
         return PREFIX + "w:" + bucket + ":" + windowSeconds;
@@ -288,9 +328,16 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         List<Rule> rules = new ArrayList<>();
         for (RateLimitWindow window : windows) {
             int cap = Math.max(1, (int) Math.floor(window.limit() * config.getSafetyRatio()));
-            rules.add(new Rule(ruleKey(bucket, window.windowSeconds()), cap, window.windowSeconds() * 1000L));
+            rules.add(new Rule(ruleKey(bucket, window.windowSeconds()), window.limit(), cap,
+                    window.windowSeconds() * 1000L));
         }
         return rules;
+    }
+
+    /** 백필 전용 1초 규칙. 한도와 상한이 모두 backgroundMax 다. */
+    private static Rule backgroundRule(String routing, int backgroundMax) {
+        return new Rule(ruleKey(backgroundBucket(routing), BACKGROUND_WINDOW_SECONDS), backgroundMax, backgroundMax,
+                BACKGROUND_WINDOW_SECONDS * 1000L);
     }
 
     /** 유저 활동 중 낮춤 규칙의 상한에 곱할 비율. 설정이 [0, 1] 밖이면 그 끝으로 자른다 (상한을 넘겨 쓰지 않게). */
@@ -323,6 +370,10 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return PREFIX + "pause:" + bucket;
     }
 
+    private static String observedKey(String bucket) {
+        return PREFIX + "observed:" + bucket;
+    }
+
     private static boolean isNoScript(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
             if (t.getMessage() != null && t.getMessage().contains("NOSCRIPT")) {
@@ -332,14 +383,16 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return false;
     }
 
-    private record Rule(String key, int cap, long windowMs) {
+    /** limit 은 설정 한도, cap 은 허가 상한(한도 × safetyRatio) 이다. */
+    private record Rule(String key, int limit, int cap, long windowMs) {
     }
 
-    /** 지표용 규칙. bucket 은 app, method 이름, background 중 하나다. */
-    record MonitoredRule(String routing, String bucket, int windowSeconds, String key, int cap) {
+    /** 지표용 규칙. bucket 은 app, method 이름, background 중 하나다. limit 은 설정 한도, cap 은 허가 상한이다. */
+    record MonitoredRule(String routing, String bucket, int windowSeconds, String key, int limit, int cap) {
 
         private static MonitoredRule of(String routing, String bucket, Rule rule) {
-            return new MonitoredRule(routing, bucket, (int) (rule.windowMs() / 1000), rule.key(), rule.cap());
+            return new MonitoredRule(routing, bucket, (int) (rule.windowMs() / 1000), rule.key(), rule.limit(),
+                    rule.cap());
         }
 
         long windowMs() {
@@ -347,8 +400,8 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         }
     }
 
-    /** 지표용 정지 키. bucket 은 app 또는 method 이름이다. */
-    record MonitoredPause(String routing, String bucket, String key) {
+    /** 지표용 버킷 키 (정지 키 또는 Riot 헤더 기록 해시). bucket 은 app 또는 method 이름이다. */
+    record MonitoredBucket(String routing, String bucket, String key) {
     }
 
     /**

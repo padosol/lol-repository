@@ -4,6 +4,7 @@ import com.mmrtr.lol.infra.riot.config.RiotAPIProperties;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
+import com.mmrtr.lol.infra.riot.ratelimit.RiotLimitHeaders;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
 import com.mmrtr.lol.support.riot.RiotPermit;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -11,6 +12,7 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -20,9 +22,10 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  *   <li>응답 상태를 {@code riot.api.responses{status,host}} 로 센다.</li>
+ *   <li>한도 헤더(4xx·5xx 포함)가 있으면 {@link RiotRateLimiter#observe} 로 남긴다. 비교용이고 허가 상한은 바꾸지 않는다.</li>
  *   <li>429 면 {@link RiotRateLimitException} 의 Retry-After·X-Rate-Limit-Type 으로 정지한 뒤 그대로 던진다.</li>
  * </ul>
- * 그 밖의 응답 뒤에는 한도 관리자를 부르지 않는다. 정지의 실패는 호출을 실패시키지 않는다 (경고 로그만 남긴다).
+ * 응답 뒤 일의 실패는 호출을 실패시키지 않는다 (경고 로그만 남긴다).
  */
 @Slf4j
 @Component
@@ -50,24 +53,29 @@ public class RiotCallRecorder {
         String method = permit.method().methodName();
         try {
             ResponseEntity<T> response = call.get();
-            countResponse(hostName, response.getStatusCode());
+            afterResponse(routing, hostName, method, response.getStatusCode(), response.getHeaders());
             return response.getBody();
         } catch (RiotClientException e) {
-            countResponse(hostName, e.getStatus());
+            afterResponse(routing, hostName, method, e.getStatus(), e.getHeaders());
             if (e instanceof RiotRateLimitException rateLimited) {
                 on429(routing, method, rateLimited);
             }
             throw e;
         } catch (RiotServerException e) {
-            countResponse(hostName, e.getStatus());
+            afterResponse(routing, hostName, method, e.getStatus(), e.getHeaders());
             throw e;
         }
     }
 
-    private void countResponse(String hostName, HttpStatusCode status) {
+    private void afterResponse(String routing, String hostName, String method, HttpStatusCode status,
+                               HttpHeaders headers) {
         if (status != null) {
             meterRegistry.counter("riot.api.responses",
                     "status", String.valueOf(status.value()), "host", hostName).increment();
+        }
+        RiotLimitHeaders limitHeaders = RiotLimitHeaders.from(headers);
+        if (!limitHeaders.isEmpty()) {
+            safely("observe", routing, method, () -> limiter.observe(routing, method, limitHeaders));
         }
     }
 

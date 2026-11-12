@@ -22,4 +22,14 @@ class RateLimitWindowTest {
         assertThat(RateLimitWindow.parse("")).isEmpty();
         assertThat(RateLimitWindow.parse(null)).isEmpty();
     }
+
+    @Test
+    @DisplayName("Count 헤더는 0 도 읽고, 창이 0 이하이거나 잘못된 항목은 건너뛴다")
+    void parseCounts_allowsZeroCount() {
+        assertThat(RateLimitWindow.parseCounts("0:10,40:600"))
+                .containsExactly(new RateLimitWindow(0, 10), new RateLimitWindow(40, 600));
+        assertThat(RateLimitWindow.parseCounts("abc,-1:10,3:0,3:10"))
+                .containsExactly(new RateLimitWindow(3, 10));
+        assertThat(RateLimitWindow.parseCounts(null)).isEmpty();
+    }
 }
