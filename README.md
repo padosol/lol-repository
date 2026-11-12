@@ -175,6 +175,9 @@ routing 마다 Lua `riot-permit.lua` 한 번으로 정지 → app → method →
    최근 3게임 타임라인은 갱신 성공 조건이 아니다.
 6. **메트릭** — `riot.permit.requests{routing,priority,result}`(허가 요청 수. result 는 `granted` 또는 거절 사유 `app`·`method`·`paused`·`background`·`unknown`),
    `riot.api.responses{status,host}`, `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별).
+   남은 한도는 `RiotRateLimitMetrics` 가 1초마다 Redis 를 읽어 낸다: `riot.ratelimit.used{routing,bucket,window}`(창 안 허가 수),
+   `riot.ratelimit.cap{...}`(상한, 유저 활동 중 낮춤 전), `riot.ratelimit.pause.remaining{routing,bucket}`(429 정지 남은 초).
+   bucket 은 `app`·method 이름·`background` 이고, Redis 에 기록이 있는 규칙·정지만 나온다. 대시보드 "남은 한도" 패널은 `cap - used` 다.
 
 PostgreSQL 적재는 두 단계로 흡수:
 - **인-메모리 큐 + 1 초 flush** — `MatchBatchProcessor` 가 매치를 모아 `@Scheduled(fixedRate=1000)` 로 일괄 flush.

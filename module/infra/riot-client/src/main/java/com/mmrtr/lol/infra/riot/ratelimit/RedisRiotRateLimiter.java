@@ -218,6 +218,55 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
         return result;
     }
 
+    /**
+     * 지표용: 모든 routing(Platform 의 regional·platform 호스트)에서 쓸 수 있는 규칙. 순서는 routing → app → method → 백필이다.
+     * 상한은 허가 때와 같고(유저 활동 중 낮춤 전), 설정에서 만들므로 실행 중에 바뀌지 않는다.
+     */
+    List<MonitoredRule> monitoredRules() {
+        List<MonitoredRule> result = new ArrayList<>();
+        int backgroundMax = config.getBackgroundMaxPerSecond();
+        allRoutings().forEach((routing, kind) -> {
+            windowRules(appBucket(routing), limits.app()).forEach(r -> result.add(MonitoredRule.of(routing, "app", r)));
+            for (RiotMethod method : RiotMethod.values()) {
+                if (method.routing() == kind) {
+                    windowRules(methodBucket(routing, method.methodName()), limits.windowsOf(method))
+                            .forEach(r -> result.add(MonitoredRule.of(routing, method.methodName(), r)));
+                }
+            }
+            if (backgroundMax > 0) {
+                result.add(new MonitoredRule(routing, "background", BACKGROUND_WINDOW_SECONDS,
+                        ruleKey(backgroundBucket(routing), BACKGROUND_WINDOW_SECONDS), backgroundMax));
+            }
+        });
+        return result;
+    }
+
+    /** 지표용: 모든 routing 의 정지 키 (app, 그 routing 으로 가는 각 method). 한도 설정이 없는 method 도 429 로 정지될 수 있다. */
+    List<MonitoredPause> monitoredPauses() {
+        List<MonitoredPause> result = new ArrayList<>();
+        allRoutings().forEach((routing, kind) -> {
+            result.add(new MonitoredPause(routing, "app", pauseKey(appBucket(routing))));
+            for (RiotMethod method : RiotMethod.values()) {
+                if (method.routing() == kind) {
+                    result.add(new MonitoredPause(routing, method.methodName(),
+                            pauseKey(methodBucket(routing, method.methodName()))));
+                }
+            }
+        });
+        return result;
+    }
+
+    /** Platform 의 regional·platform 호스트에서 나오는 routing 과 그 종류. 여러 platform 이 같은 regional 을 쓴다. */
+    private static Map<String, RiotMethod.Routing> allRoutings() {
+        Map<String, RiotMethod.Routing> routings = new LinkedHashMap<>();
+        for (Platform platform : Platform.values()) {
+            for (RiotMethod.Routing kind : RiotMethod.Routing.values()) {
+                routings.putIfAbsent(routingOf(platform, kind), kind);
+            }
+        }
+        return routings;
+    }
+
     /** 정지 키 하나를 duration 만료로 쓴다 (값은 "1"). 허가 Lua 는 키가 있는지만 본다. 나중 정지가 앞 정지를 덮어쓴다. */
     @Override
     public void pause(String routing, String methodOrNull, Duration duration) {
@@ -284,6 +333,22 @@ public class RedisRiotRateLimiter implements RiotRateLimiter, RiotPermitPort {
     }
 
     private record Rule(String key, int cap, long windowMs) {
+    }
+
+    /** 지표용 규칙. bucket 은 app, method 이름, background 중 하나다. */
+    record MonitoredRule(String routing, String bucket, int windowSeconds, String key, int cap) {
+
+        private static MonitoredRule of(String routing, String bucket, Rule rule) {
+            return new MonitoredRule(routing, bucket, (int) (rule.windowMs() / 1000), rule.key(), rule.cap());
+        }
+
+        long windowMs() {
+            return windowSeconds * 1000L;
+        }
+    }
+
+    /** 지표용 정지 키. bucket 은 app 또는 method 이름이다. */
+    record MonitoredPause(String routing, String bucket, String key) {
     }
 
     /**

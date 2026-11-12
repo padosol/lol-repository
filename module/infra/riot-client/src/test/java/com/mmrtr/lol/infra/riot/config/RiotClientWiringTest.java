@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.mmrtr.lol.infra.riot.ratelimit.RedisRiotRateLimiter;
+import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimitMetrics;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.infra.riot.service.RiotCallRecorder;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
@@ -31,6 +32,7 @@ class RiotClientWiringTest {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(RiotAPIProperties.class);
             assertThat(context).hasSingleBean(RedisRiotRateLimiter.class);
+            assertThat(context).hasSingleBean(RiotRateLimitMetrics.class);
             assertThat(context).hasSingleBean(RiotApiService.class);
             assertThat(context).hasSingleBean(RiotCallRecorder.class);
             assertThat(context).hasSingleBean(RiotPermitPort.class);
