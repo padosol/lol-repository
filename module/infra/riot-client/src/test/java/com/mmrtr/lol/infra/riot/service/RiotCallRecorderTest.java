@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -122,6 +123,56 @@ class RiotCallRecorderTest {
     }
 
     @Test
+    @DisplayName("호출마다 걸린 시간을 호스트·method·결과(ok·error)별로 남긴다")
+    void recordsCallDuration_byResult() {
+        // when
+        recorder.exchange(permit("ok"), HOST, () -> ResponseEntity.ok().body("body"));
+        assertThatThrownBy(() -> recorder.exchange(permit("404"), HOST, () -> {
+            throw new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "x", LogLevel.WARN);
+        })).isInstanceOf(RiotClientNotFoundException.class);
+        assertThatThrownBy(() -> recorder.exchange(permit("io"), HOST, () -> {
+            throw new ResourceAccessException("I/O error", new IOException("reset"));
+        })).isInstanceOf(ResourceAccessException.class);
+
+        // then
+        assertThat(callCount("ok")).isEqualTo(1);
+        assertThat(callCount("error")).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("응답 헤더를 받지 못한 호출(인터셉터를 거치지 않은 호출 포함)은 대기·받기 시간과 크기를 남기지 않는다")
+    void noHeaders_noWaitDownloadOrSize() {
+        // when
+        recorder.exchange(permit("ok"), HOST, () -> ResponseEntity.ok().body("body"));
+
+        // then
+        assertThat(meterRegistry.find("riot.api.call.wait").timer()).isNull();
+        assertThat(meterRegistry.find("riot.api.call.download").timer()).isNull();
+        assertThat(meterRegistry.find("riot.api.response.size").summary()).isNull();
+    }
+
+    @Test
+    @DisplayName("호출 중에는 그 호스트의 진행 중 호출 수가 1 이고, 끝나면 0 이며 호출 기록도 스레드에서 지운다")
+    void inflightDuringCall_andTimingClearedAfter() {
+        // given
+        AtomicReference<Double> during = new AtomicReference<>();
+        AtomicReference<RiotCallTiming> timingDuring = new AtomicReference<>();
+
+        // when
+        recorder.exchange(permit("ok"), HOST, () -> {
+            during.set(inflight());
+            timingDuring.set(RiotCallTiming.current());
+            return ResponseEntity.ok().body("body");
+        });
+
+        // then
+        assertThat(during.get()).isEqualTo(1.0);
+        assertThat(inflight()).isZero();
+        assertThat(timingDuring.get()).isNotNull();
+        assertThat(RiotCallTiming.current()).isNull();
+    }
+
+    @Test
     @DisplayName("429 는 type 이 application 이면 routing 전체, 그 밖(없음 포함)이면 그 method 를 Retry-After 만큼 정지한다")
     void pausesOn429ByType() {
         // when
@@ -206,6 +257,17 @@ class RiotCallRecorderTest {
         var counter = meterRegistry.find("riot.api.responses")
                 .tags("status", status, "host", "asia.api.riotgames.com").counter();
         return counter == null ? 0 : counter.count();
+    }
+
+    private long callCount(String result) {
+        var timer = meterRegistry.find("riot.api.call.duration")
+                .tags("host", "asia.api.riotgames.com", "method", METHOD, "result", result).timer();
+        return timer == null ? 0 : timer.count();
+    }
+
+    private double inflight() {
+        var gauge = meterRegistry.find("riot.api.inflight").tags("host", "asia.api.riotgames.com").gauge();
+        return gauge == null ? -1 : gauge.value();
     }
 
     private double rateLimited(String type) {

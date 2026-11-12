@@ -177,6 +177,9 @@ routing 마다 Lua `riot-permit.lua` 한 번으로 정지 → app → method →
    최근 3게임 타임라인은 갱신 성공 조건이 아니다.
 6. **메트릭** — `riot.permit.requests{routing,priority,result}`(허가 요청 수. result 는 `granted` 또는 거절 사유 `app`·`method`·`paused`·`background`·`unknown`),
    `riot.api.responses{status,host}`, `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별).
+   호출 시간은 `riot.api.call.duration{host,method,result}`(보냄 → 본문 변환 끝)이고, 응답 헤더를 받은 호출은
+   `riot.api.call.wait{host,method}`(보냄 → 응답 헤더, Riot 이 답하기까지)·`riot.api.call.download{...}`(응답 헤더 → 본문 끝)과
+   `riot.api.response.size{...}`(받은 바이트)로 나눠 남긴다. `riot.api.inflight{host}` 는 진행 중 호출 수다. 대시보드 "Riot 호출 — 대기·받기·크기" 행.
    남은 한도는 `RiotRateLimitMetrics` 가 1초마다 Redis 를 읽어 낸다: `riot.ratelimit.used{routing,bucket,window}`(창 안 허가 수),
    `riot.ratelimit.cap{...}`(상한, 유저 활동 중 낮춤 전), `riot.ratelimit.limit{...}`(설정 한도),
    `riot.ratelimit.pause.remaining{routing,bucket}`(429 정지 남은 초).

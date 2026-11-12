@@ -7,9 +7,16 @@ import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotLimitHeaders;
 import com.mmrtr.lol.infra.riot.ratelimit.RiotRateLimiter;
 import com.mmrtr.lol.support.riot.RiotPermit;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -22,6 +29,9 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  *   <li>응답 상태를 {@code riot.api.responses{status,host}} 로 센다.</li>
+ *   <li>호출 시간을 {@code riot.api.call.duration{host,method,result}} 로 남긴다. 응답 헤더를 받았으면
+ *       {@link RiotCallTimingInterceptor} 가 잰 응답 대기({@code riot.api.call.wait})·받기({@code riot.api.call.download})
+ *       시간과 받은 바이트({@code riot.api.response.size})도 남긴다. 진행 중 호출 수는 {@code riot.api.inflight{host}} 다.</li>
  *   <li>한도 헤더(4xx·5xx 포함)가 있으면 {@link RiotRateLimiter#observe} 로 남긴다. 비교용이고 허가 상한은 바꾸지 않는다.</li>
  *   <li>429 면 {@link RiotRateLimitException} 의 Retry-After·X-Rate-Limit-Type 으로 정지한 뒤 그대로 던진다.</li>
  * </ul>
@@ -32,10 +42,17 @@ import org.springframework.stereotype.Component;
 public class RiotCallRecorder {
 
     private static final String UNKNOWN = "unknown";
+    private static final Duration[] LATENCY_BUCKETS = {
+        Duration.ofMillis(50), Duration.ofMillis(100), Duration.ofMillis(200), Duration.ofMillis(300),
+        Duration.ofMillis(500), Duration.ofMillis(750), Duration.ofSeconds(1), Duration.ofMillis(1500),
+        Duration.ofSeconds(2), Duration.ofSeconds(3), Duration.ofSeconds(5)};
+    private static final double[] SIZE_BUCKETS = {
+        10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_000_000, 4_000_000};
 
     private final RiotRateLimiter limiter;
     private final RiotAPIProperties.RateLimit props;
     private final MeterRegistry meterRegistry;
+    private final Map<String, AtomicInteger> inflight = new ConcurrentHashMap<>();
 
     public RiotCallRecorder(RiotRateLimiter limiter, RiotAPIProperties properties, MeterRegistry meterRegistry) {
         this.limiter = limiter;
@@ -52,7 +69,7 @@ public class RiotCallRecorder {
         String routing = routingOf(hostName);
         String method = permit.method().methodName();
         try {
-            ResponseEntity<T> response = call.get();
+            ResponseEntity<T> response = timed(hostName, method, call);
             afterResponse(routing, hostName, method, response.getStatusCode(), response.getHeaders());
             return response.getBody();
         } catch (RiotClientException e) {
@@ -65,6 +82,48 @@ public class RiotCallRecorder {
             afterResponse(routing, hostName, method, e.getStatus(), e.getHeaders());
             throw e;
         }
+    }
+
+    /** call 을 부르는 동안 시간 기록을 이 스레드에 두고 진행 중 호출 수를 센다. 던지지 않고 돌아오면 ok, 아니면 error 다. */
+    private <T> ResponseEntity<T> timed(String hostName, String method, Supplier<ResponseEntity<T>> call) {
+        AtomicInteger running = inflight.computeIfAbsent(hostName, host ->
+                meterRegistry.gauge("riot.api.inflight", Tags.of("host", host), new AtomicInteger()));
+        RiotCallTiming timing = RiotCallTiming.begin(System.nanoTime());
+        running.incrementAndGet();
+        boolean ok = false;
+        try {
+            ResponseEntity<T> response = call.get();
+            ok = true;
+            return response;
+        } finally {
+            long end = System.nanoTime();
+            RiotCallTiming.end();
+            running.decrementAndGet();
+            recordTiming(hostName, method, timing, ok, end);
+        }
+    }
+
+    private void recordTiming(String hostName, String method, RiotCallTiming timing, boolean ok, long endNanos) {
+        latency("riot.api.call.duration", "Riot 호출 시간 (보냄 → 본문 변환 끝)",
+                Tags.of("host", hostName, "method", method, "result", ok ? "ok" : "error"))
+                .record(timing.totalNanos(endNanos), TimeUnit.NANOSECONDS);
+        if (!timing.hasHeaders()) {
+            return;
+        }
+        Tags tags = Tags.of("host", hostName, "method", method);
+        latency("riot.api.call.wait", "Riot 응답 대기 시간 (보냄 → 응답 헤더)", tags)
+                .record(timing.waitNanos(), TimeUnit.NANOSECONDS);
+        latency("riot.api.call.download", "Riot 응답 받기 시간 (응답 헤더 → 본문 끝)", tags)
+                .record(timing.downloadNanos(endNanos), TimeUnit.NANOSECONDS);
+        DistributionSummary.builder("riot.api.response.size").baseUnit("bytes")
+                .description("Riot 응답 본문 크기 (압축을 푼 뒤가 아니라 받은 그대로)")
+                .tags(tags).serviceLevelObjectives(SIZE_BUCKETS).register(meterRegistry)
+                .record(timing.bytes());
+    }
+
+    private Timer latency(String name, String description, Tags tags) {
+        return Timer.builder(name).description(description).tags(tags)
+                .serviceLevelObjectives(LATENCY_BUCKETS).register(meterRegistry);
     }
 
     private void afterResponse(String routing, String hostName, String method, HttpStatusCode status,

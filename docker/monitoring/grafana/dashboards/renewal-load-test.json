@@ -2155,6 +2155,293 @@
     },
     {
       "type": "row",
+      "title": "Riot 호출 — 대기·받기·크기 (진단)",
+      "id": 46,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Riot 호출 시간 p95 (호스트·method)",
+      "description": "보냄부터 본문 변환 끝까지. 성공한 호출만. 버킷 경계(50ms~5s) 사이는 보간이라 대략값이다",
+      "id": 47,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 79
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, host, method) (rate(riot_api_call_duration_seconds_bucket{result=\"ok\"}[30s])))",
+          "legendFormat": "{{host}} {{method}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "응답 대기 vs 받기 평균 (호스트·method)",
+      "description": "대기 = 보냄 → 응답 헤더 (Riot 이 답하기까지), 받기 = 응답 헤더 → 본문 끝 (내려받기·변환). 대기가 늘면 Riot 쪽이, 받기가 늘면 우리 쪽 연결·대역폭이 의심된다",
+      "id": 48,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 79
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (host, method) (rate(riot_api_call_wait_seconds_sum[30s])) / sum by (host, method) (rate(riot_api_call_wait_seconds_count[30s]))",
+          "legendFormat": "대기 {{host}} {{method}}"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "B",
+          "expr": "sum by (host, method) (rate(riot_api_call_download_seconds_sum[30s])) / sum by (host, method) (rate(riot_api_call_download_seconds_count[30s]))",
+          "legendFormat": "받기 {{host}} {{method}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Riot 받은 양 / 초 (호스트)",
+      "description": "호스트별 응답 본문 바이트 / 초. 값이 일정한 선에서 더 오르지 않는데 받기 시간이 늘면 연결 하나의 대역폭이 찬 것이다",
+      "id": 49,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 79
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (host) (rate(riot_api_response_size_bytes_sum[30s]))",
+          "legendFormat": "{{host}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "응답 크기 평균 (method)",
+      "description": "method 별 응답 본문 평균 바이트 (받은 그대로)",
+      "id": 50,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 87
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (method) (rate(riot_api_response_size_bytes_sum[30s])) / sum by (method) (rate(riot_api_response_size_bytes_count[30s]))",
+          "legendFormat": "{{method}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "진행 중 Riot 호출 (호스트)",
+      "description": "그 순간 응답을 기다리거나 받는 중인 호출 수 (1초마다 찍은 값)",
+      "id": 51,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 87
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "expr": "max by (host) (riot_api_inflight)",
+          "legendFormat": "{{host}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
       "title": "DB 커넥션",
       "id": 32,
       "collapsed": false,
@@ -2162,7 +2449,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 78
+        "y": 95
       },
       "panels": []
     },
@@ -2179,7 +2466,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 79
+        "y": 96
       },
       "targets": [
         {
@@ -2251,7 +2538,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 79
+        "y": 96
       },
       "targets": [
         {

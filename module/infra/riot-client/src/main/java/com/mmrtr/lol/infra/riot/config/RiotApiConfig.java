@@ -4,6 +4,7 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
+import com.mmrtr.lol.infra.riot.service.RiotCallTimingInterceptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -62,6 +63,7 @@ public class RiotApiConfig {
                 .defaultHeader("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
                 .defaultHeader("Accept-Charset", "application/x-www-form-urlencoded; charset=UTF-8")
                 .requestInterceptor(logRequest())
+                .requestInterceptor(new RiotCallTimingInterceptor())
                 .defaultStatusHandler(status -> status.value() == 404, this::handleNotFound)
                 .defaultStatusHandler(status -> status.value() == 429, this::handleRateLimited)
                 .defaultStatusHandler(HttpStatusCode::is4xxClientError, this::handleClientError)
