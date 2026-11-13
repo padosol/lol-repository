@@ -4,7 +4,6 @@ import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.match.application.port.MatchApiPort;
 import com.mmrtr.lol.domain.match.application.port.MatchCacheWritePort;
 import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
-import com.mmrtr.lol.domain.match.application.usecase.SaveMatchDataUseCase;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
@@ -39,27 +38,24 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * 갱신 ④ 매치 단계. 최근 매치 id 20개(최신순)로 {@link RenewalMatchPlan} 을 만든다. 매치 대상은 DB 에 없는 매치,
- * 타임라인 대상은 앞 3개 중 타임라인이 DB 에 없는 것이다. 매치 대상을 레코드에 기록하고 선점한 뒤
- * {@link RenewalMatchFetcher} 로 묶음 허가를 받아 한꺼번에 받고, 받은 것을 한 번에 저장한다.
- * 못 받은 것은 넘긴다: 허가가 끝내 거절됐거나 match 가 429·5xx·IO·시간 초과로 실패한 매치는 매치 적재 큐에
- * 사용자 재시도 순위로, 타임라인을 받지 못한 것(저장한 매치·타임라인만 필요한 것)은 나중 타임라인 순위로 넘긴다.
- * match 가 4xx(429 제외)인 매치만 실패 표시를 남긴다(스펙 5.4). 실패 표시는 매치 단위라 그 매치를 대상으로 둔
- * 다른 갱신까지 match_failed 로 끝내므로, 매치 자체가 잘못된 경우에만 남긴다.
- * 계속 실패해 대상에서 뺀 매치는 버리지 않고 매치 적재 큐에 백필 순위로 넘긴다. 커서가 그 매치를 지나가도 잃지 않는다 (G8).
- * 매치 대상이 전부 저장되면 매치 비트를 켜고(최신 3게임 타임라인은 조건이 아니다), 아니면 판정기가 DB 를 보고 켠다.
- * 나중 타임라인 발행은 매치 비트 판단 뒤에 하고, 실패해도 갱신을 실패시키지 않는다.
- * 밖으로 던지는 예외는 첫 전달의 저장 실패뿐이다 (재전달받아 DB 에 쓴 뒤에만 ack 한다).
- *
- * <p>{@code lol.renewal.background.enabled=false} 면 추가 갱신(추가 매치 찾기·백필)으로 넘기지 않는다: 20개를 채워도 매치
- * 검색 큐에 넘기지 않고, 계속 실패해 뺀 매치도 백필로 넘기지 않는다(대상에서만 뺀다). 사용자 재시도·나중 타임라인은 그대로다.
+ * 갱신 ④ 매치 단계 (스펙 2026-11-13). 최근 매치 id 20개(최신순)를 받아 차례로 한다.
+ * <ol>
+ *   <li>20개면 21번째부터를 추가 매치 찾기 큐에 넘긴다 (추가 갱신이 켜졌을 때만).</li>
+ *   <li>DB 에 있는 매치와 다른 갱신이 선점한 매치를 뺀다. 그 매치를 기다리지 않는다.</li>
+ *   <li>남은 id 의 앞 3개는 매치와 타임라인, 나머지는 매치만 묶음 허가를 받고({@link RenewalMatchFetcher}),
+ *       허가된 id 를 선점(1분, 풀지 않음)한 뒤 부른다. 1개까지 줄여도 거절된 id 는 매치 적재 큐에 사용자 재시도로 넘긴다.</li>
+ *   <li>받은 매치를 요청자 캐시에 쓰고 매치 비트를 켠다. DB 는 {@link RenewalMatchSaver} 가 비동기로 저장한다.</li>
+ *   <li>타임라인 없이 받은 매치는 나중 타임라인으로 넘긴다. 발행 실패는 갱신을 실패시키지 않는다.</li>
+ * </ol>
+ * 부른 뒤 실패한 매치는 누락으로 두고 다시 받지 않는다. 거절 넘기기나 캐시 쓰기가 실패하면 갱신을 실패시키되,
+ * 받은 매치는 그대로 저장한다. 밖으로 예외를 던지지 않는다.
  */
 @Slf4j
 @Component
 public class RenewalMatchStep {
 
     private static final int MATCH_COUNT = 20;
-    private static final String EXCLUDED_METRIC = "lol.renewal.match_excluded";
+    private static final String MISSING_METRIC = "lol.renewal.match_missing";
     private static final String TIMELINE_LATER_PUBLISH_FAILED_METRIC = "lol.renewal.timeline_later.publish_failed";
 
     private final RenewalRecordPort recordPort;
@@ -67,7 +63,7 @@ public class RenewalMatchStep {
     private final RiotPermitPort permitPort;
     private final RenewalMatchFetcher fetcher;
     private final MatchRepositoryPort matchRepositoryPort;
-    private final SaveMatchDataUseCase saveMatchDataUseCase;
+    private final RenewalMatchSaver saver;
     private final MatchCacheWritePort matchCacheWritePort;
     private final RenewalMatchClaimService claimService;
     private final MessageSender messageSender;
@@ -80,7 +76,7 @@ public class RenewalMatchStep {
 
     public RenewalMatchStep(RenewalRecordPort recordPort, MatchApiPort matchApiPort, RiotPermitPort permitPort,
                             RenewalMatchFetcher fetcher, MatchRepositoryPort matchRepositoryPort,
-                            SaveMatchDataUseCase saveMatchDataUseCase, MatchCacheWritePort matchCacheWritePort,
+                            RenewalMatchSaver saver, MatchCacheWritePort matchCacheWritePort,
                             RenewalMatchClaimService claimService, MessageSender messageSender,
                             RenewalStepPublisher stepPublisher, RenewalFinisher finisher,
                             MeterRegistry meterRegistry, Executor requestExecutor,
@@ -90,7 +86,7 @@ public class RenewalMatchStep {
         this.permitPort = permitPort;
         this.fetcher = fetcher;
         this.matchRepositoryPort = matchRepositoryPort;
-        this.saveMatchDataUseCase = saveMatchDataUseCase;
+        this.saver = saver;
         this.matchCacheWritePort = matchCacheWritePort;
         this.claimService = claimService;
         this.messageSender = messageSender;
@@ -102,7 +98,7 @@ public class RenewalMatchStep {
         this.backgroundEnabled = backgroundEnabled;
     }
 
-    public void run(RenewalStepMessage message, boolean redelivered) {
+    public void run(RenewalStepMessage message) {
         String puuid = message.puuid();
         String renewalId = message.renewalId();
 
@@ -133,27 +129,28 @@ public class RenewalMatchStep {
             return;
         }
 
-        List<String> claimed = new ArrayList<>();
         try {
-            RenewalMatchPlan plan = plan(puuid, renewalId, platformName, ids);
-            // 대상이 0개여도 기록한다 (판정기가 대상이 준비됐는지 본다).
-            recordPort.recordTargets(puuid, renewalId, plan.matchTargets());
-            List<Item> items = claim(plan.items(), renewalId, claimed);
-            Result result = fetcher.fetch(platformName, items);
-            int savedMatches = save(puuid, result.fetched());
-            handOffForRetry(platformName, result);
-            releaseQuietly(claimed, renewalId);
-            if (savedMatches == plan.matchTargets().size()) {
-                finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.of(RenewalStep.MATCH)));
-            }
-            handOffTimelineLater(platformName, result);
             handOffRest(message, platformName, ids);
+            List<String> remaining = remaining(ids, renewalId);
+            Result result = fetcher.fetch(platformName, RenewalMatchPlan.items(remaining),
+                    matchId -> claimService.claim(matchId, renewalId));
+            List<MatchDto> matches = result.fetched().stream().map(Fetched::match).toList();
+            List<TimelineDto> timelines = result.fetched().stream()
+                    .map(Fetched::timeline).filter(Objects::nonNull).toList();
+            try {
+                handOffDenied(platformName, result.denied());
+                matchCacheWritePort.writeMatches(matches, timelines, puuid);
+                finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.of(RenewalStep.MATCH)));
+            } finally {
+                // 실패 경로에서도 받은 것은 저장한다 (스펙 4장 9단계)
+                saver.save(matches, timelines);
+            }
+            handOffTimelineLater(platformName, result.fetched());
+            countMissing("call_failed", result.failed().size());
+            countMissing("claimed_by_other", result.claimedElsewhere().size());
             failures.success();
-        } catch (MatchSaveFailure e) {
-            onSaveFailure(message, redelivered, claimed, e.failure);
         } catch (Exception e) {
             log.error("매치 단계 처리 실패. puuid={}", puuid, e);
-            releaseQuietly(claimed, renewalId);
             failures.fail(puuid, renewalId, e);
         }
     }
@@ -170,108 +167,6 @@ public class RenewalMatchStep {
         return Optional.of(ids == null ? List.of() : ids);
     }
 
-    /**
-     * 매치 대상과 타임라인 대상을 정한다. 계속 실패해 빠진 매치는 대상에서 빼고 로그와 지표({@code lol.renewal.match_excluded})로
-     * 남기며(스펙 5.6), 매치 적재 큐에 백필 순위로 넘긴다. 넘기기가 실패하면 예외가 run 까지 올라가 갱신이 실패하므로
-     * 커서가 그 매치를 지나가지 않는다.
-     */
-    private RenewalMatchPlan plan(String puuid, String renewalId, String platformName, List<String> ids) {
-        Set<String> existing = ids.isEmpty() ? Set.of() : new HashSet<>(matchRepositoryPort.findExistingMatchIds(ids));
-        Set<String> candidates = new LinkedHashSet<>(ids);
-        candidates.removeAll(existing);
-        Set<String> excluded = candidates.isEmpty() ? Set.of() : claimService.findExcluded(candidates);
-        if (!excluded.isEmpty() && backgroundEnabled) {
-            log.warn("계속 실패한 매치를 갱신 대상에서 빼고 매치 적재 큐에 백필로 넘긴다. puuid={}, renewalId={}, matchIds={}",
-                    puuid, renewalId, excluded);
-            excluded.forEach(matchId -> messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.BACKFILL));
-        } else if (!excluded.isEmpty()) {
-            log.warn("계속 실패한 매치를 갱신 대상에서 뺀다. 추가 갱신이 꺼져 있어 백필로 넘기지 않는다. puuid={}, renewalId={}, matchIds={}",
-                    puuid, renewalId, excluded);
-        }
-        meterRegistry.counter(EXCLUDED_METRIC).increment(excluded.size());
-        List<String> recent = ids.subList(0, Math.min(RenewalMatchPlan.TIMELINE_COUNT, ids.size()));
-        Set<String> withTimeline = recent.isEmpty() ? Set.of() : matchRepositoryPort.findMatchIdsWithTimeline(recent);
-        return RenewalMatchPlan.of(ids, existing, excluded, withTimeline);
-    }
-
-    /**
-     * 매치 대상만 선점하고, 받을 항목을 돌려준다. 다른 갱신이 쥔 매치는 부르지 않는다 — 그 갱신이 저장하면 판정기가
-     * 두 갱신을 함께 끝낸다. 단 타임라인 대상이면 타임라인만 받는다. 선점한 id 는 도중에 던져도 풀 수 있게 claimed 에 모은다.
-     */
-    private List<Item> claim(List<Item> items, String renewalId, List<String> claimed) {
-        List<Item> toFetch = new ArrayList<>();
-        for (Item item : items) {
-            if (!item.match()) {
-                toFetch.add(item);
-            } else if (claimService.claim(item.matchId(), renewalId)) {
-                claimed.add(item.matchId());
-                toFetch.add(item);
-            } else if (item.timeline()) {
-                toFetch.add(item.timelineOnly());
-            }
-        }
-        return toFetch;
-    }
-
-    /**
-     * 받은 매치·타임라인을 한 번에 저장하고 요청자 캐시를 쓴다. 저장한 매치 수를 돌려준다.
-     * 저장 예외는 {@link MatchSaveFailure} 로 올린다.
-     */
-    private int save(String puuid, List<Fetched> fetched) {
-        if (fetched.isEmpty()) {
-            return 0;
-        }
-        List<MatchDto> matches = fetched.stream().map(Fetched::match).filter(Objects::nonNull).toList();
-        List<TimelineDto> timelines = fetched.stream().map(Fetched::timeline).filter(Objects::nonNull).toList();
-        try {
-            saveMatchDataUseCase.execute(matches, timelines);
-        } catch (RuntimeException e) {
-            throw new MatchSaveFailure(e);
-        }
-        matchCacheWritePort.writeMatches(matches, timelines, puuid);
-        return matches.size();
-    }
-
-    /**
-     * 다시 받아야 할 매치를 매치 적재 큐에 id 로 넘긴다. 허가가 거절된 매치와 match 가 429·5xx·IO·시간 초과로 실패한 매치는
-     * 사용자 재시도 순위로 넘긴다(그 길은 match·timeline 을 둘 다 받는다). match 가 4xx 면 실패 표시만 남긴다.
-     * 이 매치들은 갱신 완료에 필요하므로 발행이 던지면 run 까지 올려 갱신을 실패시킨다.
-     */
-    private void handOffForRetry(String platformName, Result result) {
-        result.denied().stream()
-                .filter(Item::match)
-                .forEach(item -> messageSender.sendMessageByMatchId(item.matchId(), platformName,
-                        MatchQueueRank.USER_RETRY));
-        result.userRetry().forEach(matchId ->
-                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.USER_RETRY));
-        result.clientError().forEach(claimService::markFailed);
-    }
-
-    /**
-     * 타임라인을 받지 못한 것 — 거절된 타임라인만 항목, 타임라인 없이 저장한 매치, 실패한 타임라인 — 을 id 마다 한 번
-     * 나중 타임라인 순위로 넘긴다. 타임라인만 필요한 항목을 사용자 재시도로 넘기면 DB 에 있는 매치라 DUPLICATE 로 버려지기
-     * 때문이다. 타임라인은 갱신 성공 조건이 아니라서 발행 실패는 경고 로그와
-     * {@code lol.renewal.timeline_later.publish_failed} 로 남기고 다음 id 로 간다.
-     */
-    private void handOffTimelineLater(String platformName, Result result) {
-        Set<String> timelineLater = new LinkedHashSet<>();
-        result.denied().stream()
-                .filter(item -> !item.match())
-                .forEach(item -> timelineLater.add(item.matchId()));
-        result.fetched().stream()
-                .filter(fetched -> fetched.match() != null && fetched.timeline() == null)
-                .forEach(fetched -> timelineLater.add(fetched.matchId()));
-        timelineLater.addAll(result.timelineLater());
-        for (String matchId : timelineLater) {
-            try {
-                messageSender.sendMessageByMatchId(matchId, platformName, MatchQueueRank.TIMELINE_LATER);
-            } catch (RuntimeException e) {
-                log.warn("나중 타임라인 발행 실패. 그 타임라인은 채워지지 않는다. matchId={}, cause={}", matchId, e.toString());
-                meterRegistry.counter(TIMELINE_LATER_PUBLISH_FAILED_METRIC).increment();
-            }
-        }
-    }
-
     /** 20개를 꽉 채웠으면 21번째부터는 백그라운드 매치 검색이 찾는다. 추가 갱신이 꺼져 있으면 넘기지 않는다. */
     private void handOffRest(RenewalStepMessage message, String platformName, List<String> ids) {
         if (backgroundEnabled && ids.size() == MATCH_COUNT) {
@@ -281,41 +176,58 @@ public class RenewalMatchStep {
     }
 
     /**
-     * 첫 전달이면 저장 예외를 다시 던져 메시지를 다시 받는다. 선점은 내 renewalId 라 재전달 때 다시 잡힌다.
-     * 이미 재전달된 메시지면 같은 메시지가 끝없이 돌지 않게 갱신을 실패시키고 선점을 푼 뒤 정상 반환한다.
+     * 받을 id. 중복을 빼고(Riot 순서 유지), DB 에 있는 매치와 다른 갱신이 선점한 매치를 뺀다.
+     * 선점한 매치는 그 갱신이 받으므로 기다리지 않고, {@code claimed_by_other} 로 센다.
      */
-    private void onSaveFailure(RenewalStepMessage message, boolean redelivered, List<String> claimed,
-                               RuntimeException failure) {
-        String puuid = message.puuid();
-        String renewalId = message.renewalId();
-        if (!redelivered) {
-            log.warn("매치 저장 실패. 메시지를 다시 받는다. puuid={}, renewalId={}, cause={}", puuid, renewalId, failure.toString());
-            throw failure;
+    private List<String> remaining(List<String> ids, String renewalId) {
+        Set<String> candidates = new LinkedHashSet<>(ids);
+        if (candidates.isEmpty()) {
+            return List.of();
         }
-        log.error("재전달된 메시지의 매치 저장도 실패. puuid={}, renewalId={}", puuid, renewalId, failure);
-        releaseQuietly(claimed, renewalId);
-        failures.fail(puuid, renewalId, failure);
+        candidates.removeAll(new HashSet<>(matchRepositoryPort.findExistingMatchIds(new ArrayList<>(candidates))));
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        Set<String> claimedByOthers = claimService.findClaimedByOthers(candidates, renewalId);
+        candidates.removeAll(claimedByOthers);
+        countMissing("claimed_by_other", claimedByOthers.size());
+        return List.copyOf(candidates);
     }
 
-    private void releaseQuietly(List<String> matchIds, String renewalId) {
-        for (String matchId : matchIds) {
+    /**
+     * 1개까지 줄여도 허가가 거절된 매치를 매치 적재 큐에 사용자 재시도로 넘긴다. 백그라운드가 나중에 적재하므로
+     * 갱신 성공 조건에서 뺀다. 발행이 던지면 run 까지 올려 갱신을 실패시킨다 (커서가 옮겨지지 않아 다음 갱신이 다시 받는다).
+     */
+    private void handOffDenied(String platformName, List<Item> denied) {
+        for (Item item : denied) {
+            messageSender.sendMessageByMatchId(item.matchId(), platformName, MatchQueueRank.USER_RETRY);
+            countMissing("denied_queued", 1);
+        }
+    }
+
+    /**
+     * 타임라인 없이 받은 매치(앞 3개 밖이거나 타임라인만 실패한 매치)를 id 마다 나중 타임라인 순위로 넘긴다.
+     * 타임라인은 갱신 성공 조건이 아니라서 발행 실패는 경고 로그와
+     * {@code lol.renewal.timeline_later.publish_failed} 로 남기고 다음 id 로 간다.
+     */
+    private void handOffTimelineLater(String platformName, List<Fetched> fetched) {
+        for (Fetched item : fetched) {
+            if (item.timeline() != null) {
+                continue;
+            }
             try {
-                claimService.release(matchId, renewalId);
-            } catch (Exception e) {
-                log.warn("매치 선점 해제 실패. TTL 로 풀린다. matchId={}, renewalId={}, cause={}",
-                        matchId, renewalId, e.toString());
+                messageSender.sendMessageByMatchId(item.matchId(), platformName, MatchQueueRank.TIMELINE_LATER);
+            } catch (RuntimeException e) {
+                log.warn("나중 타임라인 발행 실패. 그 타임라인은 채워지지 않는다. matchId={}, cause={}",
+                        item.matchId(), e.toString());
+                meterRegistry.counter(TIMELINE_LATER_PUBLISH_FAILED_METRIC).increment();
             }
         }
     }
 
-    /** 저장 예외를 run 까지 올려 그 밖의 예외와 가른다. */
-    private static final class MatchSaveFailure extends RuntimeException {
-
-        private final RuntimeException failure;
-
-        MatchSaveFailure(RuntimeException failure) {
-            super(failure);
-            this.failure = failure;
+    private void countMissing(String reason, int count) {
+        if (count > 0) {
+            meterRegistry.counter(MISSING_METRIC, "reason", reason).increment(count);
         }
     }
 }

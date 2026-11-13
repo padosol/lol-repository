@@ -8,7 +8,6 @@ import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalMatchFetcher.Fetched;
 import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalMatchFetcher.Result;
 import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalMatchPlan.Item;
-import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
@@ -17,26 +16,25 @@ import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
-import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.client.ResourceAccessException;
 
 class RenewalMatchFetcherTest {
 
     private static final List<String> TWENTY = IntStream.rangeClosed(1, 20).mapToObj(i -> "m" + i).toList();
+    private static final Predicate<String> CLAIM_ALL = matchId -> true;
 
     private final List<String> events = new ArrayList<>();
     private final FakePermitPort permitPort = new FakePermitPort(events);
@@ -44,8 +42,8 @@ class RenewalMatchFetcherTest {
     private final Executor executor = Runnable::run;
     private final RenewalMatchFetcher fetcher = new RenewalMatchFetcher(matchApi, permitPort, executor);
 
-    private static List<Item> newMatches(List<String> ids) {
-        return RenewalMatchPlan.of(ids, Set.of(), Set.of(), Set.of()).items();
+    private static List<Item> items(List<String> ids) {
+        return RenewalMatchPlan.items(ids);
     }
 
     private static RiotRateLimitException rateLimit() {
@@ -61,13 +59,14 @@ class RenewalMatchFetcherTest {
     void permitsRequestedDownToOneWhenDenied() {
         // given
         permitPort.allow = counts -> false;
-        List<Item> items = newMatches(TWENTY);
+        List<Item> items = items(TWENTY);
 
         // when
-        Result result = fetcher.fetch("KR", items);
+        Result result = fetcher.fetch("KR", items, CLAIM_ALL);
 
         // then
-        assertThat(permitPort.requests).extracting(counts -> counts.get(RiotMethod.MATCH)).containsExactly(20, 10, 5, 3, 2, 1);
+        assertThat(permitPort.requests).extracting(counts -> counts.get(RiotMethod.MATCH))
+                .containsExactly(20, 10, 5, 3, 2, 1);
         assertThat(permitPort.priorities).containsOnly(RiotCallPriority.USER);
         assertThat(result.denied()).containsExactlyElementsOf(items);
         assertThat(result.fetched()).isEmpty();
@@ -75,178 +74,88 @@ class RenewalMatchFetcherTest {
     }
 
     @Test
-    @DisplayName("묶음 허가에는 그 묶음에 든 타임라인 대상만 센다")
-    void costIncludesOnlyRequestedTimelines() {
-        // given: 매치 5건까지만 허가한다
-        permitPort.allow = counts -> counts.getOrDefault(RiotMethod.MATCH, 0) <= 5;
-
+    @DisplayName("앞 3개만 타임라인까지 허가를 묻고 부른다")
+    void costCountsTimelineOnlyForFirstThree() {
         // when
-        Result result = fetcher.fetch("KR", newMatches(TWENTY));
+        Result result = fetcher.fetch("KR", items(List.of("m1", "m2", "m3", "m4", "m5")), CLAIM_ALL);
 
         // then
-        assertThat(permitPort.requests.get(0)).isEqualTo(Map.of(RiotMethod.MATCH, 20, RiotMethod.MATCH_TIMELINE, 3));
-        assertThat(permitPort.requests.get(2)).isEqualTo(Map.of(RiotMethod.MATCH, 5, RiotMethod.MATCH_TIMELINE, 3));
-        assertThat(permitPort.requests.subList(3, permitPort.requests.size()))
-                .allMatch(counts -> !counts.containsKey(RiotMethod.MATCH_TIMELINE));
+        assertThat(permitPort.requests).containsExactly(Map.of(RiotMethod.MATCH, 5, RiotMethod.MATCH_TIMELINE, 3));
         assertThat(matchApi.calls).filteredOn(call -> call.startsWith("timeline:"))
                 .containsExactly("timeline:m1", "timeline:m2", "timeline:m3");
-        assertThat(result.fetched()).extracting(Fetched::matchId).containsExactlyElementsOf(TWENTY);
-        assertThat(result.denied()).isEmpty();
-        assertThat(result.timelineLater()).isEmpty();
+        assertThat(result.fetched()).extracting(Fetched::matchId).containsExactly("m1", "m2", "m3", "m4", "m5");
+        assertThat(result.fetched()).filteredOn(fetched -> fetched.timeline() == null)
+                .extracting(Fetched::matchId).containsExactly("m4", "m5");
     }
 
     @Test
-    @DisplayName("타임라인만 실패하면 매치는 받은 것으로 두고 타임라인은 나중 타임라인으로 넘긴다")
-    void timelineFailureKeepsMatchAndQueuesTimelineLater() {
+    @DisplayName("허가 뒤 선점에 지면 부르지 않고 claimedElsewhere 로 돌려준다")
+    void claimLostAfterPermit_notCalled() {
+        // when
+        Result result = fetcher.fetch("KR", items(List.of("m1", "m2", "m3")), matchId -> !matchId.equals("m2"));
+
+        // then
+        assertThat(matchApi.calls).noneMatch(call -> call.endsWith(":m2"));
+        assertThat(result.claimedElsewhere()).containsExactly("m2");
+        assertThat(result.fetched()).extracting(Fetched::matchId).containsExactly("m1", "m3");
+        assertThat(result.denied()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("매치가 어떤 이유로든 실패하면 failed 로 돌려준다")
+    void matchFailure_anyCause_isFailed() {
+        // given
+        matchApi.matches.put("m1", CompletableFuture.failedFuture(serverError()));
+        matchApi.matches.put("m2", CompletableFuture.failedFuture(rateLimit()));
+        matchApi.matches.put("m3", CompletableFuture.failedFuture(
+                new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
+
+        // when
+        Result result = fetcher.fetch("KR", items(List.of("m1", "m2", "m3")), CLAIM_ALL);
+
+        // then
+        assertThat(result.failed()).containsExactly("m1", "m2", "m3");
+        assertThat(result.fetched()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("타임라인만 실패하면 매치는 받은 것으로 두고 타임라인은 비운다")
+    void timelineFailure_keepsMatchWithoutTimeline() {
         // given
         matchApi.timelines.put("m1", CompletableFuture.failedFuture(serverError()));
 
         // when
-        Result result = fetcher.fetch("KR", List.of(new Item("m1", true, true)));
+        Result result = fetcher.fetch("KR", items(List.of("m1")), CLAIM_ALL);
 
         // then
         assertThat(result.fetched()).containsExactly(new Fetched("m1", matchApi.match("m1"), null));
-        assertThat(result.fetched().get(0).match()).isSameAs(matchApi.match("m1"));
-        assertThat(result.timelineLater()).containsExactly("m1");
-        assertThat(result.userRetry()).isEmpty();
-        assertThat(result.clientError()).isEmpty();
+        assertThat(result.failed()).isEmpty();
     }
 
     @Test
-    @DisplayName("매치가 5xx 면 타임라인을 받았어도 버리고 매치를 사용자 재시도로 넘긴다")
-    void matchServerErrorGoesToUserRetry() {
-        // given
-        matchApi.matches.put("m1", CompletableFuture.failedFuture(serverError()));
-
-        // when
-        Result result = fetcher.fetch("KR", List.of(new Item("m1", true, true)));
-
-        // then
-        assertThat(result.userRetry()).containsExactly("m1");
-        assertThat(result.fetched()).isEmpty();
-        assertThat(result.timelineLater()).isEmpty();
-        assertThat(result.clientError()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("매치가 429·IO·시간 초과면 사용자 재시도로 넘기고, 상태 429 인 RiotClientException 도 4xx 로 보지 않는다")
-    void matchRateLimitOrIoFailureGoesToUserRetry() {
-        // given: m1 은 타임라인이 404 여도 매치 실패가 정한다
-        matchApi.matches.put("m1", CompletableFuture.failedFuture(rateLimit()));
-        matchApi.timelines.put("m1", CompletableFuture.failedFuture(
-                new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
-        matchApi.matches.put("m2", CompletableFuture.failedFuture(
-                new RiotClientException(HttpStatus.TOO_MANY_REQUESTS, "", null)));
-        matchApi.matches.put("m3", CompletableFuture.failedFuture(
-                new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out"))));
-
-        // when
-        Result result = fetcher.fetch("KR", newMatches(List.of("m1", "m2", "m3")));
-
-        // then
-        assertThat(result.userRetry()).containsExactly("m1", "m2", "m3");
-        assertThat(result.clientError()).isEmpty();
-        assertThat(result.timelineLater()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("매치가 4xx(429 제외)면 실패 표시 대상으로 돌려준다")
-    void matchClientErrorIsMarked() {
-        // given
-        matchApi.matches.put("m1", CompletableFuture.failedFuture(
-                new RiotClientException(HttpStatus.BAD_REQUEST, "", null)));
-        matchApi.matches.put("m2", CompletableFuture.failedFuture(
-                new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
-
-        // when
-        Result result = fetcher.fetch("KR", newMatches(List.of("m1", "m2")));
-
-        // then
-        assertThat(result.clientError()).containsExactly("m1", "m2");
-        assertThat(result.userRetry()).isEmpty();
-        assertThat(result.fetched()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("타임라인만 받는 항목은 매치를 부르지 않고 MATCH_TIMELINE 허가만 묻는다")
-    void timelineOnlyItemFetchesNoMatch() {
-        // when
-        Result result = fetcher.fetch("KR", List.of(new Item("m1", false, true)));
-
-        // then
-        assertThat(permitPort.requests).containsExactly(Map.of(RiotMethod.MATCH_TIMELINE, 1));
-        assertThat(matchApi.calls).containsExactly("timeline:m1");
-        assertThat(result.fetched()).containsExactly(new Fetched("m1", null, matchApi.timeline("m1")));
-        assertThat(result.timelineLater()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("타임라인만 받는 항목이 429·5xx·IO 로 실패하거나 본문이 비면 나중 타임라인으로 넘긴다")
-    void timelineOnlyFailureGoesToTimelineLater() {
-        // given
-        matchApi.timelines.put("m1", CompletableFuture.failedFuture(serverError()));
-        matchApi.timelines.put("m2", CompletableFuture.failedFuture(rateLimit()));
-        matchApi.timelines.put("m3", CompletableFuture.failedFuture(
-                new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out"))));
-        matchApi.timelines.put("m4", CompletableFuture.completedFuture(null));
-
-        // when
-        Result result = fetcher.fetch("KR", List.of(new Item("m1", false, true), new Item("m2", false, true),
-                new Item("m3", false, true), new Item("m4", false, true)));
-
-        // then
-        assertThat(result.timelineLater()).containsExactly("m1", "m2", "m3", "m4");
-        assertThat(result.fetched()).isEmpty();
-        assertThat(result.clientError()).isEmpty();
-        assertThat(result.userRetry()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("타임라인만 받는 항목이 4xx(429 제외)로 실패하면 나중 타임라인으로 넘기지 않고 버린다")
-    void timelineOnlyClientErrorIsDropped() {
-        // given
-        matchApi.timelines.put("m1", CompletableFuture.failedFuture(
-                new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
-        matchApi.timelines.put("m2", CompletableFuture.failedFuture(
-                new RiotClientException(HttpStatus.BAD_REQUEST, "", null)));
-
-        // when
-        Result result = fetcher.fetch("KR", List.of(new Item("m1", false, true), new Item("m2", false, true)));
-
-        // then
-        assertThat(result.timelineLater()).isEmpty();
-        assertThat(result.fetched()).isEmpty();
-        assertThat(result.clientError()).isEmpty();
-        assertThat(result.userRetry()).isEmpty();
-        assertThat(result.denied()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("본문이 빈 매치는 사용자 재시도로, 빈 타임라인은 받지 않은 것으로 둔다")
-    void nullBodiesAreNotFetched() {
+    @DisplayName("본문이 빈 매치는 failed, 빈 타임라인은 받지 않은 것으로 둔다")
+    void nullBodies() {
         // given
         matchApi.matches.put("m1", CompletableFuture.completedFuture(null));
         matchApi.timelines.put("m2", CompletableFuture.completedFuture(null));
 
         // when
-        Result result = fetcher.fetch("KR", newMatches(List.of("m1", "m2")));
+        Result result = fetcher.fetch("KR", items(List.of("m1", "m2")), CLAIM_ALL);
 
         // then
-        assertThat(result.userRetry()).containsExactly("m1");
+        assertThat(result.failed()).containsExactly("m1");
         assertThat(result.fetched()).containsExactly(new Fetched("m2", matchApi.match("m2"), null));
-        assertThat(result.timelineLater()).containsExactly("m2");
     }
 
     @Test
     @DisplayName("허가된 묶음은 다음 허가를 묻기 전에 시작하고, 남은 것이 끝내 거절되면 순서대로 돌려준다")
     void startsEachGrantedChunkBeforeAskingNext() {
-        // given: 두 번째 요청(2건)만 허가한다
+        // given: 두 번째 요청(2건)만 허가한다. 4번째부터라 타임라인은 없다
         permitPort.allow = counts -> permitPort.requests.size() == 2;
-        List<Item> items = List.of("m1", "m2", "m3", "m4").stream()
-                .map(matchId -> new Item(matchId, true, false)).toList();
+        List<Item> items = List.of("m1", "m2", "m3", "m4").stream().map(matchId -> new Item(matchId, false)).toList();
 
         // when
-        Result result = fetcher.fetch("KR", items);
+        Result result = fetcher.fetch("KR", items, CLAIM_ALL);
 
         // then
         assertThat(events).containsExactly(
@@ -264,17 +173,36 @@ class RenewalMatchFetcherTest {
             case 2 -> true;
             default -> throw new IllegalStateException("redis down");
         };
-        List<Item> more = List.of(new Item("m3", true, false), new Item("m4", false, true));
-        List<Item> all = new ArrayList<>(List.of(new Item("m1", true, false), new Item("m2", false, true)));
-        all.addAll(more);
+        List<Item> all = items(List.of("m1", "m2", "m3", "m4"));
 
         // when
-        Result result = fetcher.fetch("KR", all);
+        Result result = fetcher.fetch("KR", all, CLAIM_ALL);
 
         // then
         assertThat(result.fetched()).extracting(Fetched::matchId).containsExactly("m1", "m2");
-        assertThat(result.denied()).containsExactlyElementsOf(more);
-        assertThat(matchApi.calls).containsExactly("match:m1", "timeline:m2");
+        assertThat(result.denied()).containsExactly(all.get(2), all.get(3));
+        assertThat(matchApi.calls).containsExactly("match:m1", "timeline:m1", "match:m2", "timeline:m2");
+    }
+
+    @Test
+    @DisplayName("선점 조회가 던지면 그 항목과 뒤의 항목은 거절된 것으로 둔다")
+    void claimThrows_thatAndRestDenied() {
+        // given
+        List<Item> all = items(List.of("m1", "m2", "m3"));
+        Predicate<String> claim = matchId -> {
+            if (matchId.equals("m2")) {
+                throw new IllegalStateException("redis down");
+            }
+            return true;
+        };
+
+        // when
+        Result result = fetcher.fetch("KR", all, claim);
+
+        // then
+        assertThat(matchApi.calls).containsExactly("match:m1", "timeline:m1");
+        assertThat(result.fetched()).extracting(Fetched::matchId).containsExactly("m1");
+        assertThat(result.denied()).containsExactly(all.get(1), all.get(2));
     }
 
     /** 요청을 기록하고 allow 가 true 인 요청만 허가하는 가짜 허가 포트. */

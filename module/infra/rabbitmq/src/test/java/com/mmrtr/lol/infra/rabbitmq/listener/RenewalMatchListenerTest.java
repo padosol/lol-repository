@@ -14,15 +14,15 @@ class RenewalMatchListenerTest {
     private final RenewalMatchListener listener = new RenewalMatchListener(step);
 
     @Test
-    @DisplayName("받은 메시지와 재전달 여부를 그대로 매치 단계에 넘긴다")
-    void receive_delegatesWithRedeliveredFlag() {
+    @DisplayName("받은 메시지를 그대로 매치 단계에 넘긴다")
+    void receive_delegatesMessage() {
         // given
         RenewalStepMessage message = new RenewalStepMessage("r1", "p1", "KR", 100L, 0);
 
         // when
-        listener.receive(message, true);
+        listener.receive(message);
 
         // then
-        verify(step).run(message, true);
+        verify(step).run(message);
     }
 }
