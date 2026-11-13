@@ -11,6 +11,7 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -235,10 +236,17 @@ public class RabbitMqConfig {
         return connectionFactory;
     }
 
+    /**
+     * 직접 만드는 템플릿이라 Boot 의 spring.rabbitmq.template.* 가 붙지 않는다. trace 를 메시지 헤더로 넘기는 observation 만
+     * spring.rabbitmq.template.observation-enabled 를 따른다 (local 프로파일에서 켠다). 발행 시각은 큐 대기 시간을 재려고 늘 찍는다.
+     */
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, RabbitProperties rabbitProperties,
+                                         RabbitQueueWait queueWait) {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(jackson2JsonMessageConverter());
+        rabbitTemplate.setObservationEnabled(rabbitProperties.getTemplate().isObservationEnabled());
+        rabbitTemplate.addBeforePublishPostProcessors(queueWait.stamp());
         return rabbitTemplate;
     }
 
@@ -268,10 +276,12 @@ public class RabbitMqConfig {
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory factory,
             @Qualifier("rabbitListenerTaskExecutor")
-            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider,
+            RabbitQueueWait queueWait
     ) {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
+        simpleFactory.setAfterReceivePostProcessors(queueWait.recorder());
 
         simpleFactory.setChannelTransacted(true);
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
@@ -295,10 +305,12 @@ public class RabbitMqConfig {
             ConnectionFactory factory,
             @Qualifier("rabbitListenerTaskExecutor")
             ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider,
-            @Value("${lol.renewal.background.enabled:true}") boolean backgroundEnabled
+            @Value("${lol.renewal.background.enabled:true}") boolean backgroundEnabled,
+            RabbitQueueWait queueWait
     ) {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
+        simpleFactory.setAfterReceivePostProcessors(queueWait.recorder());
 
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
         simpleFactory.setConcurrentConsumers(1);
@@ -316,11 +328,13 @@ public class RabbitMqConfig {
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory factory,
             @Qualifier("rabbitListenerTaskExecutor")
-            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider,
+            RabbitQueueWait queueWait
     ) {
 
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
+        simpleFactory.setAfterReceivePostProcessors(queueWait.recorder());
 
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
         simpleFactory.setConcurrentConsumers(20);

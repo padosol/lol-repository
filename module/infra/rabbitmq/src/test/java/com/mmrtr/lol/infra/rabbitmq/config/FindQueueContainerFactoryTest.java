@@ -3,6 +3,7 @@ package com.mmrtr.lol.infra.rabbitmq.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
@@ -34,7 +35,8 @@ class FindQueueContainerFactoryTest {
                 new SimpleRabbitListenerContainerFactoryConfigurer(new RabbitProperties()),
                 mock(ConnectionFactory.class),
                 new StaticListableBeanFactory().getBeanProvider(TaskExecutor.class),
-                backgroundEnabled);
+                backgroundEnabled,
+                new RabbitQueueWait(new SimpleMeterRegistry()));
         SimpleRabbitListenerEndpoint endpoint = new SimpleRabbitListenerEndpoint();
         endpoint.setId("find");
         endpoint.setQueueNames(RabbitMqBinding.Queue.RENEWAL_MATCH_FIND);
