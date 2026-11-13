@@ -328,6 +328,23 @@ class RenewalMatchStepTest {
     }
 
     @Test
+    @DisplayName("캐시 쓰기가 실패해도 타임라인 없이 받은 매치는 나중 타임라인으로 넘긴다")
+    void run_cacheWriteFails_stillHandsOffTimelineLater() {
+        // given: m4·m5 는 타임라인 없이 받는다. 저장은 되므로 다음 갱신은 DB 확인에서 이 매치들을 뺀다
+        givenIds(List.of("m1", "m2", "m3", "m4", "m5"));
+        doThrow(new IllegalStateException("cache.match.write failed"))
+                .when(matchCacheWritePort).writeMatches(anyList(), anyList(), eq("p1"));
+
+        // when
+        step.run(msg("r1", START_TIME));
+
+        // then
+        verify(finisher).fail("p1", "r1", "other");
+        verify(messageSender).sendMessageByMatchId("m4", "KR", MatchQueueRank.TIMELINE_LATER);
+        verify(messageSender).sendMessageByMatchId("m5", "KR", MatchQueueRank.TIMELINE_LATER);
+    }
+
+    @Test
     @DisplayName("나중 타임라인 발행이 실패해도 갱신을 실패시키지 않는다")
     void run_timelineLaterPublishFailure_doesNotFailRenewal() {
         // given: m4·m5 는 타임라인 없이 받아 나중 타임라인으로 간다. m4 발행이 실패한다

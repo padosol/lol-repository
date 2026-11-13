@@ -142,10 +142,11 @@ public class RenewalMatchStep {
                 matchCacheWritePort.writeMatches(matches, timelines, puuid);
                 finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.of(RenewalStep.MATCH)));
             } finally {
-                // 실패 경로에서도 받은 것은 저장한다 (스펙 4장 9단계)
+                // 실패 경로에서도 받은 것은 저장한다 (스펙 4장 9단계). 저장된 매치는 다음 갱신의 DB 확인에서 빠지므로
+                // 타임라인도 여기서 넘겨야 채워진다
                 saver.save(matches, timelines);
+                handOffTimelineLater(platformName, result.fetched());
             }
-            handOffTimelineLater(platformName, result.fetched());
             countMissing("call_failed", result.failed().size());
             countMissing("claimed_by_other", result.claimedElsewhere().size());
             failures.success();
