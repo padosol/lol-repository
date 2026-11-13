@@ -2,16 +2,14 @@ package com.mmrtr.lol.support.riot;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
- * 항목들의 허가를 묶음으로 받되, 거절되면 크기를 절반씩 줄여 다시 묻는다.
+ * 항목들의 허가를 묶음으로 받되, 거절되면 크기를 1개까지 절반씩 줄여 다시 묻는다.
  */
 public final class PermitRounds {
 
@@ -47,13 +45,16 @@ public final class PermitRounds {
         return List.of();
     }
 
-    /** n, ceil(n/2), ceil(n/4) 중 중복을 뺀 시도 크기. 최소 1. */
+    /** n, ceil(n/2), ceil(n/4) … 1 로 절반(올림)씩 줄인 시도 크기. 최소 1. */
     public static List<Integer> sizes(int n) {
-        Set<Integer> sizes = new LinkedHashSet<>();
-        sizes.add(Math.max(n, 1));
-        sizes.add(Math.max((n + 1) / 2, 1));
-        sizes.add(Math.max((n + 3) / 4, 1));
-        return new ArrayList<>(sizes);
+        List<Integer> sizes = new ArrayList<>();
+        int size = Math.max(n, 1);
+        sizes.add(size);
+        while (size > 1) {
+            size = (size + 1) / 2;
+            sizes.add(size);
+        }
+        return sizes;
     }
 
     private static <T> Map<RiotMethod, Integer> totalCost(

@@ -43,22 +43,23 @@ class PermitRoundsTest {
     }
 
     @Test
-    void sizes_halveTwiceAndDedupe() {
-        assertThat(PermitRounds.sizes(20)).containsExactly(20, 10, 5);
-        assertThat(PermitRounds.sizes(7)).containsExactly(7, 4, 2);
+    void sizes_halveUntilOne() {
+        assertThat(PermitRounds.sizes(20)).containsExactly(20, 10, 5, 3, 2, 1);
+        assertThat(PermitRounds.sizes(7)).containsExactly(7, 4, 2, 1);
         assertThat(PermitRounds.sizes(2)).containsExactly(2, 1);
         assertThat(PermitRounds.sizes(1)).containsExactly(1);
+        assertThat(PermitRounds.sizes(0)).containsExactly(1);
     }
 
     @Test
-    void allDenied_asksTwentyTenFive_returnsAllItems() {
+    void allDenied_asksDownToOne_returnsAllItems() {
         FakePort port = new FakePort(c -> false);
         List<List<Integer>> granted = new ArrayList<>();
 
         List<Integer> denied = PermitRounds.acquire(port, "KR", RiotCallPriority.DEFERRED,
                 items(20), 20, i -> ONE_MATCH, (chunk, permits) -> granted.add(chunk));
 
-        assertThat(port.requestedMatchCounts()).containsExactly(20, 10, 5);
+        assertThat(port.requestedMatchCounts()).containsExactly(20, 10, 5, 3, 2, 1);
         assertThat(granted).isEmpty();
         assertThat(denied).isEqualTo(items(20));
     }

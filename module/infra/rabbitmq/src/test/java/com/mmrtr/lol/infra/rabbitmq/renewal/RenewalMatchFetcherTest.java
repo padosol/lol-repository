@@ -57,8 +57,8 @@ class RenewalMatchFetcherTest {
     }
 
     @Test
-    @DisplayName("모두 거절되면 USER 로 20 → 10 → 5 를 묻고 20개를 모두 거절로 돌려준다")
-    void permitsRequestedAsTwentyTenFiveWhenDenied() {
+    @DisplayName("모두 거절되면 USER 로 20 → 10 → 5 → 3 → 2 → 1 을 묻고 20개를 모두 거절로 돌려준다")
+    void permitsRequestedDownToOneWhenDenied() {
         // given
         permitPort.allow = counts -> false;
         List<Item> items = newMatches(TWENTY);
@@ -67,7 +67,7 @@ class RenewalMatchFetcherTest {
         Result result = fetcher.fetch("KR", items);
 
         // then
-        assertThat(permitPort.requests).extracting(counts -> counts.get(RiotMethod.MATCH)).containsExactly(20, 10, 5);
+        assertThat(permitPort.requests).extracting(counts -> counts.get(RiotMethod.MATCH)).containsExactly(20, 10, 5, 3, 2, 1);
         assertThat(permitPort.priorities).containsOnly(RiotCallPriority.USER);
         assertThat(result.denied()).containsExactlyElementsOf(items);
         assertThat(result.fetched()).isEmpty();
