@@ -173,8 +173,12 @@ routing 마다 Lua `riot-permit.lua` 한 번으로 정지 → app → method →
    응답에 한도 헤더(`X-App-Rate-Limit`·`X-Method-Rate-Limit` 와 각 `-Count`)가 있으면 버킷마다 해시 `riot:rl:observed:{bucket}` 에
    원문과 받은 시각을 덮어쓴다(마지막 응답 뒤 하루 동안 남는다). 비교용이고 허가 상한은 바꾸지 않는다.
    429·5xx·IO·시간 초과는 호출하는 쪽이 메시지 단위로 1초 뒤 시도 수를 올려 다시 넣는다 (갱신 단계 `attempt`, 매치 적재 큐 `x-attempt` 헤더, 매치 찾기 `attempt`). 상한에 닿으면 갱신은 실패, 매치 적재는 DLX, 매치 찾기는 버린다.
-5. **갱신 매치 단계** — 사용자 경로는 최근 3게임의 타임라인만 받는다. 나머지는 매치 적재 큐의 `TIMELINE_LATER` 순위(`DEFERRED`, 타임라인만, 배치 저장)로 보내 나중에 채운다.
-   최근 3게임 타임라인은 갱신 성공 조건이 아니다.
+5. **갱신 매치 단계** — 최근 20게임 id 에서 DB 에 있는 매치와 다른 갱신이 선점한 매치(`renewal:match:claim:*`, 1분, 풀지 않음)를 뺀다.
+   남은 매치 중 앞 3개는 타임라인까지, 나머지는 매치만 묶음 허가를 받는다. 거절되면 1개까지 절반씩 줄여 묻고, 끝내 거절된 매치는 매치 적재 큐의 `USER_RETRY` 로 넘긴다.
+   허가된 매치를 선점한 뒤 부르고, 부른 뒤 실패한 매치는 누락으로 둔다(다시 받지 않는다).
+   받은 매치를 요청자 캐시에 쓰면 매치 단계가 끝난다. DB 는 `matchSaveExecutor` 에서 비동기로 저장한다.
+   타임라인 없이 받은 매치는 `TIMELINE_LATER` 순위(`DEFERRED`, 타임라인만, 배치 저장)로 보내 나중에 채운다. 타임라인은 갱신 성공 조건이 아니다.
+   지표: 누락 `lol.renewal.match_missing{reason=denied_queued|call_failed|claimed_by_other}`, 비동기 저장 `lol.renewal.match_save{result}`.
 6. **메트릭** — `riot.permit.requests{routing,priority,result}`(허가 요청 수. result 는 `granted` 또는 거절 사유 `app`·`method`·`paused`·`background`·`unknown`),
    `riot.api.responses{status,host}`, `riot.api.rate_limited{routing,type}`(429, `X-Rate-Limit-Type` 별).
    호출 시간은 `riot.api.call.duration{host,method,result}`(보냄 → 본문 변환 끝)이고, 응답 헤더를 받은 호출은
