@@ -1,8 +1,9 @@
-# 로컬 모니터링: Prometheus + Grafana. 앱은 호스트에서 local 프로파일로 떠 있다고 본다(:8111).
+# 로컬 모니터링: Prometheus + Grafana + Tempo. 앱은 호스트에서 local 프로파일로 떠 있다고 본다(:8111).
 #   docker compose -f docker/monitoring/compose.yml up -d
 # RabbitMQ 는 인프라(docker/infra, 프로젝트 lol-repository)의 lol-rabbitmq 를 그 네트워크로 붙어 수집한다. 인프라를 먼저 띄운다.
 # k6 는 load-test/run.sh 가 remote write 로 Prometheus 에 지표를 밀어 넣는다.
-# 포트 기본값은 다른 프로젝트의 9090·3000 과 겹치지 않게 19090·13000 이다.
+# 앱(local 프로파일)은 갱신 흐름 trace 를 OTLP(HTTP)로 Tempo 에 보낸다. Grafana 의 Explore → Tempo 에서 본다.
+# 포트 기본값은 다른 프로젝트의 9090·3000·4318·3200 과 겹치지 않게 19090·13000·14318·13200 이다.
 name: lol-monitoring
 
 services:
@@ -39,6 +40,20 @@ services:
       - "127.0.0.1:${GRAFANA_PORT:-13000}:3000"
     depends_on:
       - prometheus
+      - tempo
+
+  tempo:
+    image: grafana/tempo:2.10.10
+    container_name: lol-tempo
+    command:
+      - -config.file=/etc/tempo.yaml
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+    ports:
+      # 호스트의 앱이 trace 를 보내는 OTLP(HTTP) 입구 — application-local.yml 의 management.otlp.tracing.endpoint
+      - "127.0.0.1:${TEMPO_OTLP_PORT:-14318}:4318"
+      # Tempo API. Grafana 는 컨테이너 네트워크로 붙으므로 직접 조회할 때만 쓴다
+      - "127.0.0.1:${TEMPO_PORT:-13200}:3200"
 
 networks:
   infra:

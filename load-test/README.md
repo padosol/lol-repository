@@ -21,7 +21,7 @@ docker compose -f docker/infra/compose.yml up -d --wait
 # 2. 앱 — 루트 .env(.env.example 복사, RIOT_API_KEY 채움)를 bootRun 이 읽는다.
 #    랭킹 스케줄러 끄기와 서버 갱신 시간 histogram 도 .env 에 들어 있다
 ./gradlew :module:app:application:bootRun
-# 3. 모니터링 (Prometheus·Grafana)
+# 3. 모니터링 (Prometheus·Grafana·Tempo)
 docker compose -f docker/monitoring/compose.yml up -d
 # 4. 대상 준비 — 처음 한 번, 데이터셋을 바꿨을 때, DB 를 통째로 비웠을 때
 bash load-test/setup.sh
@@ -31,6 +31,24 @@ RATE=2 DURATION=3m bash load-test/run.sh renewal-steady.js
 ```
 
 Grafana: http://localhost:13000 (로그인 없음), 대시보드 "갱신 부하 테스트". 위의 "k6 실행" 목록에서 `testid` 를 골라 실행끼리 나눠 본다. 포트는 `PROMETHEUS_PORT`·`GRAFANA_PORT` 로 바꾼다 (`run.sh` 도 `PROMETHEUS_PORT` 를 본다).
+
+## 갱신 흐름 추적 (Tempo)
+
+local 프로파일 앱은 갱신 요청 하나를 trace 하나로 묶어 Tempo(`127.0.0.1:14318`, OTLP HTTP)로 보낸다. 다른 프로파일은 trace 를 만들지 않는다.
+
+```
+http post /api/v1/summoners/{puuid}/renewal     접수
+ └ 발행(send) → mmrtr.summoner 받기(receive)      소환사 단계
+     ├ 발행 → mmrtr.renewal.account 받기          계정 단계
+     ├ 발행 → mmrtr.renewal.league 받기           리그 단계
+     └ 발행 → mmrtr.renewal.match 받기            매치 단계 (가장 늦게 끝난 단계에서 갱신 완료)
+```
+
+- 어느 단계가 긴지: 대시보드 "갱신 단계별 시간" 줄. 단계마다 큐 대기(발행 → 리스너가 받기 직전)와 처리(리스너가 처리한 시간) p95 를 나눠 보여 준다.
+- 느린 갱신 하나를 볼 때: 같은 줄의 "3초 넘게 걸린 갱신" 표에서 Trace ID 를 누른다. 시간 순서 그림에서 send 가 끝나고 receive 가 시작하기까지 빈 칸이 큐 대기다.
+- 로그의 `[traceId]` 는 32자리 전체라 Grafana Explore → Tempo 에 그대로 넣어 찾는다.
+- trace 는 Tempo 컨테이너 안에만 48시간 둔다 (컨테이너를 다시 만들면 지워진다). OTLP 포트는 `TEMPO_OTLP_PORT` 로 바꾸고, 바꿨으면 앱에 `OTLP_TRACING_ENDPOINT` 도 맞춘다.
+- local 프로파일은 리스너 지표가 `spring_rabbit_listener_seconds{messaging_destination_name}` 로 바뀐다 (trace 를 잇는 observation 을 켜서).
 
 ## 초기화 (`reset-db.sh`)
 

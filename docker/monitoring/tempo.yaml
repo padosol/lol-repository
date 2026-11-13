@@ -1,0 +1,34 @@
+# 로컬 부하 테스트용 Tempo (단일 바이너리). 앱이 OTLP(HTTP)로 보낸 trace 를 받아 Grafana 에서 본다.
+# trace 는 컨테이너 안(/tmp/tempo)에만 두므로 컨테이너를 다시 만들면 지워진다.
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  # 부하 테스트가 끝나면 바로 찾을 수 있게 블록을 짧게 자른다
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 48h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /tmp/tempo/wal
+    local:
+      path: /tmp/tempo/blocks
+
+# 사용 통계를 Grafana 로 보내지 않는다
+usage_report:
+  reporting_enabled: false

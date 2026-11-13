@@ -7,6 +7,33 @@ spring:
       - redis-local.yml
       - riot-local.yml
       - bigquery-local.yml
+  # 갱신 흐름 추적: 발행·소비를 observation 으로 잡아 traceparent 헤더로 요청 → 소환사·계정·리그·매치 단계를 trace 하나로 잇는다.
+  # 리스너 observation 을 켜면 리스너 지표가 spring_rabbitmq_listener_seconds{queue} 에서
+  # spring_rabbit_listener_seconds{messaging_destination_name} 로 바뀐다 (대시보드는 바뀐 이름을 쓴다)
+  rabbitmq:
+    listener:
+      simple:
+        observation-enabled: true
+    template:
+      observation-enabled: true
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      # docker/monitoring 의 Tempo (OTLP HTTP)
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://127.0.0.1:14318/v1/traces}
+  opentelemetry:
+    resource-attributes:
+      "[service.name]": lol-repository
+  metrics:
+    distribution:
+      # 대시보드의 단계별 큐 대기·처리 시간 p95
+      percentiles-histogram:
+        "[spring.rabbit.listener]": true
+        "[lol.rabbit.queue_wait]": true
 
 lol:
   backfill:

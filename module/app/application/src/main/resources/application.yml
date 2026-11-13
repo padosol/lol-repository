@@ -38,3 +38,16 @@ lol:
   vt:
     executors:
       enabled: true
+
+---
+# 분산 추적은 local 프로파일에서만 켠다 (application-local.yml). 다른 프로파일은 tracer 를 만들지 않아 traceId 를 만들지도
+# 보내지도 않는다. management.tracing.enabled=false 는 보내기만 막고 tracer 는 그대로 만들어 로그에 traceId 가 붙으므로 쓰지 않는다
+spring:
+  config:
+    activate:
+      on-profile: "!local"
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.actuate.autoconfigure.tracing.OpenTelemetryTracingAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.tracing.MicrometerTracingAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.tracing.otlp.OtlpTracingAutoConfiguration
