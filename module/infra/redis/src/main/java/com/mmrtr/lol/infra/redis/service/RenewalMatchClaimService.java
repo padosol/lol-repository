@@ -16,11 +16,12 @@ import org.springframework.stereotype.Service;
 /**
  * 사용자 갱신 전용 매치 선점·실패 표시. 백그라운드 적재의 {@code match:pending}·{@code match:processing}
  * 과는 별개 키를 쓴다. 사용자 쪽 판정의 정확성에 쓰이므로 Redis 오류는 fail-open 하지 않고 그대로 올린다.
+ * 선점은 풀지 않고 TTL(1분)로만 사라진다. 그 뒤는 DB 확인이 1차로 거른다.
  */
 @Service
 public class RenewalMatchClaimService {
 
-    static final Duration CLAIM_TTL = Duration.ofMinutes(5);
+    static final Duration CLAIM_TTL = Duration.ofMinutes(1);
     static final Duration FAILED_TTL = Duration.ofMinutes(5);
     static final Duration FAILED_COUNT_TTL = Duration.ofDays(1);
     static final int EXCLUDE_THRESHOLD = 3;
@@ -52,6 +53,23 @@ public class RenewalMatchClaimService {
             return true;
         }
         return renewalId.equals(redis.opsForValue().get(key));
+    }
+
+    /** 다른 갱신이 선점한 매치. 아무도 쥐지 않았거나 renewalId 가 쥔(재전달) 매치는 빠진다. */
+    public Set<String> findClaimedByOthers(Collection<String> matchIds, String renewalId) {
+        Set<String> result = new HashSet<>();
+        if (matchIds.isEmpty()) {
+            return result;
+        }
+        List<String> ids = new ArrayList<>(matchIds);
+        List<String> values = redis.opsForValue().multiGet(prefixed(CLAIM_PREFIX, ids));
+        for (int i = 0; values != null && i < ids.size(); i++) {
+            String owner = values.get(i);
+            if (owner != null && !owner.equals(renewalId)) {
+                result.add(ids.get(i));
+            }
+        }
+        return result;
     }
 
     public void release(String matchId, String renewalId) {

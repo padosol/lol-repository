@@ -123,13 +123,24 @@ class RenewalMatchClaimServiceTest {
     }
 
     @Test
-    @DisplayName("선점 TTL 은 5분이다")
-    void claim_ttlFiveMinutes() {
+    @DisplayName("선점 TTL 은 1분이다")
+    void claim_ttlOneMinute() {
         // when
         service.claim("m1", "r1");
 
         // then
-        assertThat(redis.getExpire("renewal:match:claim:m1")).isBetween(290L, 300L);
+        assertThat(redis.getExpire("renewal:match:claim:m1")).isBetween(1L, 60L);
+    }
+
+    @Test
+    @DisplayName("다른 갱신이 쥔 매치만 돌려준다. 내가 쥔 매치와 아무도 쥐지 않은 매치는 빠진다")
+    void findClaimedByOthers_skipsOwnAndFree() {
+        // given
+        service.claim("m1", "r2");
+        service.claim("m2", "r1");
+
+        // when & then
+        assertThat(service.findClaimedByOthers(List.of("m1", "m2", "m3"), "r1")).containsExactly("m1");
     }
 
     @Test
@@ -138,5 +149,6 @@ class RenewalMatchClaimServiceTest {
         // when & then
         assertThat(service.findFailedAt(List.of())).isEmpty();
         assertThat(service.findExcluded(List.of())).isEmpty();
+        assertThat(service.findClaimedByOthers(List.of(), "r1")).isEmpty();
     }
 }
