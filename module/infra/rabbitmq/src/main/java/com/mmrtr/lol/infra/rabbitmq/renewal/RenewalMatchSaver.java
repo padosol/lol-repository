@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * 갱신 매치 단계가 받은 매치·타임라인을 리스너 밖에서 DB 에 저장한다. 매치 단계는 요청자 캐시에 쓰면 끝나므로
- * 저장을 기다리지 않는다. 실행기는 {@code matchSaveExecutor}(10 스레드, 큐 0, 다 차면 부른 스레드가 실행)라
- * 동시 저장 수가 묶이고, 넘쳐도 버리지 않는다. 실패는 로그와 {@value #METRIC}{result=failure} 로만 남기고
+ * 저장을 기다리지 않는다. 실행기는 {@code matchSaveExecutor}(5 스레드, 큐 20, 다 차면 넘기는 쪽이 자리를 기다림)라
+ * 동시 저장 수가 5를 넘지 않고, 넘쳐도 버리지 않는다. 실패는 로그와 {@value #METRIC}{result=failure} 로만 남기고
  * 다시 하지 않는다 (스펙 8장).
  */
 @Slf4j
