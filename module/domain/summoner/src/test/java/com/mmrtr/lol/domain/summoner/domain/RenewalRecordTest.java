@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 class RenewalRecordTest {
 
     private static RenewalRecord record(RenewalStatus status, String reason, int steps, long deadlineAt) {
-        return new RenewalRecord("r1", status, reason, steps, null, 0L, deadlineAt, null, "KR");
+        return new RenewalRecord("r1", status, reason, steps, 0L, deadlineAt, null, "KR");
     }
 
     @Test

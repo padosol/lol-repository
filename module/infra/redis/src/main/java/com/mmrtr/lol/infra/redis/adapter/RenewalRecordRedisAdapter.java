@@ -7,7 +7,6 @@ import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
 import com.mmrtr.lol.domain.summoner.domain.RenewalTransition;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,7 +74,6 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
                 RenewalStatus.valueOf((String) hash.get("status")),
                 (String) hash.get("reason"),
                 Integer.parseInt((String) hash.getOrDefault("steps", "0")),
-                parseTargets((String) hash.get("targets")),
                 Long.parseLong((String) hash.get("acceptedAt")),
                 Long.parseLong((String) hash.get("deadlineAt")),
                 revision == null ? null : Long.valueOf(revision),
@@ -118,23 +116,6 @@ public class RenewalRecordRedisAdapter implements RenewalRecordPort {
     public void saveRiotRevisionDate(String puuid, String renewalId, long revisionDateMillis) {
         redis.execute(UPDATE, List.of(recordKey(puuid)),
                 renewalId, "riotRevisionDate", String.valueOf(revisionDateMillis));
-    }
-
-    @Override
-    public void recordTargets(String puuid, String renewalId, Collection<String> matchIds) {
-        redis.execute(UPDATE, List.of(recordKey(puuid)),
-                renewalId, "targets", String.join(",", matchIds));
-    }
-
-    /** targets 필드가 없으면 기록 전(null), 빈 문자열이면 대상 없음(빈 Set). */
-    private static Set<String> parseTargets(String value) {
-        if (value == null) {
-            return null;
-        }
-        if (value.isEmpty()) {
-            return Set.of();
-        }
-        return Set.copyOf(java.util.Arrays.asList(value.split(",")));
     }
 
     @Override

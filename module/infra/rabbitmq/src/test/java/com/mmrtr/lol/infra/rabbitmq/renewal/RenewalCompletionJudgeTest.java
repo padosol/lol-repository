@@ -30,7 +30,7 @@ class RenewalCompletionJudgeTest {
     private final List<String> activePuuids = new ArrayList<>();
 
     private RenewalRecord record(String id, RenewalStatus status, String reason) {
-        return new RenewalRecord(id, status, reason, 7, null, ACCEPTED, ACCEPTED + 5000, null, "KR");
+        return new RenewalRecord(id, status, reason, 7, ACCEPTED, ACCEPTED + 5000, null, "KR");
     }
 
     private void active(String puuid, RenewalRecord record) {

@@ -14,7 +14,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStatus;
 import java.util.EnumSet;
-import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,18 +77,15 @@ class RenewalRecordRedisAdapterTest {
         assertThat(r.acceptedAt()).isEqualTo(accepted);
         assertThat(r.deadlineAt()).isEqualTo(accepted + 5000);
         assertThat(r.steps()).isZero();
-        assertThat(r.targetsReady()).isFalse();
-        assertThat(r.targets()).isNull();
         assertThat(adapter.findActive()).contains("p1");
         assertThat(redis.getExpire(KEY)).isBetween(290L, 300L);
     }
 
     @Test
-    @DisplayName("open 은 이전 레코드와 대상을 덮어쓴다")
-    void open_overwritesPreviousRecordAndTargets() {
+    @DisplayName("open 은 이전 레코드를 덮어쓴다")
+    void open_overwritesPreviousRecord() {
         // given
         adapter.open("p1", "r1", "KR");
-        adapter.recordTargets("p1", "r1", List.of("KR_1"));
         adapter.markSteps("p1", "r1", EnumSet.of(ACCOUNT));
 
         // when
@@ -99,8 +95,6 @@ class RenewalRecordRedisAdapterTest {
         RenewalRecord r = adapter.find("p1").orElseThrow();
         assertThat(r.renewalId()).isEqualTo("r2");
         assertThat(r.steps()).isZero();
-        assertThat(r.targetsReady()).isFalse();
-        assertThat(redis.opsForHash().hasKey(KEY, "targets")).isFalse();
     }
 
     @Test
@@ -140,13 +134,10 @@ class RenewalRecordRedisAdapterTest {
                 .isEqualTo(NONE);
         assertThat(adapter.fail("p1", "r1", "x")).isEqualTo(NONE);
         adapter.saveRiotRevisionDate("p1", "r1", 5L);
-        adapter.recordTargets("p1", "r1", List.of("KR_1"));
         RenewalRecord r = adapter.find("p1").orElseThrow();
         assertThat(r.steps()).isZero();
         assertThat(r.status()).isEqualTo(RenewalStatus.PROGRESS);
         assertThat(r.riotRevisionDate()).isNull();
-        assertThat(r.targetsReady()).isFalse();
-        assertThat(redis.opsForHash().hasKey(KEY, "targets")).isFalse();
     }
 
     @Test
@@ -228,38 +219,16 @@ class RenewalRecordRedisAdapterTest {
     }
 
     @Test
-    @DisplayName("대상이 비어 있어도 기록 후 상태가 된다")
-    void recordEmptyTargetsIsReady() {
+    @DisplayName("revisionDate 를 기록한다")
+    void saveRiotRevisionDateWritesField() {
         // given
         adapter.open("p1", "r1", "KR");
 
         // when
-        adapter.recordTargets("p1", "r1", List.of());
-
-        // then
-        RenewalRecord r = adapter.find("p1").orElseThrow();
-        assertThat(r.targetsReady()).isTrue();
-        assertThat(r.targets()).isEmpty();
-        assertThat(redis.opsForHash().get(KEY, "targets")).isEqualTo("");
-    }
-
-    @Test
-    @DisplayName("대상을 targets 필드에 쉼표로 이어 쓰고 revisionDate 도 기록한다")
-    void recordTargetsWritesFieldAndMarksReady() {
-        // given
-        adapter.open("p1", "r1", "KR");
-
-        // when
-        adapter.recordTargets("p1", "r1", List.of("KR_1", "KR_2"));
         adapter.saveRiotRevisionDate("p1", "r1", 1234L);
 
         // then
-        RenewalRecord r = adapter.find("p1").orElseThrow();
-        assertThat(r.targetsReady()).isTrue();
-        assertThat(r.targets()).containsExactlyInAnyOrder("KR_1", "KR_2");
-        assertThat((String) redis.opsForHash().get(KEY, "targets")).isIn("KR_1,KR_2", "KR_2,KR_1");
-        assertThat(redis.opsForHash().hasKey(KEY, "targetsReady")).isFalse();
-        assertThat(r.riotRevisionDate()).isEqualTo(1234L);
+        assertThat(adapter.find("p1").orElseThrow().riotRevisionDate()).isEqualTo(1234L);
     }
 
     @Test
@@ -269,36 +238,17 @@ class RenewalRecordRedisAdapterTest {
         adapter.open("p1", "r2", "KR");
 
         // when
-        adapter.recordTargets("p1", "r1", List.of("KR_1"));
         adapter.saveRiotRevisionDate("p1", "r1", 9L);
 
         // then
-        RenewalRecord r = adapter.find("p1").orElseThrow();
-        assertThat(r.targets()).isNull();
-        assertThat(r.riotRevisionDate()).isNull();
+        assertThat(adapter.find("p1").orElseThrow().riotRevisionDate()).isNull();
     }
 
     @Test
-    @DisplayName("새 open 은 옛 레코드의 targets 필드를 지운다")
-    void openClearsPreviousTargets() {
-        // given
-        adapter.open("p1", "r1", "KR");
-        adapter.recordTargets("p1", "r1", List.of("KR_1"));
-
-        // when
-        adapter.open("p1", "r2", "KR");
-
-        // then
-        assertThat(redis.opsForHash().hasKey(KEY, "targets")).isFalse();
-        assertThat(adapter.find("p1").orElseThrow().targets()).isNull();
-    }
-
-    @Test
-    @DisplayName("어떤 동작 뒤에도 대상 set 키는 만들어지지 않는다")
+    @DisplayName("어떤 동작 뒤에도 레코드 말고 다른 키는 만들어지지 않는다")
     void noTargetsSetKeyIsCreated() {
         // given
         adapter.open("p1", "r1", "KR");
-        adapter.recordTargets("p1", "r1", List.of("KR_1"));
         adapter.markSteps("p1", "r1", EnumSet.allOf(com.mmrtr.lol.domain.summoner.domain.RenewalStep.class));
         adapter.open("p1", "r2", "KR");
         adapter.fail("p1", "r2", "x");
@@ -326,7 +276,7 @@ class RenewalRecordRedisAdapterTest {
     void keys_areOutsideLolServerScanPattern() {
         // given
         adapter.open("p1", "r1", "KR");
-        adapter.recordTargets("p1", "r1", List.of("KR_1"));
+        adapter.saveRiotRevisionDate("p1", "r1", 1L);
 
         // when & then
         assertThat(redis.keys("summoner:renewal:*")).isEmpty();

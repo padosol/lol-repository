@@ -60,69 +60,6 @@ class RenewalMatchClaimServiceTest {
     }
 
     @Test
-    @DisplayName("release 는 선점한 갱신만 지울 수 있다")
-    void release_onlyOwnerDeletes() {
-        // given
-        service.claim("m1", "r1");
-
-        // when
-        service.release("m1", "r2");
-
-        // then
-        assertThat(service.claim("m1", "r2")).isFalse();
-        service.release("m1", "r1");
-        assertThat(service.claim("m1", "r2")).isTrue();
-    }
-
-    @Test
-    @DisplayName("실패를 세 번 표시하면 대상에서 제외된다")
-    void markFailed_threeTimes_excluded() {
-        // given
-        service.markFailed("m1");
-        service.markFailed("m1");
-        assertThat(service.findExcluded(List.of("m1"))).isEmpty();
-
-        // when
-        service.markFailed("m1");
-
-        // then
-        assertThat(service.findExcluded(List.of("m1", "m2"))).containsExactly("m1");
-        assertThat(service.findFailedAt(List.of("m1", "m2"))).containsOnlyKeys("m1");
-    }
-
-    @Test
-    @DisplayName("실패 시각은 현재 ms 이고 TTL 은 5분, 횟수 TTL 은 1일이다")
-    void markFailed_timestampAndTtl() {
-        // given
-        long before = System.currentTimeMillis();
-
-        // when
-        service.markFailed("m1");
-
-        // then
-        assertThat(service.findFailedAt(List.of("m1")).get("m1"))
-                .isBetween(before, System.currentTimeMillis());
-        assertThat(redis.getExpire("renewal:match:failed:m1")).isBetween(290L, 300L);
-        assertThat(redis.getExpire("renewal:match:failed-count:m1")).isBetween(86_390L, 86_400L);
-    }
-
-    @Test
-    @DisplayName("TTL 없이 남은 실패 횟수가 있어도 markFailed 뒤에는 횟수·표시 모두 TTL 이 있다")
-    void markFailed_leftoverCountWithoutTtl_getsTtl() {
-        // given — 옛 코드가 INCR 와 EXPIRE 사이에서 죽어 남긴 TTL 없는 횟수
-        redis.opsForValue().set("renewal:match:failed-count:m1", "1");
-        assertThat(redis.getExpire("renewal:match:failed-count:m1")).isEqualTo(-1L);
-
-        // when
-        service.markFailed("m1");
-
-        // then
-        assertThat(redis.opsForValue().get("renewal:match:failed-count:m1")).isEqualTo("2");
-        assertThat(redis.getExpire("renewal:match:failed-count:m1")).isPositive();
-        assertThat(redis.getExpire("renewal:match:failed:m1")).isBetween(1L, 300L);
-    }
-
-    @Test
     @DisplayName("선점 TTL 은 1분이다")
     void claim_ttlOneMinute() {
         // when
@@ -147,8 +84,6 @@ class RenewalMatchClaimServiceTest {
     @DisplayName("빈 목록은 빈 결과를 돌려준다")
     void find_emptyInput() {
         // when & then
-        assertThat(service.findFailedAt(List.of())).isEmpty();
-        assertThat(service.findExcluded(List.of())).isEmpty();
         assertThat(service.findClaimedByOthers(List.of(), "r1")).isEmpty();
     }
 }

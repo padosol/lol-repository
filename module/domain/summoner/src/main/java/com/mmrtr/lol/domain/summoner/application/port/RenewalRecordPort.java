@@ -3,7 +3,6 @@ package com.mmrtr.lol.domain.summoner.application.port;
 import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
 import com.mmrtr.lol.domain.summoner.domain.RenewalTransition;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -29,9 +28,6 @@ public interface RenewalRecordPort {
     RenewalTransition failIfOverdue(String puuid, String renewalId);
 
     void saveRiotRevisionDate(String puuid, String renewalId, long revisionDateMillis);
-
-    /** 대상 matchId 를 레코드 targets 필드에 기록한다. 빈 목록이어도 기록 후 상태가 된다. */
-    void recordTargets(String puuid, String renewalId, Collection<String> matchIds);
 
     List<String> findActive();
 
