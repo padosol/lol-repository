@@ -428,64 +428,6 @@
     },
     {
       "type": "timeseries",
-      "title": "결과별 사이클 / 초",
-      "description": "success: 3초 이내 SUCCESS · slow: 3초 넘어 SUCCESS · failed: 완료 응답이 FAILED · timeout: 10초 넘게 PROGRESS · rejected: 쿨다운",
-      "id": 8,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 5
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (outcome) (rate(k6_renewal_cycle_outcome_total{testid=~\"$testid\"}[30s]))",
-          "legendFormat": "{{outcome}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 40,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            }
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
       "title": "사이클 시간 (누적 통계)",
       "description": "k6 가 실행 시작부터 모은 통계. 빨간 점선이 3초",
       "id": 9,
@@ -495,8 +437,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 0,
         "y": 5
       },
       "targets": [
@@ -565,8 +507,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 12,
+        "x": 12,
         "y": 5
       },
       "targets": [
@@ -610,7 +552,7 @@
     },
     {
       "type": "row",
-      "title": "앱 — HTTP 요청과 갱신 처리",
+      "title": "앱 — 갱신 처리",
       "id": 11,
       "collapsed": false,
       "gridPos": {
@@ -623,114 +565,6 @@
     },
     {
       "type": "timeseries",
-      "title": "앱 HTTP 요청 / 초",
-      "description": "",
-      "id": 12,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 14
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (method, uri, status) (rate(http_server_requests_seconds_count{job=\"lol-app\",uri=~\"/api/.*\"}[30s]))",
-          "legendFormat": "{{method}} {{uri}} {{status}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "앱 HTTP 평균 응답 시간",
-      "description": "",
-      "id": 13,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 14
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (method, uri) (rate(http_server_requests_seconds_sum{job=\"lol-app\",uri=~\"/api/.*\"}[30s])) / sum by (method, uri) (rate(http_server_requests_seconds_count{job=\"lol-app\",uri=~\"/api/.*\"}[30s]))",
-          "legendFormat": "{{method}} {{uri}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
       "title": "서버 갱신 시간 (접수 → 완료 판정)",
       "description": "1분 창. 분위수는 앱을 percentiles-histogram 으로 띄워야 나온다 (build/local-real/start.sh)",
       "id": 14,
@@ -740,9 +574,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
-        "y": 22
+        "y": 14
       },
       "targets": [
         {
@@ -828,69 +662,6 @@
     },
     {
       "type": "timeseries",
-      "title": "갱신 완료 / 초 (결과·이유)",
-      "description": "",
-      "id": 15,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 22
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (result, reason) (rate(lol_renewal_completed_total[30s]))",
-          "legendFormat": "{{result}} {{reason}}",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(lol_renewal_active)",
-          "legendFormat": "진행 중",
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
       "title": "갱신 단계 처리 / 초",
       "description": "",
       "id": 16,
@@ -900,9 +671,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 22
+        "w": 12,
+        "x": 12,
+        "y": 14
       },
       "targets": [
         {
@@ -945,22 +716,22 @@
     },
     {
       "type": "row",
-      "title": "메시지 큐 — 큐별 적재·발행·처리",
+      "title": "메시지 큐 — 갱신 단계·소환사 큐 처리",
       "id": 17,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 22
       },
       "panels": []
     },
     {
-      "type": "timeseries",
-      "title": "큐 대기 메시지 (ready)",
-      "description": "",
-      "id": 18,
+      "type": "stat",
+      "title": "큐별 처리 누적 (기간)",
+      "description": "고른 기간 안에 리스너가 처리한 메시지 수 (성공·실패 모두). 갱신 계정·리그·매치 단계와 소환사 큐",
+      "id": 52,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -969,7 +740,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 31
+        "y": 23
       },
       "targets": [
         {
@@ -977,53 +748,58 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (queue) (rabbitmq_queue_messages_ready{vhost=\"/\"})",
+          "expr": "sum by (queue) (increase(spring_rabbitmq_listener_seconds_count{job=\"lol-app\",queue=~\"mmrtr.renewal.account|mmrtr.renewal.league|mmrtr.renewal.match|mmrtr.summoner\"}[$__range]))",
           "legendFormat": "{{queue}}",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
+          "decimals": 0,
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
+        "reduceOptions": {
           "calcs": [
-            "lastNotNull",
-            "max"
-          ]
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "horizontal"
       }
     },
     {
       "type": "timeseries",
-      "title": "처리 중 메시지 (unacked)",
-      "description": "",
-      "id": 19,
+      "title": "큐별 처리 / 초",
+      "description": "리스너가 처리한 메시지 수 / 초 (성공·실패 모두)",
+      "id": 53,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 16,
         "x": 8,
-        "y": 31
+        "y": 23
       },
       "targets": [
         {
@@ -1031,7 +807,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (queue) (rabbitmq_queue_messages_unacked{vhost=\"/\"})",
+          "expr": "sum by (queue) (rate(spring_rabbitmq_listener_seconds_count{job=\"lol-app\",queue=~\"mmrtr.renewal.account|mmrtr.renewal.league|mmrtr.renewal.match|mmrtr.summoner\"}[30s]))",
           "legendFormat": "{{queue}}",
           "refId": "A"
         }
@@ -1055,223 +831,8 @@
           "placement": "right",
           "calcs": [
             "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "큐별 발행 / 초",
-      "description": "",
-      "id": 20,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 31
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (queue) (rate(rabbitmq_queue_messages_published_total[30s]))",
-          "legendFormat": "{{queue}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "리스너 처리 / 초",
-      "description": "",
-      "id": 21,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 39
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (queue, result) (rate(spring_rabbitmq_listener_seconds_count[30s]))",
-          "legendFormat": "{{queue}} {{result}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "리스너 평균 처리 시간",
-      "description": "",
-      "id": 22,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 39
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (queue) (rate(spring_rabbitmq_listener_seconds_sum[30s])) / sum by (queue) (rate(spring_rabbitmq_listener_seconds_count[30s]))",
-          "legendFormat": "{{queue}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "매치 적재 큐 처리 / 초 (순위·결과)",
-      "description": "mmrtr.matchId.priority 메시지 결과. denied 는 허가를 못 받아 1초 뒤 다시 넣은 것",
-      "id": 23,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 39
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (rank, result) (rate(lol_match_process_total[30s]))",
-          "legendFormat": "{{rank}} {{result}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
+            "max",
+            "mean"
           ]
         },
         "tooltip": {
@@ -1289,14 +850,14 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 31
       },
       "panels": []
     },
     {
       "type": "stat",
       "title": "허가 거절 (기간)",
-      "description": "Lua 허가 확인에서 거절된 수 (정지·app·method·백필 모두). 사유는 아래 '허가 요청 / 초' 의 result",
+      "description": "Lua 허가 확인에서 거절된 수 (정지·app·method·백필 모두). 사유는 riot_permit_requests_total 의 result 라벨",
       "id": 25,
       "datasource": {
         "type": "prometheus",
@@ -1304,9 +865,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 8,
+        "w": 12,
         "x": 0,
-        "y": 48
+        "y": 32
       },
       "targets": [
         {
@@ -1356,67 +917,6 @@
     },
     {
       "type": "stat",
-      "title": "유저 우선순위 허가 거절 (기간)",
-      "description": "",
-      "id": 26,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 48
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(riot_permit_requests_total{result!=\"granted\",priority=\"USER\"}[$__range]))",
-          "legendFormat": "",
-          "refId": "A",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "0",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      }
-    },
-    {
-      "type": "stat",
       "title": "Riot 429 (기간)",
       "description": "type=server 는 Riot 쪽 서비스 한도라 우리 한도와 무관",
       "id": 27,
@@ -1426,9 +926,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 48
+        "w": 12,
+        "x": 12,
+        "y": 32
       },
       "targets": [
         {
@@ -1478,60 +978,6 @@
     },
     {
       "type": "timeseries",
-      "title": "허가 요청 / 초 (라우팅·우선순위·결과)",
-      "description": "묶음 허가 한 번이 한 건이다 (호출 수가 아니다)",
-      "id": 29,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 52
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (routing, priority, result) (rate(riot_permit_requests_total[30s]))",
-          "legendFormat": "{{routing}} {{priority}} {{result}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
       "title": "Riot 응답 / 초 (호스트·상태)",
       "description": "실제 Riot 호출 수",
       "id": 30,
@@ -1541,9 +987,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 52
+        "w": 12,
+        "x": 0,
+        "y": 36
       },
       "targets": [
         {
@@ -1595,9 +1041,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 52
+        "w": 12,
+        "x": 12,
+        "y": 36
       },
       "targets": [
         {
@@ -1647,7 +1093,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 60
+        "y": 44
       },
       "panels": []
     },
@@ -1664,7 +1110,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 61
+        "y": 45
       },
       "targets": [
         {
@@ -1777,7 +1223,7 @@
         "h": 8,
         "w": 7,
         "x": 10,
-        "y": 61
+        "y": 45
       },
       "targets": [
         {
@@ -1832,7 +1278,7 @@
         "h": 8,
         "w": 4,
         "x": 17,
-        "y": 61
+        "y": 45
       },
       "targets": [
         {
@@ -1886,7 +1332,7 @@
         "h": 8,
         "w": 3,
         "x": 21,
-        "y": 61
+        "y": 45
       },
       "targets": [
         {
@@ -1941,7 +1387,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 53
       },
       "panels": []
     },
@@ -1958,7 +1404,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 70
+        "y": 54
       },
       "targets": [
         {
@@ -2056,9 +1502,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 7,
+        "w": 14,
         "x": 10,
-        "y": 70
+        "y": 54
       },
       "targets": [
         {
@@ -2101,59 +1547,6 @@
       }
     },
     {
-      "type": "timeseries",
-      "title": "실제 · 남은 보유량 (건)",
-      "description": "Riot 한도 - Riot 집계 수. Riot 이 마지막 응답 헤더로 알려 준 값이다. 집계 수는 받은 뒤 그 창이 지나면 비므로 호출이 없으면 비어 보인다. Riot 값은 마지막 응답 뒤 하루 동안 남는다",
-      "id": 45,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 7,
-        "x": 17,
-        "y": 70
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "A",
-          "expr": "max by (routing, bucket, window) (riot_ratelimit_observed_limit) - max by (routing, bucket, window) (riot_ratelimit_observed_count)",
-          "legendFormat": "{{routing}} {{bucket}} {{window}}s"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "min"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
       "type": "row",
       "title": "Riot 호출 — 대기·받기·크기 (진단)",
       "id": 46,
@@ -2162,7 +1555,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 78
+        "y": 62
       },
       "panels": []
     },
@@ -2177,9 +1570,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
-        "y": 79
+        "y": 63
       },
       "targets": [
         {
@@ -2230,9 +1623,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 79
+        "w": 12,
+        "x": 12,
+        "y": 63
       },
       "targets": [
         {
@@ -2283,59 +1676,6 @@
     },
     {
       "type": "timeseries",
-      "title": "Riot 받은 양 / 초 (호스트)",
-      "description": "호스트별 응답 본문 바이트 / 초. 값이 일정한 선에서 더 오르지 않는데 받기 시간이 늘면 연결 하나의 대역폭이 찬 것이다",
-      "id": 49,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 79
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "A",
-          "expr": "sum by (host) (rate(riot_api_response_size_bytes_sum[30s]))",
-          "legendFormat": "{{host}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
       "title": "응답 크기 평균 (method)",
       "description": "method 별 응답 본문 평균 바이트 (받은 그대로)",
       "id": 50,
@@ -2347,7 +1687,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 87
+        "y": 71
       },
       "targets": [
         {
@@ -2400,7 +1740,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 87
+        "y": 71
       },
       "targets": [
         {
@@ -2449,7 +1789,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 95
+        "y": 79
       },
       "panels": []
     },
@@ -2466,7 +1806,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 96
+        "y": 80
       },
       "targets": [
         {
@@ -2538,7 +1878,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 96
+        "y": 80
       },
       "targets": [
         {
