@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -138,11 +139,13 @@ class MatchCacheWriteAdapterTest {
     }
 
     @Test
-    @DisplayName("RBatch.execute 실패 시 swallow + failure 카운터")
-    void writeMatches_swallowsException() {
+    @DisplayName("RBatch.execute 실패 시 failure 카운터를 올리고 IllegalStateException 을 던진다")
+    void writeMatches_failure_countsAndThrows() {
         when(batch.execute()).thenThrow(new RuntimeException("redis down"));
 
-        adapter.writeMatches(List.of(buildMatch("KR_1", 1L, "Ahri")), null, "p0");
+        assertThatThrownBy(() -> adapter.writeMatches(List.of(buildMatch("KR_1", 1L, "Ahri")), null, "p0"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("redis down");
 
         assertThat(meterRegistry.counter("cache.match.write", "result", "failure").count())
                 .isEqualTo(1.0);

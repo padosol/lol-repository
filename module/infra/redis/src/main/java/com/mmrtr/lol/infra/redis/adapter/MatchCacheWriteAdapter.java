@@ -115,6 +115,7 @@ public class MatchCacheWriteAdapter implements MatchCacheWritePort {
         } catch (Exception e) {
             log.warn("cache.match.write failed count={} cause={}", matches.size(), e.getMessage());
             meterRegistry.counter("cache.match.write", "result", "failure").increment(matches.size());
+            throw new IllegalStateException("cache.match.write failed", e);
         }
     }
 
