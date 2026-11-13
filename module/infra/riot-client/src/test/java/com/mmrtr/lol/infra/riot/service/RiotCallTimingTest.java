@@ -41,9 +41,10 @@ class RiotCallTimingTest {
     private static final String HOST = "asia.api.riotgames.com";
     private static final String MATCH_PATH = "/asia/lol/match/v5/matches/KR_1";
 
+    /** 클라이언트가 gzip 을 요청하므로 WireMock 이 알아서 압축하지 않게 끈다 (압축 응답은 {@link RiotGzipTest} 가 본다). */
     @RegisterExtension
     static WireMockExtension wm = WireMockExtension.newInstance()
-            .options(wireMockConfig().dynamicPort())
+            .options(wireMockConfig().dynamicPort().gzipDisabled(true))
             .build();
 
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();

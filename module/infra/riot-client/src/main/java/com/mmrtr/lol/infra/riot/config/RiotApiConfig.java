@@ -5,6 +5,7 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
 import com.mmrtr.lol.infra.riot.exception.RiotServerException;
 import com.mmrtr.lol.infra.riot.service.RiotCallTimingInterceptor;
+import com.mmrtr.lol.infra.riot.service.RiotGzipInterceptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -63,6 +64,8 @@ public class RiotApiConfig {
                 .defaultHeader("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
                 .defaultHeader("Accept-Charset", "application/x-www-form-urlencoded; charset=UTF-8")
                 .requestInterceptor(logRequest())
+                // gzip 은 시간 측정보다 바깥에 둔다 — 받기 시간·받은 바이트를 압축된 그대로(네트워크로 받은 양) 잰다
+                .requestInterceptor(new RiotGzipInterceptor())
                 .requestInterceptor(new RiotCallTimingInterceptor())
                 .defaultStatusHandler(status -> status.value() == 404, this::handleNotFound)
                 .defaultStatusHandler(status -> status.value() == 429, this::handleRateLimited)
