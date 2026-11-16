@@ -21,7 +21,7 @@ dependencies {
     // WireMock (RiotApiService·한도 인수 테스트용)
     testImplementation 'org.wiremock:wiremock-standalone:3.9.2'
 
-    // Testcontainers Redis (RedisRiotRateLimiter 테스트용)
+    // Testcontainers Redis (RedisRiotRateLimiter 테스트, app/method 순차 vs Lua 정확도 테스트용)
     testImplementation 'org.testcontainers:testcontainers'
     testImplementation 'org.testcontainers:junit-jupiter'
 }
