@@ -7,7 +7,7 @@
 `com.mmrtr.lol.domain.championstats` 하위:
 - `domain/` — `TierFilter` (단일 티어 `EMERALD` 또는 범위 `MASTER+`)
 - `application/port/` — `ChampionStatsQueryPort`(BigQuery)·`ChampionStatsCachePort`(캐시 + single-flight 락)·`ChampionStatsMetricsPort`
-- `application/usecase/` — `ChampionStatsQueryUseCase`
+- `application/usecase/` — `ChampionStatsQueryUseCase`, `ChampionStatsCacheEvictUseCase` (BigQuery 적재 직후 자기 캐시 키와, 과도기에는 lol-server 키까지 비운다)
 - `readmodel/` — 공개 API 응답 모델. **lol-server 응답과 필드가 같아야 한다** (`ChampionStatsControllerTest` 가 검증)
 
 ## 공개 API — 챔피언 통계

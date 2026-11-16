@@ -3,6 +3,7 @@ package com.mmrtr.lol.backfill.tasklet;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mmrtr.lol.backfill.BackfillFactType;
 import com.mmrtr.lol.backfill.BackfillProperties;
+import com.mmrtr.lol.backfill.ExportJobParameters;
 import com.mmrtr.lol.backfill.gcs.GcsUploader;
 import com.mmrtr.lol.backfill.partition.IdRangePartitioner;
 import com.mmrtr.lol.backfill.sql.AggregationSql;
@@ -66,8 +67,10 @@ public class ChunkExportTasklet implements Tasklet {
     @Override
     public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
         BackfillFactType factType = BackfillFactType.fromCode(factTypeCode);
-        String objectName = buildObjectName(factType);
-        long rowsWritten = exportToGcs(objectName, factType);
+        ExportJobParameters exportParams = ExportJobParameters.resolve(
+                chunkContext.getStepContext().getStepExecution().getJobParameters(), properties);
+        String objectName = buildObjectName(factType, exportParams);
+        long rowsWritten = exportToGcs(objectName, factType, exportParams);
 
         ExecutionContext stepCtx = chunkContext.getStepContext()
                 .getStepExecution()
@@ -82,20 +85,17 @@ public class ChunkExportTasklet implements Tasklet {
         return RepeatStatus.FINISHED;
     }
 
-    private String buildObjectName(BackfillFactType factType) {
+    private String buildObjectName(BackfillFactType factType, ExportJobParameters exportParams) {
         return String.format("%s/%s/chunk_%012d_%012d.ndjson.gz",
-                factType.gcsPrefix(), runId, startId, endId);
+                factType.gcsPrefixFor(exportParams.mode()), runId, startId, endId);
     }
 
-    private long exportToGcs(String objectName, BackfillFactType factType) throws IOException {
+    private long exportToGcs(String objectName, BackfillFactType factType, ExportJobParameters exportParams)
+            throws IOException {
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
         jdbc.getJdbcTemplate().setFetchSize(properties.chunk().fetchSize());
 
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("startId", startId)
-                .addValue("endId", endId)
-                .addValue("season", properties.filter().season())
-                .addValue("queueIds", properties.filter().queueIds());
+        MapSqlParameterSource params = exportParams.toSqlParams(startId, endId);
 
         long[] count = {0};
         OutputStream raw = gcsUploader.openWriteStream(

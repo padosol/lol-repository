@@ -63,6 +63,7 @@ com.mmrtr.lol.domain.{ctx}/
 2. RestClient Interceptor 체인: `RetryInterceptor` (Retry-After 기반 backoff + ±25% jitter + 4xx/429/5xx/IOException 분류 + Micrometer 메트릭 3종 — `riot.api.responses{status,host}` / `riot.api.retry.attempts{outcome=success|exhausted}` / `riot.api.retry.backoff` timer) → 로컬 Redisson `RateLimitInterceptor` → 로깅 → `concurrencyInterceptor` (Semaphore 20)
 3. CompletableFuture 패턴을 활용한 비동기 처리
 4. 배치 데이터베이스 삽입 (배치 크기 1000, 1초 간격)
+5. 챔피언 통계 적재 — `StatsExportScheduler`(2h) → `lolStatsExportJob`(PG → GCS NDJSON → BigQuery Load) → 캐시 무효화. 설계 `docs/report/2026-10-29-stats-export-pipeline-design.md`
 
 ### 공개 API · 포트 분리
 
