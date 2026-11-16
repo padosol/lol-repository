@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Set;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -25,7 +27,12 @@ public class SaveSummonerDataUseCase {
     public void execute(Summoner summoner) {
         summonerRepositoryPort.save(summoner);
 
-        for (LeagueInfo leagueInfo : summoner.getLeagueInfos()) {
+        saveLeagues(summoner.getPuuid(), summoner.getLeagueInfos());
+    }
+
+    @Transactional
+    public void saveLeagues(String puuid, Set<LeagueInfo> leagueInfos) {
+        for (LeagueInfo leagueInfo : leagueInfos) {
             // Riot league-v4 puuid 전환(2025)으로 leagueId 미제공 — League 저장만
             // 건너뛴다. tier/rank/LP 는 아래 LeagueSummoner 가 보존한다.
             if (leagueInfo.getLeagueId() != null) {
@@ -37,7 +44,7 @@ public class SaveSummonerDataUseCase {
             }
 
             LeagueSummoner leagueSummoner = LeagueSummoner.builder()
-                    .puuid(summoner.getPuuid())
+                    .puuid(puuid)
                     .leagueId(leagueInfo.getLeagueId())
                     .queue(leagueInfo.getQueueType())
                     .tier(leagueInfo.getTier())

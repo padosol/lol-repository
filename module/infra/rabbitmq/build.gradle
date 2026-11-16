@@ -3,6 +3,7 @@ dependencies {
     implementation project(':module:domain:match')
     implementation project(':module:domain:league')
     implementation project(':module:shared')
+    implementation project(':module:common')  // RiotPermitPort·RiotCallPriority
     implementation project(':module:infra:redis')
     implementation project(':module:infra:riot-client')  // 비매치 API (account, summoner, league)
     implementation project(':module:support:logging')
@@ -12,4 +13,12 @@ dependencies {
 
     // Redisson
     implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
+
+    implementation 'io.micrometer:micrometer-core'  // lol.renewal.completed
+
+    implementation 'org.springframework:spring-web'  // RiotClientException.getStatus() 의 HttpStatusCode
+
+    testImplementation 'org.testcontainers:testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:rabbitmq'
 }

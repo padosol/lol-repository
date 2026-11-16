@@ -1,0 +1,121 @@
+# load-test
+
+실제 Riot API 로 갱신 부하를 주는 k6 스크립트와 데이터셋. 인프라는 `docker/infra`, 지표 화면은 `docker/monitoring` 에 있다.
+
+| 파일 | 내용 |
+|---|---|
+| `renewal-steady.js` | 여러 건 측정. 초당 `RATE`(기본 1)명을 `DURATION`(`run.sh` 기본 5m) 동안 갱신. 대상은 `targets.json`. 갱신 요청 → 완료 응답이 한 사이클, 3초 이내 SUCCESS 면 성공 |
+| `renewal.js` | 단건 측정. 소환사 한 명(`-e PUUID=...`, 없으면 `targets.json` 첫 소환사)을 한 번 갱신 요청 → 상태 조회, 걸린 시간 확인 |
+| `lib/renewal.js` | 두 스크립트가 같이 쓰는 갱신 한 사이클(요청 → 0.5초마다 상태 조회, 최대 5초). 성공 기준 3초 |
+| `setup.sh` | 데이터셋 소환사를 DB 에 등록하고 쓸 수 있는 puuid 를 `targets.json` 에 적는다 (아래 "대상 준비") |
+| `run.sh` | k6 를 돌리며 지표를 모니터링 Prometheus 로 보낸다 (실행마다 `testid` 태그) |
+| `reset-db.sh` | 부하 전에 데이터를 "갱신 안 된 소환사" 상태로 되돌린다 (아래 "초기화") |
+| `data.js` | 데이터셋(갱신할 소환사 목록). git 에 넣지 않는다 (아래 "데이터셋") |
+| `targets.json` | `setup.sh` 가 쓰는 부하 대상 목록. git 에 넣지 않는다 |
+
+## 실행
+
+```bash
+# 1. 인프라 (postgres·rabbitmq·redis)
+docker compose -f docker/infra/compose.yml up -d --wait
+# 2. 앱 — 루트 .env(.env.example 복사, RIOT_API_KEY 채움)를 bootRun 이 읽는다.
+#    랭킹 스케줄러 끄기와 서버 갱신 시간 histogram 도 .env 에 들어 있다
+./gradlew :module:app:application:bootRun
+# 3. 모니터링 (Prometheus·Grafana·Tempo)
+docker compose -f docker/monitoring/compose.yml up -d
+# 4. 대상 준비 — 처음 한 번, 데이터셋을 바꿨을 때, DB 를 통째로 비웠을 때
+bash load-test/setup.sh
+# 5. 부하
+bash load-test/run.sh renewal-steady.js
+RATE=2 DURATION=3m bash load-test/run.sh renewal-steady.js
+```
+
+Grafana: http://localhost:13000 (로그인 없음), 대시보드 "갱신 부하 테스트". 위의 "k6 실행" 목록에서 `testid` 를 골라 실행끼리 나눠 본다. 포트는 `PROMETHEUS_PORT`·`GRAFANA_PORT` 로 바꾼다 (`run.sh` 도 `PROMETHEUS_PORT` 를 본다).
+
+## 갱신 흐름 추적 (Tempo)
+
+local 프로파일 앱은 갱신 요청 하나를 trace 하나로 묶어 Tempo(`127.0.0.1:14318`, OTLP HTTP)로 보낸다. 다른 프로파일은 trace 를 만들지 않는다.
+
+```
+http post /api/v1/summoners/{puuid}/renewal     접수
+ └ 발행(send) → mmrtr.summoner 받기(receive)      소환사 단계
+     ├ 발행 → mmrtr.renewal.account 받기          계정 단계
+     ├ 발행 → mmrtr.renewal.league 받기           리그 단계
+     └ 발행 → mmrtr.renewal.match 받기            매치 단계 (가장 늦게 끝난 단계에서 갱신 완료)
+```
+
+- 어느 단계가 긴지: 대시보드 "갱신 단계별 시간" 줄. 단계마다 큐 대기(발행 → 리스너가 받기 직전)와 처리(리스너가 처리한 시간) p95 를 나눠 보여 준다.
+- 느린 갱신 하나를 볼 때: 같은 줄의 "3초 넘게 걸린 갱신" 표에서 Trace ID 를 누른다. 시간 순서 그림에서 send 가 끝나고 receive 가 시작하기까지 빈 칸이 큐 대기다.
+- 로그의 `[traceId]` 는 32자리 전체라 Grafana Explore → Tempo 에 그대로 넣어 찾는다.
+- trace 는 Tempo 컨테이너 안에만 48시간 둔다 (컨테이너를 다시 만들면 지워진다). OTLP 포트는 `TEMPO_OTLP_PORT` 로 바꾸고, 바꿨으면 앱에 `OTLP_TRACING_ENDPOINT` 도 맞춘다.
+- local 프로파일은 리스너 지표가 `spring_rabbit_listener_seconds{messaging_destination_name}` 로 바뀐다 (trace 를 잇는 observation 을 켜서).
+
+## 초기화 (`reset-db.sh`)
+
+같은 조건으로 다시 돌리려면 부하 전에 앱을 끄고 초기화한다. 앱이 떠 있으면 스크립트가 멈춘다 (배경 적재가 지우는 사이에 다시 쓰므로).
+
+```bash
+bash load-test/reset-db.sh --dry-run   # 지울 양만 본다
+bash load-test/reset-db.sh             # yes 를 입력하면 초기화 (--yes 는 확인 없이)
+```
+
+| 대상 | 하는 일 |
+|---|---|
+| `summoner` | 행은 남기고 갱신 일시(`revision_date`·`last_riot_call_date`)를 2026-01-01 로 되돌린다. 앱이 소환사를 처음 등록할 때 넣는 값이라 모두 첫 갱신이 된다 |
+| 리그 | `league`, `league_summoner(_history)`, `summoner_ranking(_backup)`, `tier_cutoff(_backup)` 를 비운다 |
+| 매치 | `match`·참가자·팀·밴, 타임라인(`participant_frame`·`timeline_event_frame`), 이벤트 테이블을 비운다 |
+| Redis db 0 | 비운다 (Riot 한도 상태, 매치 처리 중복 키) |
+| RabbitMQ vhost `/` | 큐 메시지를 비운다 (큐는 남긴다) |
+
+`item_meta`(Flyway V1 기준 데이터), 게임 데이터, esports, batch, `flyway_schema_history` 는 건드리지 않는다. 비울 테이블이 스키마에 없으면 아무것도 하지 않고 멈춘다.
+
+## 대상 준비 (`setup.sh`)
+
+갱신은 DB 에 있는 소환사만 받는다. `setup.sh` 가 데이터셋의 소환사를 하나씩 앱에서 찾고(`GET /api/v1/summoners/{puuid}`), 없으면 Riot 에서 puuid 로 등록한다(`GET /api/riot/{platform}/summoners/{puuid}`). 등록까지 된 소환사만 `targets.json` 에 적고, 안 되는 소환사는 상태 코드와 함께 보여 주고 뺀다. 앱이 떠 있어야 한다.
+
+부하 직전에 Riot 을 부르지 않도록 k6 에서 뺀 단계다. `reset-db.sh` 는 소환사를 남기므로 초기화 뒤에는 다시 돌리지 않아도 된다.
+
+```bash
+bash load-test/setup.sh                            # data.js → targets.json
+DATA=/절대/경로/other.js bash load-test/setup.sh   # 다른 데이터셋
+```
+
+`renewal-steady.js` 는 `targets.json` 만 읽는다. 다른 목록은 `-e TARGETS=/절대/경로` 로 준다 (`bash load-test/run.sh renewal-steady.js -e TARGETS=...`).
+
+## 데이터셋 (`data.js`)
+
+`setup.sh` 가 기본으로 `load-test/data.js` 를 읽는다. 다른 파일은 `DATA=/절대/경로` 로 준다. 실제 소환사 puuid 라 git 에 넣지 않는다 (`.gitignore`).
+
+파일에서 첫 `{` 부터 마지막 `}` 까지를 JSON 으로 읽고 `entries[].puuid` 만 쓴다. 그래서 그 사이는 올바른 JSON 이어야 한다 (키에 따옴표). Riot league API(챌린저 리그 등) 응답을 그대로 붙여 넣어도 된다.
+
+```js
+const userInfo = {
+  "tier": "CHALLENGER",
+  "entries": [
+    { "puuid": "..." },
+    { "puuid": "..." }
+  ]
+}
+```
+
+## 사이클 결과 (`renewal_cycle_outcome`)
+
+| outcome | 뜻 | 성공률 |
+|---|---|---|
+| `success` | 완료 응답 SUCCESS, POST 부터 3초 이내 | 성공 |
+| `slow` | SUCCESS 지만 3초 초과 | 실패 |
+| `failed` | 완료 응답이 FAILED (갱신 실패·기한 초과) | 실패 |
+| `timeout` | 5초 동안 조회해도 PROGRESS | 실패 |
+| `error` | POST 가 202 가 아니거나 응답이 이상함 | 실패 |
+| `rejected` | 쿨다운(같은 소환사 2분)으로 거절 | 넣지 않음 |
+
+갱신 요청 뒤 0.5초마다 최대 10번(5초) 상태를 본다. 성공 기준 3초와 최대 대기 5초는 `lib/renewal.js` 에 고정돼 있고 두 스크립트가 같이 쓴다. 사이클 시간은 0.5초 단위로 잡힌다. 서버가 잰 시간은 대시보드의 "서버 갱신 시간" 이다.
+
+## 알아 둘 것
+
+- 처음 갱신하는 소환사는 최근 20경기를 받고, 뒤이어 추가 매치 찾기가 시즌 매치를 수백 건 받는다. 두 번째 갱신부터는 새 매치만 받아 훨씬 빠르다. 첫 갱신과 재갱신을 섞지 않으려면 같은 소환사로 바로 다시 돌리지 않는다.
+- 추가 매치 찾기와 그 뒤 백필 매치 적재는 `LOL_RENEWAL_BACKGROUND_ENABLED=false`(`.env.example` 기본, 또는 `--lol.renewal.background.enabled=false`)로 끈다.
+  - 갱신이 추가 매치 찾기·백필로 넘기지 않는다.
+  - 추가 매치 찾기 리스너가 시작하지 않는다. `renewal.match.find.queue` 에 쌓인 메시지는 버리지 않고 남는다.
+  - 매치 적재 큐의 사용자 재시도와 나중 타임라인은 그대로 돈다. 이미 큐에 들어 있는 백필 메시지도 처리되므로, 없애려면 `reset-db.sh` 로 큐를 비운다.
+- 앱이 뜨고 1분 뒤, 그 뒤 2시간마다 랭킹 스케줄러가 상위 티어 미등록 소환사 약 1000명을 Riot 에서 조회한다. 부하 중이면 같은 Riot 한도를 쓰므로, 부하 테스트 때는 `LOL_RANKING_SCHEDULER_ENABLED=false`(또는 `--lol.ranking.scheduler.enabled=false`)로 띄워 끈다 (관리자 API 수동 실행은 그대로 된다).

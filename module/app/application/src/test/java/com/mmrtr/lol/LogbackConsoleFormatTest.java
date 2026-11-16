@@ -103,6 +103,19 @@ class LogbackConsoleFormatTest {
                 .contains(": pattern-info");
     }
 
+    @DisplayName("prod 가 아닌 프로파일은 32자리 traceId 를 자르지 않고 찍는다 (로그의 traceId 로 Tempo 에서 trace 를 찾는다)")
+    @Test
+    void nonProdProfileWritesFullTraceId(CapturedOutput output) {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setActiveProfiles("local");
+        initialize(environment);
+
+        MDC.put("traceId", "4bf92f3577b34da6a3ce929d0e0e4736");
+        log.info("trace-info");
+
+        assertThat(output.getOut()).contains(" INFO [4bf92f3577b34da6a3ce929d0e0e4736] --- ");
+    }
+
     private void initialize(MockEnvironment environment) {
         loggingSystem.beforeInitialize();
         loggingSystem.initialize(new LoggingInitializationContext(environment), CONFIG_LOCATION, null);

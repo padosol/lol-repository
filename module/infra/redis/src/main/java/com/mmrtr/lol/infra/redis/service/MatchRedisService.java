@@ -40,4 +40,13 @@ public class MatchRedisService {
             return true;
         }
     }
+
+    /** 재전달될 메시지가 DUPLICATE 로 버려지지 않도록 처리 표시를 푼다. 실패해도 진행한다(fail-open). */
+    public void releaseProcessing(String matchId) {
+        try {
+            stringRedisTemplate.delete(PROCESSING_KEY_PREFIX + matchId);
+        } catch (Exception e) {
+            log.warn("Redis processing 표시 해제 실패 (fail-open): {}", e.getMessage());
+        }
+    }
 }

@@ -29,6 +29,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
+/**
+ * 매치 저장. match 행 = 완료 표시: 갱신 완료 판정이 match 행 존재로 "저장 끝"을 판단하므로
+ * match 행은 참가자·챌린지·팀·밴·타임라인 저장이 모두 끝난 뒤 마지막에 쓴다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -43,8 +47,11 @@ public class MatchService implements MatchRepositoryPort {
     private final TimelineEventJsonService timelineEventJsonService;
     private final Executor timelineSaveExecutor;
 
+    /**
+     * 바깥 트랜잭션을 두지 않는다 — 병렬 저장을 기다리는 동안 커넥션을 쥐지 않기 위해서다.
+     * 각 bulkSave 는 자기 커넥션으로 커밋된다.
+     */
     @Override
-    @Transactional
     public void saveAll(List<MatchDto> matchDtos, List<TimelineDto> timelineDtos,
                         Map<String, Map<String, LeagueSummoner>> leagueByQueueAndPuuid) {
         long start = System.currentTimeMillis();
@@ -118,10 +125,6 @@ public class MatchService implements MatchRepositoryPort {
             }
         }
 
-        t = System.currentTimeMillis();
-        matchRepository.bulkSave(matchEntities);
-        log.debug("[saveAll] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
-
         CompletableFuture<?>[] futures = {
             runBulkSave("matchParticipant", allMatchParticipants, matchSummonerRepository::bulkSave),
             runBulkSave("challenges", allChallenges, challengesRepository::bulkSave),
@@ -134,7 +137,7 @@ public class MatchService implements MatchRepositoryPort {
             t = System.currentTimeMillis();
             CompletableFuture<Void> participantFrameSave = CompletableFuture.runAsync(() -> {
                 long inner = System.currentTimeMillis();
-                timeLineService.saveAll(matchEntities, timelineDtos);
+                timeLineService.saveAll(timelineDtos);
                 log.debug("[saveAll] saveAll timelines: {}ms", System.currentTimeMillis() - inner);
             }, timelineSaveExecutor);
 
@@ -146,6 +149,14 @@ public class MatchService implements MatchRepositoryPort {
 
             CompletableFuture.allOf(participantFrameSave, eventJsonSave).join();
             log.debug("[saveAll] saveAll timelines (parallel total): {}ms", System.currentTimeMillis() - t);
+        }
+
+        // match 행은 마지막에 쓴다 — 행이 있으면 자식 테이블·같은 호출의 타임라인까지 저장이 끝난 것이다.
+        // 타임라인만 저장하는 호출(매치는 이미 DB 에 있음)이면 쓸 매치 행이 없다.
+        if (!matchEntities.isEmpty()) {
+            t = System.currentTimeMillis();
+            matchRepository.bulkSave(matchEntities);
+            log.debug("[saveAll] bulkSave match: {}ms ({}건)", System.currentTimeMillis() - t, matchEntities.size());
         }
 
         log.info("[saveAll] 총 소요: {}ms", System.currentTimeMillis() - start);
@@ -162,6 +173,11 @@ public class MatchService implements MatchRepositoryPort {
             log.debug("[saveAll] bulkSave {}: {}ms ({}건)", name,
                     System.currentTimeMillis() - t, entities.size());
         }, timelineSaveExecutor);
+    }
+
+    @Override
+    public Set<String> findMatchIdsWithTimeline(List<String> matchIds) {
+        return timeLineService.findMatchIdsWithTimeline(matchIds);
     }
 
     @Override

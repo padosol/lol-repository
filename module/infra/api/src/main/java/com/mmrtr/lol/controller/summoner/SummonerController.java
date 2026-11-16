@@ -3,6 +3,7 @@ package com.mmrtr.lol.controller.summoner;
 import com.mmrtr.lol.controller.summoner.dto.response.SummonerResponse;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.application.SummonerService;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -37,7 +38,7 @@ public class SummonerController {
             @PathVariable("region") String region,
             @PathVariable("puuid") String puuid
     ) {
-        Summoner summoner = summonerService.getSummonerByPuuid(region, puuid);
+        Summoner summoner = summonerService.getSummonerByPuuid(region, puuid, RiotCallPriority.USER);
 
         return ResponseEntity.ok(SummonerResponse.of(summoner));
     }

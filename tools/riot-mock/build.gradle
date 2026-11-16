@@ -1,0 +1,18 @@
+bootJar {
+    enabled = true
+    archiveFileName = 'riot-mock.jar'
+}
+
+jar.enabled = false
+
+dependencies {
+    implementation project(':module:domain:match')
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // 헤더 계약 테스트용: 앱의 RateLimitWindow 파서만 쓴다. Redisson 자동설정이 따라오지 않게 전이 의존은 끊는다.
+    testImplementation(project(':module:infra:riot-client')) {
+        transitive = false
+    }
+}
