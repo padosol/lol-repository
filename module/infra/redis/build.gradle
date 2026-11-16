@@ -18,4 +18,8 @@ dependencies {
     implementation 'io.micrometer:micrometer-core'
 
     testImplementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    // Testcontainers Redis (RenewalRecordRedisAdapter Lua 테스트용)
+    testImplementation 'org.testcontainers:testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
 }

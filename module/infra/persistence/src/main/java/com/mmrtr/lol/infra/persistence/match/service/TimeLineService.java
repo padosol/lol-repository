@@ -1,6 +1,5 @@
 package com.mmrtr.lol.infra.persistence.match.service;
 
-import com.mmrtr.lol.infra.persistence.match.entity.MatchEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.ParticipantFrameEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.ChampionStatsValue;
 import com.mmrtr.lol.infra.persistence.match.entity.timeline.value.DamageStatsValue;
@@ -13,10 +12,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -25,24 +22,28 @@ public class TimeLineService {
 
     private final TimeLineRepositoryImpl timeLineRepository;
 
-    public void saveAll(List<MatchEntity> matchEntities, List<TimelineDto> timelineDtos) {
+    /**
+     * 매치 엔티티 없이 timeline.metadata.matchId 로 저장한다 — 매치 행이 이미 DB 에 있어도, 같은 호출에 함께 와도 된다.
+     * participant_frame 에 이미 있는 matchId 는 건너뛴다.
+     */
+    public void saveAll(List<TimelineDto> timelineDtos) {
         long start = System.currentTimeMillis();
 
-        Map<String, MatchEntity> matchEntityMap = matchEntities.stream()
-                .collect(Collectors.toMap(MatchEntity::getMatchId, Function.identity()));
-
         Set<String> existingMatchIds = timeLineRepository.findExistingMatchIds(
-                matchEntities.stream().map(MatchEntity::getMatchId).toList()
+                timelineDtos.stream()
+                        .filter(t -> t != null && t.getMetadata() != null)
+                        .map(t -> t.getMetadata().getMatchId())
+                        .filter(Objects::nonNull)
+                        .toList()
         );
 
         List<ParticipantFrameEntity> allParticipantFrames = new ArrayList<>();
 
         for (TimelineDto timelineDto : timelineDtos) {
-            if (timelineDto == null || timelineDto.getInfo() == null) continue;
+            if (timelineDto == null || timelineDto.getInfo() == null || timelineDto.getMetadata() == null) continue;
 
             String matchId = timelineDto.getMetadata().getMatchId();
-            MatchEntity matchEntity = matchEntityMap.get(matchId);
-            if (matchEntity == null) continue;
+            if (matchId == null) continue;
 
             if (existingMatchIds.contains(matchId)) {
                 log.debug("[timeline] matchId {} 이미 존재, 스킵", matchId);
@@ -56,7 +57,7 @@ public class TimeLineService {
                 ParticipantFramesDto participantFrames = frame.getParticipantFrames();
                 if (participantFrames == null) continue;
                 for (ParticipantFrameDto pf : toParticipantFrameList(participantFrames)) {
-                    allParticipantFrames.add(toParticipantFrameEntity(matchEntity, frame.getTimestamp(), pf));
+                    allParticipantFrames.add(toParticipantFrameEntity(matchId, frame.getTimestamp(), pf));
                 }
             }
         }
@@ -69,6 +70,11 @@ public class TimeLineService {
         }
 
         log.debug("[timeline] 총 소요: {}ms", System.currentTimeMillis() - start);
+    }
+
+    /** participant_frame 에 이미 저장된 matchId (타임라인 저장 여부 판단). */
+    public Set<String> findMatchIdsWithTimeline(List<String> matchIds) {
+        return timeLineRepository.findExistingMatchIds(matchIds);
     }
 
     private List<ParticipantFrameDto> toParticipantFrameList(ParticipantFramesDto frames) {
@@ -86,13 +92,13 @@ public class TimeLineService {
         return list;
     }
 
-    private ParticipantFrameEntity toParticipantFrameEntity(MatchEntity matchEntity, int timestamp, ParticipantFrameDto dto) {
+    private ParticipantFrameEntity toParticipantFrameEntity(String matchId, int timestamp, ParticipantFrameDto dto) {
         ChampionStatsDto cs = dto.getChampionStats();
         DamageStatsDto ds = dto.getDamageStats();
         PositionDto pos = dto.getPosition();
 
         return ParticipantFrameEntity.builder()
-                .matchId(matchEntity.getMatchId())
+                .matchId(matchId)
                 .timestamp(timestamp)
                 .participantId(dto.getParticipantId())
                 .championStats(cs != null ? ChampionStatsValue.builder()

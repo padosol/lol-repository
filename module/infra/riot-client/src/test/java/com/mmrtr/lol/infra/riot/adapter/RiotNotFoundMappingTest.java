@@ -5,11 +5,16 @@ import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
+import com.mmrtr.lol.support.riot.RiotCallPriority;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.http.HttpStatus;
 
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
@@ -32,12 +37,14 @@ class RiotNotFoundMappingTest {
     @Test
     void fetchSummonerByRiotId_riot404_throwsNotFoundUser() {
         // given
-        when(riotApiService.getAccountByRiotId(anyString(), anyString(), any(Platform.class), any()))
+        when(riotApiService.getAccountByRiotId(anyString(), anyString(), any(Platform.class), any(), any()))
                 .thenReturn(CompletableFuture.failedFuture(notFound()));
         SummonerApiAdapter adapter = new SummonerApiAdapter(riotApiService);
+        RiotPermits permits = permits(RiotMethod.ACCOUNT_BY_RIOT_ID, RiotMethod.SUMMONER_BY_PUUID,
+                RiotMethod.LEAGUE_ENTRIES_BY_PUUID);
 
         // when & then
-        assertThatThrownBy(() -> adapter.fetchSummonerByRiotId("nobody", "KR1", "KR", DIRECT).join())
+        assertThatThrownBy(() -> adapter.fetchSummonerByRiotId("nobody", "KR1", "KR", permits, DIRECT).join())
                 .isInstanceOf(CompletionException.class)
                 .cause()
                 .isInstanceOfSatisfying(CoreException.class,
@@ -48,12 +55,19 @@ class RiotNotFoundMappingTest {
     @Test
     void fetchActiveGameByPuuid_riot404_returnsEmpty() {
         // given
-        when(riotApiService.getActiveGameByPuuid(anyString(), any(Platform.class), any()))
+        when(riotApiService.getActiveGameByPuuid(anyString(), any(Platform.class), any(), any()))
                 .thenReturn(CompletableFuture.failedFuture(notFound()));
         SpectatorApiAdapter adapter = new SpectatorApiAdapter(riotApiService);
 
         // when & then
-        assertThat(adapter.fetchActiveGameByPuuid("puuid-1", "KR", DIRECT).join()).isEmpty();
+        assertThat(adapter.fetchActiveGameByPuuid("puuid-1", "KR", permits(RiotMethod.ACTIVE_GAME), DIRECT).join())
+                .isEmpty();
+    }
+
+    private static RiotPermits permits(RiotMethod... methods) {
+        return RiotPermits.of(Arrays.stream(methods)
+                .map(m -> new RiotPermit("t-" + m.methodName(), "KR", m, RiotCallPriority.USER))
+                .toList());
     }
 
     private RiotClientNotFoundException notFound() {

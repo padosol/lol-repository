@@ -1,0 +1,47 @@
+server:
+  port: 8099
+
+spring:
+  application:
+    name: riot-mock
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
+riot-mock:
+  app-limit: "500:10"
+  default-method-limit: "1000:10"
+  count-rejected: true
+  api-key-required: true
+  # endpointKey 에 점이 있어 대괄호 표기를 쓴다 (없으면 바인더가 중첩 키로 쪼갠다)
+  method-limits:
+    "[account-v1.by-riot-id]": "1000:60"
+    "[account-v1.by-puuid]": "1000:60"
+    "[summoner-v4.by-puuid]": "1600:60"
+    "[league-v4.entries-by-puuid]": "20000:10"
+    "[match-v5.ids-by-puuid]": "2000:10"
+    "[match-v5.match]": "2000:10"
+    "[match-v5.timeline]": "2000:10"
+  latency:
+    enabled: true
+    endpoints:
+      "[account-v1.by-riot-id]": { mean-ms: 60, jitter-ms: 30 }
+      "[account-v1.by-puuid]": { mean-ms: 60, jitter-ms: 30 }
+      "[summoner-v4.by-puuid]": { mean-ms: 60, jitter-ms: 30 }
+      "[league-v4.entries-by-puuid]": { mean-ms: 60, jitter-ms: 30 }
+      "[match-v5.ids-by-puuid]": { mean-ms: 120, jitter-ms: 60 }
+      "[match-v5.match]": { mean-ms: 120, jitter-ms: 60 }
+      "[match-v5.timeline]": { mean-ms: 200, jitter-ms: 100 }
+  world:
+    players: 4000
+    first-visit-max: 2500
+    base-history: 60
+    new-game-weights: [30, 40, 20, 10]
+    # 앱이 시즌·패치로 해석하는 값: season 16, patch_version 16.11 (T0=2026-06-01 무렵)
+    game-version: "16.11.712.4021"

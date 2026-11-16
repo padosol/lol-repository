@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -17,34 +16,7 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class RedisLockHandler {
 
-    private static final String RENEWAL_KEY_PREFIX = "summoner:renewal:";
-
     private final RedissonClient redissonClient;
-    private final StringRedisTemplate stringRedisTemplate;
-
-    public boolean acquireLock(String puuid, Duration duration) {
-        String lockKey = "summoner:lock:" + puuid;
-
-        try {
-            RLock lock = redissonClient.getLock(lockKey);
-            return lock.tryLock(0, duration.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("락 획득 중 인터럽트 발생: {}", lockKey, e);
-            return false;
-        }
-    }
-
-    public boolean releaseLock(String puuid) {
-        String lockKey = "summoner:lock:" + puuid;
-
-        RLock lock = redissonClient.getLock(lockKey);
-        if (lock.isHeldByCurrentThread()) {
-            lock.unlock();
-            return true;
-        }
-        return false;
-    }
 
     /**
      * 분산 락 내에서 작업 실행 (재시도 없음)
@@ -74,9 +46,5 @@ public class RedisLockHandler {
         }
 
         return Optional.empty();
-    }
-
-    public void deleteSummonerRenewal(String puuid) {
-        stringRedisTemplate.delete(RENEWAL_KEY_PREFIX + puuid);
     }
 }

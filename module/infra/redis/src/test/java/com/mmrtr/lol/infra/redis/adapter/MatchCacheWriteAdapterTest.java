@@ -5,6 +5,8 @@ import com.mmrtr.lol.domain.match.readmodel.InfoDto;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.MetadataDto;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.MetadataTimeLineDto;
+import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 import com.mmrtr.lol.infra.redis.adapter.view.MatchCacheViewMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -29,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -113,11 +116,36 @@ class MatchCacheWriteAdapterTest {
     }
 
     @Test
-    @DisplayName("RBatch.execute 실패 시 swallow + failure 카운터")
-    void writeMatches_swallowsException() {
+    @DisplayName("타임라인은 index 가 아니라 matchId 로 짝짓는다 — 짝이 없는 매치는 null")
+    void pairsTimelinesByMatchIdNotIndex() {
+        List<MatchDto> matches = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            matches.add(buildMatch("KR_" + i, i, "Ahri"));
+        }
+        TimelineDto t3 = new TimelineDto();
+        MetadataTimeLineDto tm = new MetadataTimeLineDto();
+        tm.setMatchId("KR_3");
+        t3.setMetadata(tm);
+        MatchCacheViewMapper mapper = mock(MatchCacheViewMapper.class);
+        MatchCacheWriteAdapter pairing = new MatchCacheWriteAdapter(
+                redissonClient, objectMapper, meterRegistry, mapper);
+
+        pairing.writeMatches(matches, List.of(t3), "p0");
+
+        for (MatchDto m : matches) {
+            String id = m.getMetadata().getMatchId();
+            verify(mapper).toView(m, id.equals("KR_3") ? t3 : null);
+        }
+    }
+
+    @Test
+    @DisplayName("RBatch.execute 실패 시 failure 카운터를 올리고 IllegalStateException 을 던진다")
+    void writeMatches_failure_countsAndThrows() {
         when(batch.execute()).thenThrow(new RuntimeException("redis down"));
 
-        adapter.writeMatches(List.of(buildMatch("KR_1", 1L, "Ahri")), null, "p0");
+        assertThatThrownBy(() -> adapter.writeMatches(List.of(buildMatch("KR_1", 1L, "Ahri")), null, "p0"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("redis down");
 
         assertThat(meterRegistry.counter("cache.match.write", "result", "failure").count())
                 .isEqualTo(1.0);

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
@@ -44,5 +45,30 @@ public class SummonerRepositoryImpl implements SummonerRepositoryPort {
     public void updateLastRiotCallDate(String puuid) {
         jpaRepository.findById(puuid)
                 .ifPresent(SummonerEntity::updateLastRiotCallDate);
+    }
+
+    @Override
+    @Transactional
+    public boolean updateStatusInfo(String puuid, int profileIconId, long summonerLevel) {
+        return jpaRepository.findById(puuid)
+                .map(entity -> {
+                    entity.updateStatusInfo(profileIconId, summonerLevel);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    @Override
+    @Transactional
+    public void updateGameIdentity(String puuid, String gameName, String tagLine) {
+        jpaRepository.findById(puuid)
+                .ifPresent(entity -> entity.updateGameIdentity(gameName, tagLine));
+    }
+
+    @Override
+    @Transactional
+    public void updateRevisionDate(String puuid, LocalDateTime revisionDate) {
+        jpaRepository.findById(puuid)
+                .ifPresent(entity -> entity.updateRevisionDate(revisionDate));
     }
 }

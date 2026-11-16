@@ -6,6 +6,8 @@ import com.mmrtr.lol.domain.league.application.port.LeagueApiPort;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueListDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
+import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -26,9 +28,11 @@ public class LeagueApiAdapter implements LeagueApiPort {
     private final Executor requestExecutor;
 
     @Override
-    public Set<LeagueEntry> getLeagueEntries(String queue, String tier, String division, int page, String platformName) {
+    public Set<LeagueEntry> getLeagueEntries(String queue, String tier, String division, int page, String platformName,
+                                             RiotPermits permits) {
         Platform platform = Platform.valueOfName(platformName);
-        Set<LeagueEntryDto> entries = riotApiService.getLeagueEntries(queue, tier, division, page, platform);
+        Set<LeagueEntryDto> entries = riotApiService.getLeagueEntries(queue, tier, division, page, platform,
+                permits.take(RiotMethod.LEAGUE_ENTRIES));
         if (entries == null || entries.isEmpty()) {
             return Set.of();
         }
@@ -48,14 +52,14 @@ public class LeagueApiAdapter implements LeagueApiPort {
     }
 
     @Override
-    public Map<Tier, List<LeagueEntry>> getApexEntries(String queue, String platformName) {
+    public Map<Tier, List<LeagueEntry>> getApexEntries(String queue, String platformName, RiotPermits permits) {
         Platform platform = Platform.valueOfName(platformName);
         log.debug("getApexEntries queue={} platform={}", queue, platformName);
 
-        CompletableFuture<LeagueListDto> challengerFuture =
-                riotApiService.getApexLeague("challengerleagues", queue, platform, requestExecutor);
-        CompletableFuture<LeagueListDto> grandmasterFuture =
-                riotApiService.getApexLeague("grandmasterleagues", queue, platform, requestExecutor);
+        CompletableFuture<LeagueListDto> challengerFuture = riotApiService.getApexLeague(RiotMethod.CHALLENGER_LEAGUE,
+                queue, platform, permits.take(RiotMethod.CHALLENGER_LEAGUE), requestExecutor);
+        CompletableFuture<LeagueListDto> grandmasterFuture = riotApiService.getApexLeague(RiotMethod.GRANDMASTER_LEAGUE,
+                queue, platform, permits.take(RiotMethod.GRANDMASTER_LEAGUE), requestExecutor);
 
         CompletableFuture.allOf(challengerFuture, grandmasterFuture).join();
 

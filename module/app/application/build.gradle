@@ -30,6 +30,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
+    // 분산 추적 — 요청 → 소환사·계정·리그·매치 단계를 traceId 하나로 잇는다. 켜는 것은 local 프로파일뿐이다 (application-local.yml)
+    implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+    implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+
     // Redisson (dedicated backfill rate limiter)
     implementation 'org.redisson:redisson-spring-boot-starter:3.46.0'
 
