@@ -11,11 +11,6 @@ import com.mmrtr.lol.domain.spectator.domain.SpectatorTarget;
 import com.mmrtr.lol.domain.spectator.readmodel.ActiveGameReadModel;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotMethod;
-import com.mmrtr.lol.support.riot.RiotPermit;
-import com.mmrtr.lol.support.riot.RiotPermitPort;
-import com.mmrtr.lol.support.riot.RiotPermits;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,14 +22,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -59,15 +52,11 @@ class ActiveGameQueryServiceTest {
     @Mock
     private SpectatorApiPort spectatorApiPort;
 
-    @Mock
-    private RiotPermitPort riotPermitPort;
-
     private ActiveGameQueryService service;
 
     @BeforeEach
     void setUp() {
-        service = new ActiveGameQueryService(spectatorTargetPort, activeGameCachePort, spectatorApiPort,
-                riotPermitPort, Runnable::run);
+        service = new ActiveGameQueryService(spectatorTargetPort, activeGameCachePort, spectatorApiPort, Runnable::run);
     }
 
     @DisplayName("저장되지 않은 puuid 는 NOT_FOUND_PUUID")
@@ -115,8 +104,7 @@ class ActiveGameQueryServiceTest {
         given(spectatorTargetPort.findTarget(PUUID)).willReturn(Optional.of(new SpectatorTarget("KR", AFTER_GAME)));
         ActiveGameReadModel cached = ActiveGameReadModel.from(game());
         given(activeGameCachePort.findGame("KR", PUUID)).willReturn(Optional.of(cached));
-        givenPermitsGranted();
-        given(spectatorApiPort.fetchActiveGameByPuuid(eq(PUUID), eq("KR"), any(), any()))
+        given(spectatorApiPort.fetchActiveGameByPuuid(eq(PUUID), eq("KR"), any()))
                 .willReturn(CompletableFuture.completedFuture(Optional.empty()));
 
         // when & then
@@ -145,8 +133,7 @@ class ActiveGameQueryServiceTest {
         given(spectatorTargetPort.findTarget(PUUID)).willReturn(Optional.of(new SpectatorTarget("NA1", BEFORE_GAME)));
         given(activeGameCachePort.findGame("NA1", PUUID)).willReturn(Optional.empty());
         given(activeGameCachePort.isNotInGame("NA1", PUUID)).willReturn(false);
-        givenPermitsGranted();
-        given(spectatorApiPort.fetchActiveGameByPuuid(eq(PUUID), eq("NA"), any(), any()))
+        given(spectatorApiPort.fetchActiveGameByPuuid(eq(PUUID), eq("NA"), any()))
                 .willReturn(CompletableFuture.completedFuture(Optional.of(game())));
 
         // when
@@ -160,7 +147,6 @@ class ActiveGameQueryServiceTest {
             assertThat(game.bannedChampions()).hasSize(1);
         });
         verify(activeGameCachePort).saveGame("NA1", result.get());
-        verify(riotPermitPort).tryAcquire("NA", RiotCallPriority.USER, Map.of(RiotMethod.ACTIVE_GAME, 1));
     }
 
     @DisplayName("Riot 조회가 실패하면 게임 없음으로 응답하고 캐싱하지 않는다 (lol-server 와 같다)")
@@ -169,44 +155,13 @@ class ActiveGameQueryServiceTest {
         // given
         given(spectatorTargetPort.findTarget(PUUID)).willReturn(Optional.of(new SpectatorTarget("KR", BEFORE_GAME)));
         given(activeGameCachePort.findGame("KR", PUUID)).willReturn(Optional.empty());
-        givenPermitsGranted();
-        given(spectatorApiPort.fetchActiveGameByPuuid(anyString(), anyString(), any(), any()))
+        given(spectatorApiPort.fetchActiveGameByPuuid(anyString(), anyString(), any()))
                 .willReturn(CompletableFuture.failedFuture(new IllegalStateException("riot 503")));
 
         // when & then
         assertThat(service.getActiveGame(PUUID)).isEmpty();
         verify(activeGameCachePort, never()).saveNotInGame(anyString(), anyString());
         verify(activeGameCachePort, never()).saveGame(anyString(), any());
-    }
-
-    @DisplayName("Riot 호출 허가가 거절되면 Riot 을 부르지 않고 게임 없음으로 응답하며 캐싱하지 않는다")
-    @Test
-    void deniedReturnsEmpty() {
-        // given
-        given(spectatorTargetPort.findTarget(PUUID)).willReturn(Optional.of(new SpectatorTarget("KR", BEFORE_GAME)));
-        given(activeGameCachePort.findGame("KR", PUUID)).willReturn(Optional.empty());
-        given(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).willReturn(Optional.empty());
-
-        // when & then
-        assertThat(service.getActiveGame(PUUID)).isEmpty();
-        verifyNoInteractions(spectatorApiPort);
-        verify(activeGameCachePort, never()).saveNotInGame(anyString(), anyString());
-    }
-
-    /** 요청한 건수만큼 허가를 준다. */
-    private void givenPermitsGranted() {
-        given(riotPermitPort.tryAcquire(anyString(), any(), anyMap())).willAnswer(invocation -> {
-            String platform = invocation.getArgument(0);
-            RiotCallPriority priority = invocation.getArgument(1);
-            Map<RiotMethod, Integer> counts = invocation.getArgument(2);
-            List<RiotPermit> permits = new java.util.ArrayList<>();
-            counts.forEach((method, count) -> {
-                for (int k = 1; k <= count; k++) {
-                    permits.add(new RiotPermit("t-" + method + "-" + k, platform, method, priority));
-                }
-            });
-            return Optional.of(RiotPermits.of(permits));
-        });
     }
 
     private ActiveGame game() {

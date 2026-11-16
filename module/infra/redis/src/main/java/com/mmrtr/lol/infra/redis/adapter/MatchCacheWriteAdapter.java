@@ -75,23 +75,13 @@ public class MatchCacheWriteAdapter implements MatchCacheWritePort {
             RBatch batch = redissonClient.createBatch();
             Map<String, Double> zsetMembers = new HashMap<>();
 
-            // 타임라인은 index 가 아니라 matchId 로 짝짓는다 — 최근 일부 매치만 타임라인을 받기 때문이다.
-            Map<String, TimelineDto> timelineByMatchId = new HashMap<>();
-            if (timelines != null) {
-                for (TimelineDto timeline : timelines) {
-                    if (timeline != null && timeline.getMetadata() != null
-                            && timeline.getMetadata().getMatchId() != null) {
-                        timelineByMatchId.put(timeline.getMetadata().getMatchId(), timeline);
-                    }
-                }
-            }
-
-            for (MatchDto match : matches) {
+            for (int i = 0; i < matches.size(); i++) {
+                MatchDto match = matches.get(i);
                 String matchId = extractMatchId(match);
                 if (matchId == null) {
                     continue;
                 }
-                TimelineDto timeline = timelineByMatchId.get(matchId);
+                TimelineDto timeline = (timelines != null && i < timelines.size()) ? timelines.get(i) : null;
                 MatchCacheView view = viewMapper.toView(match, timeline);
 
                 String json = objectMapper.writeValueAsString(view);
@@ -115,7 +105,6 @@ public class MatchCacheWriteAdapter implements MatchCacheWritePort {
         } catch (Exception e) {
             log.warn("cache.match.write failed count={} cause={}", matches.size(), e.getMessage());
             meterRegistry.counter("cache.match.write", "result", "failure").increment(matches.size());
-            throw new IllegalStateException("cache.match.write failed", e);
         }
     }
 

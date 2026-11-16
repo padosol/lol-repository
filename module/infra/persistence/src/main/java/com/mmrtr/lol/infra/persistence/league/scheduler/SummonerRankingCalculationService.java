@@ -12,23 +12,18 @@ import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.infra.persistence.league.repository.MostChampionProjection;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
-import com.mmrtr.lol.support.riot.RiotCallPriority;
-import com.mmrtr.lol.support.riot.RiotPermitPort;
-import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -41,15 +36,12 @@ public class SummonerRankingCalculationService {
     private final TierCutoffRepositoryPort tierCutoffRepositoryPort;
     private final SummonerRepositoryPort summonerRepositoryPort;
     private final SummonerService summonerService;
-    private final RiotPermitPort riotPermitPort;
 
     private static final String PLATFORM_KR = "KR";
-    private static final int PERMIT_ATTEMPTS = 10;
-    private static final Duration PERMIT_PAUSE = Duration.ofSeconds(1);
     private static final long UNKNOWN_SUMMONER_FETCH_DELAY_MS = 500;
 
     /**
-     * 큐 랭킹을 갱신한다. 스케줄 작업이라 Riot 호출은 BACKGROUND 허가로 받아 사용자 요청보다 뒤로 미룬다.
+     * 큐 랭킹을 갱신한다.
      *
      * @param queue            대상 큐 타입
      * @param updateTierCutoff 티어 커트라인(챌린저/그랜드마스터 컷)까지 함께 갱신할지 여부.
@@ -57,16 +49,6 @@ public class SummonerRankingCalculationService {
      */
     public void processQueueRanking(String queue, boolean updateTierCutoff) {
         try {
-            // 허가를 먼저 받는다. 못 받으면 백업 등 DB 를 건드리기 전에 이번 계산을 건너뛴다
-            Optional<RiotPermits> granted = riotPermitPort.acquireWithRetry(
-                    PLATFORM_KR, RiotCallPriority.BACKGROUND, LeagueApiPort.APEX_COST,
-                    PERMIT_ATTEMPTS, PERMIT_PAUSE);
-            if (granted.isEmpty()) {
-                log.warn("큐 {} 랭킹 계산 건너뜀 (Riot 허가를 받지 못함)", queue);
-                return;
-            }
-            RiotPermits apexPermits = granted.get();
-
             // 잔존 백업 데이터 방어적 정리
             summonerRankingRepositoryPort.clearBackup(queue);
 
@@ -81,7 +63,7 @@ public class SummonerRankingCalculationService {
             // Riot API에서 챌린저/그랜드마스터 데이터 조회 (KR만)
             log.info("큐 {} 챌린저/그랜드마스터 데이터 조회 시작 (KR)", queue);
 
-            Map<Tier, List<LeagueEntry>> apexEntries = leagueApiPort.getApexEntries(queue, PLATFORM_KR, apexPermits);
+            Map<Tier, List<LeagueEntry>> apexEntries = leagueApiPort.getApexEntries(queue, PLATFORM_KR);
             List<LeagueEntry> challengerEntries = apexEntries.getOrDefault(Tier.CHALLENGER, List.of());
             List<LeagueEntry> grandmasterEntries = apexEntries.getOrDefault(Tier.GRANDMASTER, List.of());
 
@@ -257,7 +239,7 @@ public class SummonerRankingCalculationService {
         int fetched = 0;
         for (String puuid : unknownPuuids) {
             try {
-                Summoner summoner = summonerService.getSummonerByPuuid(PLATFORM_KR, puuid, RiotCallPriority.BACKGROUND);
+                Summoner summoner = summonerService.getSummonerByPuuid(PLATFORM_KR, puuid);
                 summonerMap.put(puuid, summoner);
                 fetched++;
                 if (fetched % 50 == 0) {

@@ -16,9 +16,6 @@ public class RedissonConfig {
     @Value("${spring.data.redis.port}")
     private int redisPort;
 
-    @Value("${spring.data.redis.database:0}")
-    private int redisDatabase;
-
     private static final String REDIS_PROTOCOL_PREFIX = "redis://";
 
     @Bean
@@ -26,7 +23,6 @@ public class RedissonConfig {
         Config config = new Config();
         config.useSingleServer()
                 .setAddress(REDIS_PROTOCOL_PREFIX + redisHost + ":" + redisPort)
-                .setDatabase(redisDatabase)
                 .setConnectionPoolSize(10)
                 .setConnectionMinimumIdleSize(10);
         return Redisson.create(config);

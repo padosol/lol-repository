@@ -1,8 +1,10 @@
 package com.mmrtr.lol.infra.rabbitmq.listener;
 
-import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
+import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
-import com.mmrtr.lol.infra.rabbitmq.renewal.RenewalSummonerStep;
+import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
+import com.mmrtr.lol.infra.rabbitmq.service.SummonerRenewalService;
+import com.mmrtr.lol.infra.redis.service.RedisLockHandler;
 import com.mmrtr.lol.support.aop.TraceLogging;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,17 +12,43 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 @TraceLogging
 public class SummonerRenewalListener {
 
-    private final RenewalSummonerStep summonerStep;
+    private static final Duration LOCK_TIMEOUT = Duration.ofMinutes(3L);
+
+    private final RedisLockHandler redisLockHandler;
+    private final SummonerRenewalService summonerRenewalService;
 
     @RabbitListener(queues = RabbitMqBinding.Queue.SUMMONER, containerFactory = "simpleRabbitListenerContainerFactory")
     public void receiveSummonerMessageV2(@Payload SummonerMessage summonerMessage) {
         log.info("전적 갱신 요청 {}", summonerMessage);
-        summonerStep.run(summonerMessage);
+
+        Platform platform = Platform.valueOfName(summonerMessage.getPlatformId());
+        if (platform == null) {
+            log.error("유효하지 않은 platform: {}, message: {}", summonerMessage.getPlatformId(), summonerMessage);
+            return;
+        }
+
+        String puuid = summonerMessage.getPuuid();
+        if (!redisLockHandler.acquireLock(puuid, LOCK_TIMEOUT)) {
+            log.info("이미 전적 갱신 진행 중 입니다. {}", puuid);
+            return;
+        }
+
+        try {
+            summonerRenewalService.renewSummoner(puuid, platform);
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        } finally {
+            log.info("전적 갱신 요청 완료 {}", summonerMessage);
+            redisLockHandler.deleteSummonerRenewal(puuid);
+            redisLockHandler.releaseLock(puuid);
+        }
     }
 }

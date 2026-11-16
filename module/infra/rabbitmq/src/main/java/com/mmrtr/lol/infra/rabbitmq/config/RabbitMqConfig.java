@@ -11,7 +11,6 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -37,9 +36,6 @@ public class RabbitMqConfig {
 
     @Value("${spring.rabbitmq.password}")
     private String rabbitmqPassword;
-
-    @Value("${spring.rabbitmq.virtual-host:/}")
-    private String rabbitmqVirtualHost;
 
     @Bean
     public Queue summonerQueue() {
@@ -80,30 +76,24 @@ public class RabbitMqConfig {
                 .with(RabbitMqBinding.SUMMONER_DLX.getRoutingKey());
     }
 
-    /**
-     * ⑥ 매치 적재 우선순위 큐. 이미 있는 큐의 인자는 바꿀 수 없어, 옛 비우선순위 {@code mmrtr.matchId} 를 같은 이름으로
-     * 다시 선언하면 PRECONDITION_FAILED 로 거절되고 RabbitAdmin 이 뒤의 선언(갱신 단계 큐 포함)까지 멈춘다.
-     * 그래서 새 이름으로 선언하고 옛 큐·exchange 는 선언하지도 쓰지도 않는다. DLX 는 옛 큐와 같은 것을 쓴다.
-     */
     @Bean
-    public Queue matchIdPriorityQueue() {
+    public Queue matchIdQueue() {
         return QueueBuilder.durable(RabbitMqBinding.MATCH_ID.getQueue())
                 .withArgument("x-dead-letter-exchange", RabbitMqBinding.MATCH_ID_DLX.getExchange())
                 .withArgument("x-dead-letter-routing-key", RabbitMqBinding.MATCH_ID_DLX.getRoutingKey())
-                .maxPriority(3)
                 .build();
     }
 
     @Bean
-    public DirectExchange matchIdPriorityExchange() {
+    public DirectExchange matchIdExchange() {
         return new DirectExchange(RabbitMqBinding.MATCH_ID.getExchange());
     }
 
     @Bean
-    public Binding matchIdPriorityBinding() {
+    public Binding matchIdBinding() {
         return BindingBuilder
-                .bind(matchIdPriorityQueue())
-                .to(matchIdPriorityExchange())
+                .bind(matchIdQueue())
+                .to(matchIdExchange())
                 .with(RabbitMqBinding.MATCH_ID.getRoutingKey());
     }
 
@@ -143,110 +133,21 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public DirectExchange renewalStepExchange() {
-        return new DirectExchange(RabbitMqBinding.Exchange.RENEWAL);
-    }
-
-    @Bean
-    public DirectExchange renewalStepDlxExchange() {
-        return new DirectExchange(RabbitMqBinding.Exchange.RENEWAL_DLX);
-    }
-
-    @Bean
-    public Queue renewalAccountQueue() {
-        return renewalStepQueue(RabbitMqBinding.RENEWAL_ACCOUNT, RabbitMqBinding.RENEWAL_ACCOUNT_DLX);
-    }
-
-    @Bean
-    public Queue renewalLeagueQueue() {
-        return renewalStepQueue(RabbitMqBinding.RENEWAL_LEAGUE, RabbitMqBinding.RENEWAL_LEAGUE_DLX);
-    }
-
-    @Bean
-    public Queue renewalMatchQueue() {
-        return renewalStepQueue(RabbitMqBinding.RENEWAL_MATCH, RabbitMqBinding.RENEWAL_MATCH_DLX);
-    }
-
-    @Bean
-    public Queue renewalAccountDlxQueue() {
-        return new Queue(RabbitMqBinding.RENEWAL_ACCOUNT_DLX.getQueue(), true);
-    }
-
-    @Bean
-    public Queue renewalLeagueDlxQueue() {
-        return new Queue(RabbitMqBinding.RENEWAL_LEAGUE_DLX.getQueue(), true);
-    }
-
-    @Bean
-    public Queue renewalMatchDlxQueue() {
-        return new Queue(RabbitMqBinding.RENEWAL_MATCH_DLX.getQueue(), true);
-    }
-
-    @Bean
-    public Binding renewalAccountBinding() {
-        return stepBinding(renewalAccountQueue(), renewalStepExchange(), RabbitMqBinding.RENEWAL_ACCOUNT);
-    }
-
-    @Bean
-    public Binding renewalLeagueBinding() {
-        return stepBinding(renewalLeagueQueue(), renewalStepExchange(), RabbitMqBinding.RENEWAL_LEAGUE);
-    }
-
-    @Bean
-    public Binding renewalMatchBinding() {
-        return stepBinding(renewalMatchQueue(), renewalStepExchange(), RabbitMqBinding.RENEWAL_MATCH);
-    }
-
-    @Bean
-    public Binding renewalAccountDlxBinding() {
-        return stepBinding(renewalAccountDlxQueue(), renewalStepDlxExchange(), RabbitMqBinding.RENEWAL_ACCOUNT_DLX);
-    }
-
-    @Bean
-    public Binding renewalLeagueDlxBinding() {
-        return stepBinding(renewalLeagueDlxQueue(), renewalStepDlxExchange(), RabbitMqBinding.RENEWAL_LEAGUE_DLX);
-    }
-
-    @Bean
-    public Binding renewalMatchDlxBinding() {
-        return stepBinding(renewalMatchDlxQueue(), renewalStepDlxExchange(), RabbitMqBinding.RENEWAL_MATCH_DLX);
-    }
-
-    private Queue renewalStepQueue(RabbitMqBinding binding, RabbitMqBinding dlx) {
-        return QueueBuilder.durable(binding.getQueue())
-                .withArgument("x-dead-letter-exchange", dlx.getExchange())
-                .withArgument("x-dead-letter-routing-key", dlx.getRoutingKey())
-                .build();
-    }
-
-    private Binding stepBinding(Queue queue, DirectExchange exchange, RabbitMqBinding binding) {
-        return BindingBuilder.bind(queue).to(exchange).with(binding.getRoutingKey());
-    }
-
-    @Bean
     public ConnectionFactory connectionFactory() {
         CachingConnectionFactory connectionFactory = new CachingConnectionFactory();
         connectionFactory.setHost(rabbitmqHost);
         connectionFactory.setPort(rabbitmqPort);
         connectionFactory.setUsername(rabbitmqUsername);
         connectionFactory.setPassword(rabbitmqPassword);
-        connectionFactory.setVirtualHost(rabbitmqVirtualHost);
         connectionFactory.setRequestedHeartBeat(60);
 
         return connectionFactory;
     }
 
-    /**
-     * 직접 만드는 템플릿이라 Boot 의 spring.rabbitmq.template.* 가 붙지 않는다. trace 를 메시지 헤더로 넘기는 observation 만
-     * spring.rabbitmq.template.observation-enabled 를 따른다 (local 프로파일에서 켠다). 발행 시각은 큐 대기 시간을 재려고 늘 찍는다.
-     */
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, RabbitProperties rabbitProperties,
-                                         RabbitQueueWait queueWait) {
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(jackson2JsonMessageConverter());
-        rabbitTemplate.setObservationEnabled(rabbitProperties.getTemplate().isObservationEnabled());
-        rabbitTemplate.addBeforePublishPostProcessors(queueWait.stamp());
         return rabbitTemplate;
     }
 
@@ -276,12 +177,10 @@ public class RabbitMqConfig {
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory factory,
             @Qualifier("rabbitListenerTaskExecutor")
-            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider,
-            RabbitQueueWait queueWait
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
     ) {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
-        simpleFactory.setAfterReceivePostProcessors(queueWait.recorder());
 
         simpleFactory.setChannelTransacted(true);
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
@@ -295,22 +194,15 @@ public class RabbitMqConfig {
         return simpleFactory;
     }
 
-    /**
-     * 추가 매치 찾기 큐(renewal.match.find.queue) 전용. {@code lol.renewal.background.enabled=false} 면 리스너를 자동으로 시작하지
-     * 않는다 — 추가 갱신을 잠시 끄는 동안 메시지는 버리지 않고 큐에 남는다.
-     */
     @Bean
     public SimpleRabbitListenerContainerFactory findQueueSimpleRabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory factory,
             @Qualifier("rabbitListenerTaskExecutor")
-            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider,
-            @Value("${lol.renewal.background.enabled:true}") boolean backgroundEnabled,
-            RabbitQueueWait queueWait
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
     ) {
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
-        simpleFactory.setAfterReceivePostProcessors(queueWait.recorder());
 
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
         simpleFactory.setConcurrentConsumers(1);
@@ -318,7 +210,6 @@ public class RabbitMqConfig {
 
         simpleFactory.setPrefetchCount(1);
         simpleFactory.setReceiveTimeout(1000L);
-        simpleFactory.setAutoStartup(backgroundEnabled);
 
         return simpleFactory;
     }
@@ -328,13 +219,11 @@ public class RabbitMqConfig {
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory factory,
             @Qualifier("rabbitListenerTaskExecutor")
-            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider,
-            RabbitQueueWait queueWait
+            ObjectProvider<TaskExecutor> rabbitListenerTaskExecutorProvider
     ) {
 
         SimpleRabbitListenerContainerFactory simpleFactory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(simpleFactory, factory);
-        simpleFactory.setAfterReceivePostProcessors(queueWait.recorder());
 
         rabbitListenerTaskExecutorProvider.ifAvailable(simpleFactory::setTaskExecutor);
         simpleFactory.setConcurrentConsumers(20);

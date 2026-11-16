@@ -13,9 +13,7 @@
 *.swo
 
 # Docker dev infrastructure
-docker/infra/
-docker/monitoring/
-load-test/
+docker/docker-compose*.yml
 docker/.env*
 docker/clickhouse/
 

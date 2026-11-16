@@ -12,8 +12,6 @@ import com.mmrtr.lol.infra.riot.dto.spectator.ParticipantVO;
 import com.mmrtr.lol.infra.riot.dto.spectator.PerksVO;
 import com.mmrtr.lol.infra.riot.exception.RiotClientException;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;
-import com.mmrtr.lol.support.riot.RiotMethod;
-import com.mmrtr.lol.support.riot.RiotPermits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -34,10 +32,10 @@ public class SpectatorApiAdapter implements SpectatorApiPort {
 
     @Override
     public CompletableFuture<Optional<ActiveGame>> fetchActiveGameByPuuid(
-            String puuid, String platformName, RiotPermits permits, Executor executor) {
+            String puuid, String platformName, Executor executor) {
         Platform platform = Platform.valueOfName(platformName);
 
-        return riotApiService.getActiveGameByPuuid(puuid, platform, permits.take(RiotMethod.ACTIVE_GAME), executor)
+        return riotApiService.getActiveGameByPuuid(puuid, platform, executor)
                 .thenApply(vo -> Optional.of(toDomain(vo)))
                 .exceptionally(ex -> {
                     Throwable cause = ex.getCause();
