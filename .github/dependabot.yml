@@ -12,6 +12,15 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
+    # Spring Boot 4 / springdoc 3 는 코드 이관이 필요한 메이저라 별도 작업으로 올린다.
+    # 그때까지는 3.5.x / 2.x 라인 안의 패치·마이너만 받는다 (이관 완료 시 이 블록 제거).
+    ignore:
+      - dependency-name: "org.springframework.boot*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "io.spring.dependency-management"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springdoc:*"
+        update-types: ["version-update:semver-major"]
     groups:
       spring-boot:
         patterns:

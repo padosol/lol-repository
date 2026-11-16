@@ -21,7 +21,7 @@ LOL Repository 는 League of Legends 데이터 **수집/저장 전용 컨슈머*
 | 분류 | 기술 |
 |------|------|
 | Language | Java 21 (Toolchain) |
-| Framework | Spring Boot 3.5.9 |
+| Framework | Spring Boot 3.5.16 |
 | Build | Gradle (Multi-Module) |
 | Database | PostgreSQL + JPA/Hibernate (`reWriteBatchedInserts`, `batch_size=1000`) |
 | Migration | Flyway — `riot` 스키마 전용 체인 (`module/infra/persistence/src/main/resources/db/migration/riot`) |

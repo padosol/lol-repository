@@ -27,7 +27,7 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: 15
+      maximum-pool-size: 10
       leak-detection-threshold: 300000
       max-lifetime: 1500000
       keepalive-time: 300000

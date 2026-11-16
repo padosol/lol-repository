@@ -27,7 +27,8 @@ ENV SPRING_PROFILES_ACTIVE=dev
 COPY --from=build /app/module/app/application/build/libs/*.jar app.jar
 
 # JVM 컨테이너 최적화 옵션
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+# 힙 상한은 이미지가 아니라 배포 쪽(lol-deploy jvmOptions → JAVA_TOOL_OPTIONS 의 -Xmx)에서 정한다.
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:InitialRAMPercentage=50.0"
 ENV JVM_DIAGNOSTIC_OPTS=""
 
 # 포트 노출

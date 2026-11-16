@@ -40,7 +40,8 @@ jobs:
     name: Slack Notification
     runs-on: ubuntu-latest
     needs: [build]
-    if: always()
+    # Dependabot 이 띄운 실행에는 Actions secret 이 주입되지 않아 토큰 누락으로 실패한다
+    if: always() && github.actor != 'dependabot[bot]'
     steps:
       - name: Notify Slack
         uses: slackapi/slack-github-action@v2.1.1

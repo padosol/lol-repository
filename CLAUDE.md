@@ -8,7 +8,7 @@ LOL Repository는 League of Legends 데이터 처리를 위한 컨슈머 서비�
 
 ## 2. 기술 스택
 
-- Java 21, Spring Boot 3.5.9, Gradle
+- Java 21, Spring Boot 3.5.16, Gradle
 - PostgreSQL (JPA/Hibernate)
 - Redis + Redisson 3.46.0 (캐싱, 분산 락)
 - RabbitMQ (비동기 메시지 처리)
