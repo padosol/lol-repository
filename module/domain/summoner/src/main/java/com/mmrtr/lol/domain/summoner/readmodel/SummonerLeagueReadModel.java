@@ -63,17 +63,17 @@ public record SummonerLeagueReadModel(
         return new SummonerLeagueReadModel(soloLeague, flexLeague, soloLeagueHistory, flexLeagueHistory);
     }
 
-    private static LeagueEntry entry(LeagueRecord record, String oow) {
-        return new LeagueEntry(record.queue(), record.leaguePoints(), record.wins(), record.losses(), oow,
-                record.tier(), record.rank());
+    private static LeagueEntry entry(LeagueRecord leagueRecord, String oow) {
+        return new LeagueEntry(leagueRecord.queue(), leagueRecord.leaguePoints(), leagueRecord.wins(),
+                leagueRecord.losses(), oow, leagueRecord.tier(), leagueRecord.rank());
     }
 
-    private static boolean isSolo(LeagueRecord record) {
-        return SOLO_QUEUE.equals(record.queue());
+    private static boolean isSolo(LeagueRecord leagueRecord) {
+        return SOLO_QUEUE.equals(leagueRecord.queue());
     }
 
-    private static boolean isFlex(LeagueRecord record) {
-        return FLEX_QUEUES.contains(record.queue());
+    private static boolean isFlex(LeagueRecord leagueRecord) {
+        return FLEX_QUEUES.contains(leagueRecord.queue());
     }
 
     private static String currentOow(int wins, int losses) {
