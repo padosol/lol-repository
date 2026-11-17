@@ -10,8 +10,7 @@ import java.util.Set;
 
 /**
  * 소환사의 현재 랭크와 랭크 변동 이력. 필드·분류·{@code oow} 형식이 lol-server {@code LeagueResponse}
- * ({@code LeagueMapper}) 와 같다. 자유 랭크 큐(FLEX_SR·FLEX_TT)는 자유 랭크로 분류하고, 티어 체계가 다른 큐
- * (Arena {@code CHERRY} 등 — 적재는 Riot 값 그대로 한다)는 응답에 넣지 않는다.
+ * ({@code LeagueMapper}) 와 같다. lol-server 는 솔로 랭크가 아닌 큐를 모두 자유 랭크로 넣는다.
  */
 public record SummonerLeagueReadModel(
         LeagueEntry soloLeague,

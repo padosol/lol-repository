@@ -35,10 +35,8 @@ import java.util.Set;
 public class LeagueSummonerEntity {
 
     /**
-     * 절대 점수를 계산하는 큐 — IRON~CHALLENGER 티어 체계를 쓰는 랭크 큐. Riot league-v4 는 Arena({@code CHERRY},
-     * WOOD~GLADIATOR) 처럼 티어 체계가 다른 큐도 돌려주는데, 그런 큐는 Riot 값을 그대로 적재하고 점수는 0 으로 둔다
-     * (이 점수를 읽는 랭킹·매치 티어 스냅샷도 이 큐들만 읽는다). {@link Queue} 전체가 아니라 나열하는 건, 매치 매핑 등
-     * 다른 이유로 {@link Queue} 에 큐가 늘어도 점수 계산이 따라 바뀌지 않게 하려는 것.
+     * Riot league-v4 는 Arena({@code CHERRY}, WOOD~GLADIATOR) 처럼 티어 체계가 다른 큐도 돌려준다.
+     * {@link Queue} 에 다른 이유로 큐가 늘어도 점수 계산이 따라 바뀌지 않게 나열한다.
      */
     private static final Set<String> RANKED_TIER_QUEUES = Set.of(
             Queue.RANKED_SOLO_5x5.name(), Queue.RANKED_FLEX_SR.name(), Queue.RANKED_FLEX_TT.name());

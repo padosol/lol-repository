@@ -14,7 +14,7 @@ class LeagueSummonerEntityTest {
         // when
         LeagueSummonerEntity entity = LeagueSummonerEntity.fromDomain(league("RANKED_SOLO_5x5", "GOLD", "II", 50));
 
-        // then — GOLD 4000 + II 200 + 50
+        // then
         assertThat(entity.getAbsolutePoints()).isEqualTo(4250);
     }
 
