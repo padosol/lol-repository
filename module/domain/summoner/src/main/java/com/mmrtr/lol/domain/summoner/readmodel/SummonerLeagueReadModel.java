@@ -9,8 +9,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 소환사의 현재 랭크와 랭크 변동 이력. 필드·분류·{@code oow} 형식이 lol-server {@code LeagueResponse}
- * ({@code LeagueMapper}) 와 같다. lol-server 는 솔로 랭크가 아닌 큐를 모두 자유 랭크로 넣는다.
+ * 소환사의 현재 랭크와 랭크 변동 이력. 필드·{@code oow} 형식이 lol-server {@code LeagueResponse}
+ * ({@code LeagueMapper}) 와 같다.
  */
 public record SummonerLeagueReadModel(
         LeagueEntry soloLeague,

@@ -9,7 +9,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** lol-server {@code LeagueMapper} 의 분류·oow 형식과 같은지. */
+/** lol-server {@code LeagueMapper} 의 oow 형식과 같은지. */
 class SummonerLeagueReadModelTest {
 
     @DisplayName("현재 랭크 oow 는 백분율(소수 둘째 자리), 이력 oow 는 비율 — lol-server 와 같은 문자열")
