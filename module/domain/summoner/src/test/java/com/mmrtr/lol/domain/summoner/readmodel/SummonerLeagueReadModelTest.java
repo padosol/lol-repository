@@ -39,9 +39,9 @@ class SummonerLeagueReadModelTest {
         assertThat(result.soloLeagueHistory()).extracting(LeagueEntry::oow).containsExactly("0");
     }
 
-    @DisplayName("솔로 랭크가 아닌 큐는 자유 랭크로, 이력은 넘긴 순서를 지킨다. 랭크가 없으면 null·빈 목록")
+    @DisplayName("자유 랭크 큐(FLEX_TT 포함)는 자유 랭크로, 이력은 넘긴 순서를 지킨다. 랭크가 없으면 null·빈 목록")
     @Test
-    void of_otherQueuesAndOrder_classifiesAsFlexAndKeepsOrder() {
+    void of_flexQueuesAndOrder_classifiesAsFlexAndKeepsOrder() {
         // when
         SummonerLeagueReadModel result = SummonerLeagueReadModel.of(
                 List.of(record("RANKED_FLEX_TT", 1, 1)),
@@ -53,6 +53,22 @@ class SummonerLeagueReadModelTest {
         assertThat(result.soloLeague()).isNull();
         assertThat(result.soloLeagueHistory()).extracting(LeagueEntry::oow).containsExactly("0.75", "0.25");
         assertThat(empty).isEqualTo(new SummonerLeagueReadModel(null, null, List.of(), List.of()));
+    }
+
+    @DisplayName("티어 체계가 다른 큐(Arena CHERRY 등)는 자유 랭크·이력에 넣지 않는다")
+    @Test
+    void of_otherTierSystemQueue_excludedFromFlex() {
+        // when — CHERRY 가 자유 랭크보다 뒤에 와도 자유 랭크를 덮어쓰지 않는다
+        SummonerLeagueReadModel result = SummonerLeagueReadModel.of(
+                List.of(record("RANKED_FLEX_SR", 1, 0), record("CHERRY", 7, 11)),
+                List.of(record("CHERRY", 6, 11), record("RANKED_FLEX_SR", 1, 1)));
+
+        // then
+        assertThat(result.flexLeague().leagueType()).isEqualTo("RANKED_FLEX_SR");
+        assertThat(result.flexLeagueHistory()).extracting(LeagueEntry::leagueType)
+                .containsExactly("RANKED_FLEX_SR");
+        assertThat(result.soloLeague()).isNull();
+        assertThat(result.soloLeagueHistory()).isEmpty();
     }
 
     private LeagueRecord record(String queue, int wins, int losses) {

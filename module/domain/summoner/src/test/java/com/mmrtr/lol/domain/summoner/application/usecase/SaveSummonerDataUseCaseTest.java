@@ -16,8 +16,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -51,14 +52,14 @@ class SaveSummonerDataUseCaseTest {
     }
 
     @Test
-    @DisplayName("지원하지 않는 큐(Arena CHERRY 등)의 리그 정보는 적재하지 않는다")
-    void saveLeagues_skipsUnsupportedQueue() {
+    @DisplayName("티어 체계가 다른 큐(Arena CHERRY 등)도 Riot 이 준 티어 그대로 적재한다")
+    void saveLeagues_otherTierSystemQueue_storesRiotValuesAsIs() {
         // given
         LeagueInfo solo = LeagueInfo.builder()
                 .leagueId("L1").queueType("RANKED_SOLO_5x5").tier("GOLD").rank("II")
                 .leaguePoints(50).wins(10).losses(5).build();
         LeagueInfo arena = LeagueInfo.builder()
-                .leagueId("A1").queueType("CHERRY").tier("WOOD").rank("I")
+                .queueType("CHERRY").tier("WOOD")
                 .leaguePoints(0).wins(7).losses(11).build();
 
         // when
@@ -66,8 +67,11 @@ class SaveSummonerDataUseCaseTest {
 
         // then
         ArgumentCaptor<LeagueSummoner> saved = ArgumentCaptor.forClass(LeagueSummoner.class);
-        verify(leagueSummonerRepositoryPort).save(saved.capture());
-        assertThat(saved.getValue().getQueue()).isEqualTo("RANKED_SOLO_5x5");
-        verify(leagueRepositoryPort, never()).saveIfAbsent(argThat(l -> l.getLeagueId().equals("A1")));
+        verify(leagueSummonerRepositoryPort, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues())
+                .extracting(LeagueSummoner::getQueue, LeagueSummoner::getTier, LeagueSummoner::getRank)
+                .containsExactlyInAnyOrder(
+                        tuple("RANKED_SOLO_5x5", "GOLD", "II"),
+                        tuple("CHERRY", "WOOD", null));
     }
 }

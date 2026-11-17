@@ -6,10 +6,12 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 소환사의 현재 랭크와 랭크 변동 이력. 필드·분류·{@code oow} 형식이 lol-server {@code LeagueResponse}
- * ({@code LeagueMapper}) 와 같다. 솔로 랭크가 아닌 큐는 모두 자유 랭크로 분류한다.
+ * ({@code LeagueMapper}) 와 같다. 자유 랭크 큐(FLEX_SR·FLEX_TT)는 자유 랭크로 분류하고, 티어 체계가 다른 큐
+ * (Arena {@code CHERRY} 등 — 적재는 Riot 값 그대로 한다)는 응답에 넣지 않는다.
  */
 public record SummonerLeagueReadModel(
         LeagueEntry soloLeague,
@@ -20,6 +22,7 @@ public record SummonerLeagueReadModel(
 
     private static final BigDecimal ONE_HUNDRED = new BigDecimal(100);
     private static final String SOLO_QUEUE = Queue.RANKED_SOLO_5x5.name();
+    private static final Set<String> FLEX_QUEUES = Set.of(Queue.RANKED_FLEX_SR.name(), Queue.RANKED_FLEX_TT.name());
 
     /**
      * @param oow 승률 문자열. 현재 랭크는 백분율({@code "50.00"}), 이력은 비율({@code "0.50"}) — lol-server 와 같다
@@ -43,7 +46,7 @@ public record SummonerLeagueReadModel(
             LeagueEntry entry = entry(current, currentOow(current.wins(), current.losses()));
             if (isSolo(current)) {
                 soloLeague = entry;
-            } else {
+            } else if (isFlex(current)) {
                 flexLeague = entry;
             }
         }
@@ -52,7 +55,11 @@ public record SummonerLeagueReadModel(
         List<LeagueEntry> flexLeagueHistory = new ArrayList<>();
         for (LeagueRecord history : histories) {
             LeagueEntry entry = entry(history, ratio(history.wins(), history.losses()).toString());
-            (isSolo(history) ? soloLeagueHistory : flexLeagueHistory).add(entry);
+            if (isSolo(history)) {
+                soloLeagueHistory.add(entry);
+            } else if (isFlex(history)) {
+                flexLeagueHistory.add(entry);
+            }
         }
         return new SummonerLeagueReadModel(soloLeague, flexLeague, soloLeagueHistory, flexLeagueHistory);
     }
@@ -64,6 +71,10 @@ public record SummonerLeagueReadModel(
 
     private static boolean isSolo(LeagueRecord record) {
         return SOLO_QUEUE.equals(record.queue());
+    }
+
+    private static boolean isFlex(LeagueRecord record) {
+        return FLEX_QUEUES.contains(record.queue());
     }
 
     private static String currentOow(int wins, int losses) {

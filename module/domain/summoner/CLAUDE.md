@@ -16,8 +16,9 @@ lol-server summoner 모듈의 조회·갱신을 옮겼다 (공개 API 재설계 
 
 - `GET /{puuid}` — 저장된 소환사만, 없으면 `NOT_FOUND_PUUID` 404
 - `GET /by-riot-id/{gameName-tagLine}?platform=` — `search_name` 으로 찾아 하나로 특정되면 그대로, 아니면 Riot 에서 찾아 저장한다(갱신 일시는 과거로 초기화). Riot 조회는 `SummonerLookupLockPort`(Redis `summoner:lock:lookup:*`, 5초 대기) 안에서, 기다린 요청은 저장된 결과를 다시 찾는다. 태그가 없으면 저장된 소환사만 찾는다
-- `GET /autocomplete?q=&platform=` — 랭크 기록이 있는 소환사, `search_name` 접두사, 최대 20건(이름순). 솔로 랭크 티어 우선. 빈 검색어는 빈 목록
-- `GET /{puuid}/leagues` — 현재 랭크와 이력(최신순). `oow` 는 현재 백분율 `"50.00"`, 이력 비율 `"0.50"` (lol-server 와 같다)
+- `GET /autocomplete?q=&platform=` — 랭크 기록(IRON~CHALLENGER 티어 체계 큐)이 있는 소환사, `search_name` 접두사, 최대 20건(이름순). 솔로 랭크 티어 우선. 빈 검색어는 빈 목록
+- `GET /{puuid}/leagues` — 현재 랭크와 이력(최신순). `oow` 는 현재 백분율 `"50.00"`, 이력 비율 `"0.50"` (lol-server 와 같다). 티어 체계가 다른 큐(Arena `CHERRY` 등)는 넣지 않는다
+- 리그 적재: Riot league-v4 가 주는 큐는 모두 Riot 값 그대로 `league_summoner` 에 적재한다. 절대 점수(`absolute_points`)는 IRON~CHALLENGER 티어 체계 큐(솔로·자유)만 계산하고 Arena 등은 0 — 랭킹·매치 티어 스냅샷도 그 큐들만 읽는다
 - `POST /{puuid}/renewal` — 진행 중이면 SUCCESS, 클릭 쿨다운(10초, SET NX)·마지막 Riot 호출 2분 이내면 FAILED(200), 아니면 진행 표시(2분) 후 `mmrtr.exchange` 로 발행하고 SUCCESS(202). 메시지의 플랫폼은 이름(KR, NA …) — 컨슈머가 이름으로 읽는다
 - `GET /{puuid}/renewal` — 진행 표시가 있으면 PROGRESS, 없으면 SUCCESS. 진행 표시는 갱신 컨슈머가 끝날 때 지운다
 - 갱신 Redis 키(`summoner:renewal:*`·`summoner:click-cooldown:*`)는 lol-server 와 같은 키·값·TTL 이라 공유한다

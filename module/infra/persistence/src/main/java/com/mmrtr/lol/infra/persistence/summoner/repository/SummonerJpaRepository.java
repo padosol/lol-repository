@@ -22,14 +22,17 @@ public interface SummonerJpaRepository extends JpaRepository<SummonerEntity, Str
                                                                    Pageable pageable);
 
     /**
-     * 랭크 기록이 있는 소환사만 (lol-server 자동완성의 league_summoner INNER JOIN 과 같다).
+     * 랭크 기록이 있는 소환사만 (lol-server 자동완성의 league_summoner INNER JOIN 과 같다). 랭크 기록은 IRON~CHALLENGER
+     * 티어 체계 큐만 — league_summoner 에는 Arena(CHERRY) 처럼 티어 체계가 다른 큐도 Riot 값 그대로 적재된다.
      * pattern 은 {@code !} 로 escape 한 LIKE 패턴 — HQL 문자열 리터럴에서 {@code \} 는 escape 시퀀스로 읽힌다.
      */
     @Query("""
             SELECT s FROM SummonerEntity s
             WHERE s.platformId = :platformId
               AND s.searchName LIKE :pattern ESCAPE '!'
-              AND EXISTS (SELECT 1 FROM LeagueSummonerEntity ls WHERE ls.puuid = s.puuid)
+              AND EXISTS (SELECT 1 FROM LeagueSummonerEntity ls
+                          WHERE ls.puuid = s.puuid
+                            AND ls.queue IN ('RANKED_SOLO_5x5', 'RANKED_FLEX_SR', 'RANKED_FLEX_TT'))
             ORDER BY s.searchName, s.puuid
             """)
     List<SummonerEntity> findRankedBySearchNameLike(@Param("platformId") String platformId,
