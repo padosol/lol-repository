@@ -29,7 +29,9 @@ public interface SummonerJpaRepository extends JpaRepository<SummonerEntity, Str
             SELECT s FROM SummonerEntity s
             WHERE s.platformId = :platformId
               AND s.searchName LIKE :pattern ESCAPE '!'
-              AND EXISTS (SELECT 1 FROM LeagueSummonerEntity ls WHERE ls.puuid = s.puuid)
+              AND EXISTS (SELECT 1 FROM LeagueSummonerEntity ls
+                          WHERE ls.puuid = s.puuid
+                            AND ls.queue IN ('RANKED_SOLO_5x5', 'RANKED_FLEX_SR', 'RANKED_FLEX_TT'))
             ORDER BY s.searchName, s.puuid
             """)
     List<SummonerEntity> findRankedBySearchNameLike(@Param("platformId") String platformId,

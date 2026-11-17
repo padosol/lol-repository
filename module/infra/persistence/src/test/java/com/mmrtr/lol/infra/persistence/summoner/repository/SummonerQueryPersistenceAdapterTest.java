@@ -93,6 +93,17 @@ class SummonerQueryPersistenceAdapterTest {
                 .extracting(Summoner::getPuuid).containsExactly("faker");
     }
 
+    @DisplayName("티어 체계가 다른 큐(Arena CHERRY 등) 기록만 있는 소환사는 자동완성에 나오지 않는다")
+    @Test
+    void findRankedSummonersBySearchNamePrefix_onlyOtherTierSystemQueue_excluded() {
+        // given
+        league(7L, "unranked", "CHERRY", "WOOD", "I", 0);
+
+        // when & then
+        assertThat(adapter.findRankedSummonersBySearchNamePrefix("KR", "hideonbush", 20))
+                .extracting(Summoner::getPuuid).containsExactly("faker", "faker-old");
+    }
+
     @DisplayName("검색어의 % · _ 는 LIKE 와일드카드가 아니라 글자로 찾는다")
     @Test
     void findRankedSummonersBySearchNamePrefix_wildcards_matchLiterally() {
