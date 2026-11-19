@@ -1,0 +1,71 @@
+package com.mmrtr.lol.infra.persistence.ranking.repository;
+
+import com.mmrtr.lol.domain.ranking.domain.TierCutoff;
+import com.mmrtr.lol.domain.ranking.application.port.TierCutoffRepositoryPort;
+import com.mmrtr.lol.infra.persistence.ranking.entity.TierCutoffEntity;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Repository
+@RequiredArgsConstructor
+public class TierCutoffRepositoryImpl implements TierCutoffRepositoryPort {
+
+    private final TierCutoffJpaRepository jpaRepository;
+
+    @Override
+    @Transactional
+    public void saveAll(List<TierCutoff> cutoffs) {
+        if (cutoffs.isEmpty()) {
+            return;
+        }
+
+        String queue = cutoffs.get(0).getQueue();
+        jpaRepository.deleteByQueue(queue);
+
+        List<TierCutoffEntity> entities = cutoffs.stream()
+                .map(TierCutoffEntity::fromDomain)
+                .toList();
+        jpaRepository.saveAll(entities);
+    }
+
+    @Override
+    public List<TierCutoff> findByQueue(String queue) {
+        return jpaRepository.findByQueue(queue).stream()
+                .map(TierCutoffEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void backupCurrentCutoffs(String queue) {
+        jpaRepository.backupCurrentCutoffs(queue);
+    }
+
+    @Override
+    @Transactional
+    public void updateLpChangesFromBackup(String queue) {
+        jpaRepository.updateLpChangesFromBackup(queue);
+    }
+
+    @Override
+    @Transactional
+    public void clearBackup(String queue) {
+        jpaRepository.clearBackup(queue);
+    }
+
+    @Override
+    @Transactional
+    public void replaceAllCutoffs(String queue, List<TierCutoff> cutoffs) {
+        jpaRepository.deleteByQueue(queue);
+
+        List<TierCutoffEntity> entities = cutoffs.stream()
+                .map(TierCutoffEntity::fromDomain)
+                .toList();
+        jpaRepository.saveAll(entities);
+
+        jpaRepository.updateLpChangesFromBackup(queue);
+    }
+}

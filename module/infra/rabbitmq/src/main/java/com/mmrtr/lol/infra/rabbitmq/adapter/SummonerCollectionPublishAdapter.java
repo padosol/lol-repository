@@ -1,6 +1,6 @@
 package com.mmrtr.lol.infra.rabbitmq.adapter;
 
-import com.mmrtr.lol.domain.league.application.port.TierCollectionPublishPort;
+import com.mmrtr.lol.domain.ranking.application.port.TierCollectionPublishPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRenewalPublishPort;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;

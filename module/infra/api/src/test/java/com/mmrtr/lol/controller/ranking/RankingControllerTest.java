@@ -1,10 +1,10 @@
 package com.mmrtr.lol.controller.ranking;
 
 import com.mmrtr.lol.controller.support.RestDocsSupport;
-import com.mmrtr.lol.domain.league.application.usecase.RankingQueryUseCase;
-import com.mmrtr.lol.domain.league.domain.RankingQueue;
-import com.mmrtr.lol.domain.league.readmodel.RankingReadModel;
-import com.mmrtr.lol.domain.league.readmodel.TierCutoffReadModel;
+import com.mmrtr.lol.domain.ranking.application.usecase.RankingQueryUseCase;
+import com.mmrtr.lol.domain.ranking.domain.RankingQueue;
+import com.mmrtr.lol.domain.ranking.readmodel.RankingReadModel;
+import com.mmrtr.lol.domain.ranking.readmodel.TierCutoffReadModel;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
 import com.mmrtr.lol.support.page.PageResult;
