@@ -19,6 +19,9 @@ spring:
     locations: classpath:db/migration/riot
     schemas: riot
     default-schema: riot
+    # 트랜잭션 lock 이면 lock 을 쥔 Flyway 연결을 CREATE INDEX CONCURRENTLY 가 끝없이 기다린다
+    postgresql:
+      transactional-lock: false
   datasource:
     # currentSchema: JPA·native query·JdbcTemplate·Spring Batch 의 스키마 미지정 SQL 이 riot 만 본다
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}?currentSchema=riot&reWriteBatchedInserts=true&tcpKeepAlive=true

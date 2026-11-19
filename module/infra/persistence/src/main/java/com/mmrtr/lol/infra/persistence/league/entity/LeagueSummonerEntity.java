@@ -1,6 +1,7 @@
 package com.mmrtr.lol.infra.persistence.league.entity;
 
 import com.mmrtr.lol.common.type.Division;
+import com.mmrtr.lol.common.type.Queue;
 import com.mmrtr.lol.common.type.Tier;
 import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
 import jakarta.persistence.*;
@@ -14,6 +15,7 @@ import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 
 @Getter
 @Entity
@@ -31,6 +33,13 @@ import java.time.LocalDateTime;
 )
 @EntityListeners(AuditingEntityListener.class)
 public class LeagueSummonerEntity {
+
+    /**
+     * Riot league-v4 는 Arena({@code CHERRY}, WOOD~GLADIATOR) 처럼 티어 체계가 다른 큐도 돌려준다.
+     * {@link Queue} 에 다른 이유로 큐가 늘어도 점수 계산이 따라 바뀌지 않게 나열한다.
+     */
+    private static final Set<String> RANKED_TIER_QUEUES = Set.of(
+            Queue.RANKED_SOLO_5x5.name(), Queue.RANKED_FLEX_SR.name(), Queue.RANKED_FLEX_TT.name());
 
     @Id
     @Comment("리그 소환사 ID")
@@ -115,6 +124,9 @@ public class LeagueSummonerEntity {
     }
 
     private int calculatePoints() {
+        if (!RANKED_TIER_QUEUES.contains(this.queue)) {
+            return 0;
+        }
         int tierScore = Tier.valueOf(this.tier).getScore();
         int divisionScore = Division.valueOf(this.rank).getScore();
 
