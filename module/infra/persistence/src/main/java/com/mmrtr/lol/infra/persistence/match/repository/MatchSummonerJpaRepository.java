@@ -12,15 +12,22 @@ import java.util.List;
 @Repository
 public interface MatchSummonerJpaRepository extends JpaRepository<MatchParticipantEntity, Long> {
 
-    @Query("""
-            SELECT ms.puuid as puuid,
-                   ms.championName as championName,
-                   COUNT(ms) as playCount
-            FROM MatchParticipantEntity ms
-            WHERE ms.puuid IN :puuids
-            GROUP BY ms.puuid, ms.championName
-            ORDER BY ms.puuid, COUNT(ms) DESC
-            """)
+    /**
+     * count(*) 라야 (puuid, champion_name) 인덱스만 읽고 끝난다. JPQL {@code COUNT(엔티티)} 는 PK 를 세서
+     * 챌린저·그랜드마스터 1000명의 전 기간 행을 힙에서 다 읽는다.
+     */
+    @Query(value = """
+            SELECT puuid, champion_name AS "championName", play_count AS "playCount"
+            FROM (
+                SELECT mp.puuid, mp.champion_name, COUNT(*) AS play_count,
+                       ROW_NUMBER() OVER (PARTITION BY mp.puuid ORDER BY COUNT(*) DESC, mp.champion_name) AS rn
+                FROM match_participant mp
+                WHERE mp.puuid IN (:puuids)
+                GROUP BY mp.puuid, mp.champion_name
+            ) ranked
+            WHERE rn <= 3
+            ORDER BY puuid, rn
+            """, nativeQuery = true)
     List<MostChampionProjection> findMostChampionsByPuuids(@Param("puuids") List<String> puuids);
 
     /**
