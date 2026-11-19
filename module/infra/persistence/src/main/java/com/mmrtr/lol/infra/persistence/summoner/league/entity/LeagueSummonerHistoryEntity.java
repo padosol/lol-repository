@@ -1,4 +1,4 @@
-package com.mmrtr.lol.infra.persistence.league.entity;
+package com.mmrtr.lol.infra.persistence.summoner.league.entity;
 
 import jakarta.persistence.*;
 import lombok.*;

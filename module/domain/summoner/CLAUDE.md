@@ -1,6 +1,6 @@
 # module:domain:summoner
 
-소환사 데이터 수집, 공개 소환사 조회 API `/api/v1/summoners/**`, lol-server duo 용 내부 조회 API. `league` 의 port·모델에 의존하고 `module:common`(error)·`module:shared`(Platform·Queue)를 사용.
+소환사 데이터 수집, 공개 소환사 조회 API `/api/v1/summoners/**`, lol-server duo 용 내부 조회 API. 리그 테이블 모델·포트(`league`·`league_summoner`)를 소유하며 다른 컨텍스트에 의존하지 않고 `module:common`(error)·`module:shared`(Platform·Queue)를 사용.
 
 ## 책임 / 구조
 

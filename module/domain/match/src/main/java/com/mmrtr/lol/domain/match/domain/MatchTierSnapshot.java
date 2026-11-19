@@ -1,6 +1,6 @@
 package com.mmrtr.lol.domain.match.domain;
 
-import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.summoner.domain.LeagueSummoner;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

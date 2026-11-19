@@ -1,4 +1,4 @@
-package com.mmrtr.lol.domain.league.domain;
+package com.mmrtr.lol.domain.summoner.domain;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;

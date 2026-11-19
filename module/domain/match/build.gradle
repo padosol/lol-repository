@@ -2,7 +2,7 @@
 dependencies {
     implementation project(':module:common')           // CoreException 등 error 사용
     implementation project(':module:shared')
-    implementation project(':module:domain:league')   // SaveMatchDataUseCase 가 league port.in/model 참조
+    implementation project(':module:domain:summoner')  // SaveMatchDataUseCase 가 summoner 의 LeagueSummonerQueryUseCase 참조
 
     // Spring
     implementation 'org.springframework:spring-context'

@@ -1,6 +1,6 @@
-package com.mmrtr.lol.infra.persistence.league.entity;
+package com.mmrtr.lol.infra.persistence.summoner.league.entity;
 
-import com.mmrtr.lol.domain.league.domain.League;
+import com.mmrtr.lol.domain.summoner.domain.League;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;

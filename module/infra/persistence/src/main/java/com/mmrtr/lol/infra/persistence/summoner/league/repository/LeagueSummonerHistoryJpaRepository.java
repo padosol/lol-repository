@@ -1,6 +1,6 @@
-package com.mmrtr.lol.infra.persistence.league.repository;
+package com.mmrtr.lol.infra.persistence.summoner.league.repository;
 
-import com.mmrtr.lol.infra.persistence.league.entity.LeagueSummonerHistoryEntity;
+import com.mmrtr.lol.infra.persistence.summoner.league.entity.LeagueSummonerHistoryEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

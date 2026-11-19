@@ -7,8 +7,8 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.mmrtr.lol.domain.league.application.port.LeagueSummonerRepositoryPort;
-import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.summoner.application.usecase.LeagueSummonerQueryUseCase;
+import com.mmrtr.lol.domain.summoner.domain.LeagueSummoner;
 import com.mmrtr.lol.domain.match.application.port.MatchRepositoryPort;
 import com.mmrtr.lol.domain.match.domain.MatchTierSnapshot;
 import com.mmrtr.lol.domain.match.readmodel.InfoDto;
@@ -31,7 +31,7 @@ class SaveMatchDataUseCaseTest {
     @Mock
     private MatchRepositoryPort matchRepositoryPort;
     @Mock
-    private LeagueSummonerRepositoryPort leagueSummonerRepositoryPort;
+    private LeagueSummonerQueryUseCase leagueSummonerQueryUseCase;
     @InjectMocks
     private SaveMatchDataUseCase useCase;
 
@@ -39,7 +39,7 @@ class SaveMatchDataUseCaseTest {
     void 큐별_리그_정보로_매치마다_스냅샷을_만든다() {
         LeagueSummoner p1 = LeagueSummoner.builder()
                 .puuid("p1").tier("GOLD").rank("II").absolutePoints(100).build();
-        given(leagueSummonerRepositoryPort.findAllByPuuidsAndQueue(Set.of("p1", "p2"), "RANKED_SOLO_5x5"))
+        given(leagueSummonerQueryUseCase.findAllByPuuidsAndQueue(Set.of("p1", "p2"), "RANKED_SOLO_5x5"))
                 .willReturn(List.of(p1));
 
         useCase.execute(List.of(match(420)), List.of());
@@ -54,7 +54,7 @@ class SaveMatchDataUseCaseTest {
         useCase.execute(List.of(match(9999)), List.of());
 
         assertThat(captureSnapshots().get("KR_1").averageTier()).isNull();
-        verify(leagueSummonerRepositoryPort, never()).findAllByPuuidsAndQueue(any(), anyString());
+        verify(leagueSummonerQueryUseCase, never()).findAllByPuuidsAndQueue(any(), anyString());
     }
 
     @SuppressWarnings("unchecked")

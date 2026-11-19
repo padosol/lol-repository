@@ -1,6 +1,6 @@
-package com.mmrtr.lol.domain.league.application.port;
+package com.mmrtr.lol.domain.summoner.application.port;
 
-import com.mmrtr.lol.domain.league.domain.League;
+import com.mmrtr.lol.domain.summoner.domain.League;
 
 import java.util.Optional;
 

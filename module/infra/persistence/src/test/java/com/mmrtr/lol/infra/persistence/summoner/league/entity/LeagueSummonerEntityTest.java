@@ -1,6 +1,6 @@
-package com.mmrtr.lol.infra.persistence.league.entity;
+package com.mmrtr.lol.infra.persistence.summoner.league.entity;
 
-import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.summoner.domain.LeagueSummoner;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

@@ -1,9 +1,9 @@
-package com.mmrtr.lol.infra.persistence.league.repository;
+package com.mmrtr.lol.infra.persistence.summoner.league.repository;
 
-import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
-import com.mmrtr.lol.domain.league.application.port.LeagueSummonerRepositoryPort;
-import com.mmrtr.lol.infra.persistence.league.entity.LeagueSummonerEntity;
-import com.mmrtr.lol.infra.persistence.league.entity.LeagueSummonerHistoryEntity;
+import com.mmrtr.lol.domain.summoner.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.summoner.application.port.LeagueSummonerRepositoryPort;
+import com.mmrtr.lol.infra.persistence.summoner.league.entity.LeagueSummonerEntity;
+import com.mmrtr.lol.infra.persistence.summoner.league.entity.LeagueSummonerHistoryEntity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 

@@ -1,6 +1,6 @@
 # module:domain:match
 
-매치/타임라인 데이터 수집과 공개 매치 조회 API `/api/v1/matches/**`. `readmodel`(Riot MatchDto/TimelineDto, 공개 API 응답 모델)을 가지며 `league` 의 port·모델에 의존하고 `module:common`(error)·`module:shared`(Tier·Division)를 사용.
+매치/타임라인 데이터 수집과 공개 매치 조회 API `/api/v1/matches/**`. `readmodel`(Riot MatchDto/TimelineDto, 공개 API 응답 모델)을 가지며 `summoner` 의 `LeagueSummonerQueryUseCase`·`LeagueSummoner` 에 의존하고 `module:common`(error)·`module:shared`(Tier·Division)를 사용.
 
 ## 책임 / 구조
 

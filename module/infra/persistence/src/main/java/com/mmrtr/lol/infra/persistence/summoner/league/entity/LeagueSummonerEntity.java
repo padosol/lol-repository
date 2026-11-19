@@ -1,9 +1,9 @@
-package com.mmrtr.lol.infra.persistence.league.entity;
+package com.mmrtr.lol.infra.persistence.summoner.league.entity;
 
 import com.mmrtr.lol.common.type.Division;
 import com.mmrtr.lol.common.type.Queue;
 import com.mmrtr.lol.common.type.Tier;
-import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.summoner.domain.LeagueSummoner;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -1,8 +1,8 @@
 package com.mmrtr.lol.domain.match.application.usecase;
 
 import com.mmrtr.lol.common.type.Queue;
-import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
-import com.mmrtr.lol.domain.league.application.port.LeagueSummonerRepositoryPort;
+import com.mmrtr.lol.domain.summoner.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.summoner.application.usecase.LeagueSummonerQueryUseCase;
 import com.mmrtr.lol.domain.match.domain.MatchTierSnapshot;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 public class SaveMatchDataUseCase {
 
     private final MatchRepositoryPort matchRepositoryPort;
-    private final LeagueSummonerRepositoryPort leagueSummonerRepositoryPort;
+    private final LeagueSummonerQueryUseCase leagueSummonerQueryUseCase;
 
     public void execute(List<MatchDto> matches, List<TimelineDto> timelines) {
         Map<String, Map<String, LeagueSummoner>> leagueMap = buildLeagueMap(matches);
@@ -67,7 +67,7 @@ public class SaveMatchDataUseCase {
             Set<String> puuids = entry.getValue();
 
             List<LeagueSummoner> leagueSummoners =
-                    leagueSummonerRepositoryPort.findAllByPuuidsAndQueue(puuids, queueName);
+                    leagueSummonerQueryUseCase.findAllByPuuidsAndQueue(puuids, queueName);
 
             Map<String, LeagueSummoner> byPuuid = leagueSummoners.stream()
                     .collect(Collectors.toMap(LeagueSummoner::getPuuid, Function.identity()));
