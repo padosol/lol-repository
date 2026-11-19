@@ -39,5 +39,5 @@ lol-server summoner 모듈의 조회·갱신을 옮겼다 (공개 API 재설계 
 ## 규칙
 
 - 도메인은 인프라 타입(@Entity·RestClient·RedisTemplate·AMQP)을 import 하지 않는다.
-- 타 컨텍스트 참조는 그 컨텍스트의 `application`(port·usecase)·도메인 모델만 사용한다.
+- 타 컨텍스트는 `application.usecase`·`domain`·`readmodel` 로만 쓴다 (`application.port..`·`application` 서비스 직접 참조 금지, `ArchitectureTest` 가 강제).
 - 검증: `./gradlew :module:domain:summoner:test` (ArchUnit) / `./gradlew :module:domain:summoner:compileJava`.

@@ -27,11 +27,11 @@ lol-repository (루트)
     ├── common                      # 공유 커널: error(CoreException) + MDC 유틸 (도메인 아님)
     ├── support/logging             # @LogExecutionTime / MDC 로깅 AOP
     ├── domain/
-    │   ├── ranking                 # 랭킹/티어컷오프
+    │   ├── ranking                 # 랭킹/티어컷오프 (→ summoner·match usecase 의존)
     │   ├── champion                # 챔피언 로테이션
     │   ├── gamedata                # 패치 버전·시즌·패치노트·큐 조회 (공개 API game-data)
     │   ├── spectator               # 활성 게임 조회
-    │   ├── match                   # 매치/타임라인 (→ summoner port 의존)
+    │   ├── match                   # 매치/타임라인 (→ summoner usecase 의존)
     │   ├── summoner                # 소환사 (리그 테이블 소유)
     │   └── championstats           # 챔피언 통계 조회 (BigQuery 집계, 공개 API champion-stats)
     └── infra/                      # 어댑터(driven/driving) — 도메인 모듈에 의존
@@ -54,7 +54,7 @@ com.mmrtr.lol.domain.{ctx}/
 └── readmodel/              # Riot/응답 DTO (match·ranking·gamedata·summoner·championstats)
 ```
 
-> 컨텍스트 경계는 `module/domain/{ctx}/src/test` 의 `ArchitectureTest` 로 강제(`./gradlew archTest`). 다른 컨텍스트는 `application.usecase`·`domain`·`readmodel` 로만 쓴다(`application.port..`·`application` 직접 참조 금지). 앱 모듈 `HexagonalArchitectureTest`(`hexagonalArchTest`)는 infra·controller 의 UseCase 구현 금지와 persistence 컨텍스트 간 import(freeze 기준선 2건, 새 위반 금지)를 막으며 `archTest` 에 포함된다.
+> 컨텍스트 경계는 `module/domain/{ctx}/src/test` 의 `ArchitectureTest` 로 강제(`./gradlew archTest`). 다른 컨텍스트는 `application.usecase`·`domain`·`readmodel` 로만 쓴다(`application.port..`·`application` 직접 참조 금지). 앱 모듈 `HexagonalArchitectureTest`(`hexagonalArchTest`)는 infra·controller 의 UseCase 구현 금지와 persistence 컨텍스트 간 import(freeze 기준선 2건, 새 위반 금지)를 막으며 `archTest` 에 포함된다. 기준선을 의도적으로 다시 만들 때는 `archunit.properties` 의 `allowStoreCreation` 을 잠시 `true` 로 두고 `archunit_store` 를 지운 뒤 한 번 실행한다.
 > 인프라 어댑터(`module/infra/*`)는 도메인 모듈의 port 를 구현하며 도메인에 단방향 의존한다.
 
 ### 데이터 흐름
