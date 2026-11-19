@@ -1,4 +1,4 @@
-// module:domain:ranking - 리그/랭킹/티어컷오프 컨텍스트 (도메인 + application port.in/out)
+// module:domain:ranking - 랭킹/티어컷오프 컨텍스트 (도메인 + application port.in/out)
 dependencies {
     implementation project(':module:shared')
     implementation project(':module:common')   // 공개 조회 API 의 CoreException·PageResult

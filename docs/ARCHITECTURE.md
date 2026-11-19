@@ -82,7 +82,7 @@ flowchart TB
 
 **읽는 법**:
 - 화살표 = 컴파일 타임 의존 (`build.gradle` `implementation project(...)`).
-- `infra → domain` 단방향. 도메인 모듈 사이에는 `match → summoner` 만 허용.
+- `infra → domain` 단방향. 도메인 모듈 사이에는 `match → summoner`, `ranking → summoner·match` 만 허용.
 - `app:application` 은 전 어댑터/도메인을 빈으로 등록하는 컴포지션 루트.
 - `tools:riot-mock` 은 앱 모듈이 아닌 독립 도구 프로젝트다 (아래 "도구 프로젝트").
 
@@ -99,6 +99,8 @@ flowchart TB
 
 - `module:infra:riot-client` 의 `RiotApiService`(전 어댑터가 주입) 가 `domain.match.readmodel`(MatchDto/TimelineDto)에 결합 → 어댑터를 도메인별로 쪼개려면 `RiotApiService` 분리 선행 필요.
 - `infra:persistence → infra:redis`, `infra:rabbitmq → infra:redis/riot-client` 의 인프라 간 의존.
+- persistence 컨텍스트 간 import 2건은 ArchUnit freeze 기준선(`module/app/application/src/test/resources/archunit_store`)으로 고정: `DuoProfileQueryPersistenceAdapter`(summoner) → match 리포지토리, `SpectatorTargetPersistenceAdapter`(spectator) → summoner 리포지토리. 새 위반은 테스트가 막는다.
+- 문자열 조인으로 컨텍스트를 넘는 곳 1곳(ArchUnit 이 못 잡음): `MatchQueryPersistenceAdapter` 의 `LEFT JOIN summoner` (match → summoner).
 
 > 어댑터의 컨텍스트별 물리 co-location(`module/domain/{ctx}/adapter/out/*`)은 위 결합 해소 후 진행한다.
 
@@ -110,7 +112,8 @@ flowchart TB
 | 도메인 `application/port` (out port) 시그니처 | 해당 port 를 구현하는 `module:infra:*` 어댑터 |
 | 도메인 `application/usecase` (in port) 시그니처 | `module:infra:api` 컨트롤러 / `rabbitmq` 리스너 |
 | 도메인 객체 필드 추가 | `infra:persistence`(Entity), `infra:api`(응답), `infra:redis`(직렬화) |
-| `summoner` 도메인 모델/포트 | `match` (교차 의존) + 위 인프라 |
+| `summoner` 도메인 모델/usecase | `match`·`ranking` (교차 의존) + 위 인프라 |
+| `match` usecase | `ranking` (교차 의존) |
 | Flyway 마이그레이션(`infra:persistence` 의 `db/migration/riot`, `riot` 스키마) | `infra:persistence` (`RiotSchemaMigrationTest` 가 전 엔티티 validate) |
 | Riot API DTO | `infra:riot-client` (도메인은 모름) |
 | `module:domain:match` readmodel(MatchDto·TimelineDto) | 이를 쓰는 `infra:*` 어댑터와 `tools:riot-mock`(가짜 응답 생성) |

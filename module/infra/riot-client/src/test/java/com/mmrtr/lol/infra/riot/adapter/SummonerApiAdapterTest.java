@@ -72,9 +72,9 @@ class SummonerApiAdapterTest {
         dto.setWins(30);
         dto.setLosses(20);
         dto.setHotStreak(true);
-        dto.setVeteran(true);
+        dto.setVeteran(false);
         dto.setFreshBlood(true);
-        dto.setInactive(true);
+        dto.setInactive(false);
         when(riotApiService.getLeagueEntriesByPuuid("puuid", PLATFORM, permit, DIRECT))
                 .thenReturn(CompletableFuture.completedFuture(Set.of(dto)));
 
@@ -90,9 +90,9 @@ class SummonerApiAdapterTest {
         assertThat(info.getWins()).isEqualTo(30);
         assertThat(info.getLosses()).isEqualTo(20);
         assertThat(info.isHotStreak()).isTrue();
-        assertThat(info.isVeteran()).isTrue();
+        assertThat(info.isVeteran()).isFalse();
         assertThat(info.isFreshBlood()).isTrue();
-        assertThat(info.isInactive()).isTrue();
+        assertThat(info.isInactive()).isFalse();
     }
 
     @Test

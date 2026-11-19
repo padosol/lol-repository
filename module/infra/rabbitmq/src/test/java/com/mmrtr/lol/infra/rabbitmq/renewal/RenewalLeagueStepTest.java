@@ -98,7 +98,7 @@ class RenewalLeagueStepTest {
     }
 
     @Test
-    @DisplayName("리그 항목을 LeagueInfo 로 바꿔 저장하고 리그 비트를 켠다")
+    @DisplayName("포트가 준 LeagueInfo 집합을 저장하고 리그 비트를 켠다")
     @SuppressWarnings("unchecked")
     void run_mapsEntriesAndSavesLeagues() {
         // when
