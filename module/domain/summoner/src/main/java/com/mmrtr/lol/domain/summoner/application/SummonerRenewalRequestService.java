@@ -1,9 +1,9 @@
 package com.mmrtr.lol.domain.summoner.application;
 
 import com.mmrtr.lol.common.type.Platform;
-import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPort;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerQueryPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRenewalPublishPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRenewalStatePort;
 import com.mmrtr.lol.domain.summoner.application.usecase.SummonerRenewalUseCase;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStatus;
@@ -34,7 +34,7 @@ public class SummonerRenewalRequestService implements SummonerRenewalUseCase {
 
     private final SummonerQueryPort summonerQueryPort;
     private final SummonerRenewalStatePort summonerRenewalStatePort;
-    private final SummonerCollectionPublishPort summonerCollectionPublishPort;
+    private final SummonerRenewalPublishPort summonerRenewalPublishPort;
     private final RenewalRecordPort renewalRecordPort;
 
     @Override
@@ -59,7 +59,7 @@ public class SummonerRenewalRequestService implements SummonerRenewalUseCase {
 
         String renewalId = UUID.randomUUID().toString();
         renewalRecordPort.open(puuid, renewalId, platform.name());
-        summonerCollectionPublishPort.publishForRenewal(puuid, platform.name(), renewalId);
+        summonerRenewalPublishPort.publishForRenewal(puuid, platform.name(), renewalId);
         return SummonerRenewalReadModel.of(puuid, RenewalStatus.SUCCESS);
     }
 

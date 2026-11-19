@@ -1,8 +1,8 @@
 package com.mmrtr.lol.domain.summoner.application;
 
-import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPort;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerQueryPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRenewalPublishPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRenewalStatePort;
 import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStatus;
@@ -50,7 +50,7 @@ class SummonerRenewalRequestServiceTest {
     private SummonerRenewalStatePort summonerRenewalStatePort;
 
     @Mock
-    private SummonerCollectionPublishPort summonerCollectionPublishPort;
+    private SummonerRenewalPublishPort summonerRenewalPublishPort;
 
     @Mock
     private RenewalRecordPort renewalRecordPort;
@@ -71,7 +71,7 @@ class SummonerRenewalRequestServiceTest {
         assertThatThrownBy(() -> service.requestRenewal(PUUID))
                 .isInstanceOfSatisfying(CoreException.class,
                         e -> assertThat(e.getErrorType()).isEqualTo(ErrorType.NOT_FOUND_PUUID));
-        verifyNoInteractions(summonerRenewalStatePort, renewalRecordPort, summonerCollectionPublishPort);
+        verifyNoInteractions(summonerRenewalStatePort, renewalRecordPort, summonerRenewalPublishPort);
     }
 
     @DisplayName("플랫폼을 모르는 소환사는 쿨다운을 걸기 전에 UNKNOWN_SUMMONER_PLATFORM")
@@ -84,7 +84,7 @@ class SummonerRenewalRequestServiceTest {
         assertThatThrownBy(() -> service.requestRenewal(PUUID))
                 .isInstanceOfSatisfying(CoreException.class,
                         e -> assertThat(e.getErrorType()).isEqualTo(ErrorType.UNKNOWN_SUMMONER_PLATFORM));
-        verifyNoInteractions(summonerRenewalStatePort, renewalRecordPort, summonerCollectionPublishPort);
+        verifyNoInteractions(summonerRenewalStatePort, renewalRecordPort, summonerRenewalPublishPort);
     }
 
     @DisplayName("갱신 레코드가 기한 전 PROGRESS 면 SUCCESS — 쿨다운도 발행도 하지 않는다")
@@ -101,7 +101,7 @@ class SummonerRenewalRequestServiceTest {
         assertThat(result.status()).isEqualTo("SUCCESS");
         verify(summonerRenewalStatePort, never()).tryStartClickCooldown(anyString());
         verify(renewalRecordPort, never()).open(anyString(), anyString(), anyString());
-        verifyNoInteractions(summonerCollectionPublishPort);
+        verifyNoInteractions(summonerRenewalPublishPort);
     }
 
     @DisplayName("레코드가 FAILED 면 진행 중이 아니라 새 갱신을 받는다")
@@ -148,7 +148,7 @@ class SummonerRenewalRequestServiceTest {
         // then
         assertThat(result.rejected()).isTrue();
         verify(renewalRecordPort, never()).open(anyString(), anyString(), anyString());
-        verifyNoInteractions(summonerCollectionPublishPort);
+        verifyNoInteractions(summonerRenewalPublishPort);
     }
 
     @DisplayName("마지막 Riot 호출 뒤 2분이 안 지났으면 FAILED (쿨다운은 남는다)")
@@ -165,7 +165,7 @@ class SummonerRenewalRequestServiceTest {
         // then
         assertThat(result.status()).isEqualTo("FAILED");
         verify(renewalRecordPort, never()).open(anyString(), anyString(), anyString());
-        verifyNoInteractions(summonerCollectionPublishPort);
+        verifyNoInteractions(summonerRenewalPublishPort);
     }
 
     @DisplayName("접수하면 레코드를 연 뒤 플랫폼 이름(NA1 → NA)과 renewalId 로 발행한다")
@@ -180,9 +180,9 @@ class SummonerRenewalRequestServiceTest {
         SummonerRenewalReadModel result = service.requestRenewal(PUUID);
 
         // then
-        InOrder order = inOrder(renewalRecordPort, summonerCollectionPublishPort);
+        InOrder order = inOrder(renewalRecordPort, summonerRenewalPublishPort);
         order.verify(renewalRecordPort).open(eq(PUUID), idCaptor.capture(), eq("NA"));
-        order.verify(summonerCollectionPublishPort).publishForRenewal(PUUID, "NA", idCaptor.getValue());
+        order.verify(summonerRenewalPublishPort).publishForRenewal(PUUID, "NA", idCaptor.getValue());
         assertThat(idCaptor.getValue()).isNotBlank();
         assertThat(result).isEqualTo(new SummonerRenewalReadModel(PUUID, "SUCCESS", null));
         assertThat(result.rejected()).isFalse();
@@ -199,7 +199,7 @@ class SummonerRenewalRequestServiceTest {
         service.requestRenewal(PUUID);
 
         // then
-        verify(summonerCollectionPublishPort).publishForRenewal(eq(PUUID), eq("KR"), anyString());
+        verify(summonerRenewalPublishPort).publishForRenewal(eq(PUUID), eq("KR"), anyString());
     }
 
     @DisplayName("상태는 레코드가 기한 전 PROGRESS 면 PROGRESS, 저장된 SUCCESS 는 SUCCESS")

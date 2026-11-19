@@ -2,7 +2,7 @@ package com.mmrtr.lol.domain.league.application;
 
 import com.mmrtr.lol.common.type.Division;
 import com.mmrtr.lol.domain.league.application.port.LeagueApiPort;
-import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPort;
+import com.mmrtr.lol.domain.league.application.port.TierCollectionPublishPort;
 import com.mmrtr.lol.domain.league.application.usecase.CollectTierDataUseCase;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
@@ -28,7 +28,7 @@ public class TierCollectionService implements CollectTierDataUseCase {
     private static final Duration PERMIT_PAUSE = Duration.ofSeconds(1);
 
     private final LeagueApiPort leagueApiPort;
-    private final SummonerCollectionPublishPort publishPort;
+    private final TierCollectionPublishPort publishPort;
     private final RiotPermitPort riotPermitPort;
 
     /** 스케줄 작업이라 Riot 호출은 BACKGROUND 허가로 페이지마다 받는다. 거절되면 1초 간격으로 10번까지 다시 묻고, 그래도 안 되면 경고를 남기고 수집을 멈춘다. */

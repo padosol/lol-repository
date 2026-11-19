@@ -1,6 +1,7 @@
 package com.mmrtr.lol.infra.rabbitmq.adapter;
 
-import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPort;
+import com.mmrtr.lol.domain.league.application.port.TierCollectionPublishPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRenewalPublishPort;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
@@ -14,7 +15,7 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class SummonerCollectionPublishAdapter implements SummonerCollectionPublishPort {
+public class SummonerCollectionPublishAdapter implements SummonerRenewalPublishPort, TierCollectionPublishPort {
 
     private final RabbitTemplate rabbitTemplate;
 

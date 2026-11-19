@@ -2,7 +2,7 @@ package com.mmrtr.lol.domain.league.application;
 
 import com.mmrtr.lol.common.type.Division;
 import com.mmrtr.lol.domain.league.application.port.LeagueApiPort;
-import com.mmrtr.lol.domain.league.application.port.SummonerCollectionPublishPort;
+import com.mmrtr.lol.domain.league.application.port.TierCollectionPublishPort;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
@@ -30,12 +30,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class TierCollectionServiceTest {
 
     private final LeagueApiPort leaguePort = mock(LeagueApiPort.class);
-    private final SummonerCollectionPublishPort publishPort = mock(SummonerCollectionPublishPort.class);
+    private final TierCollectionPublishPort publishPort = mock(TierCollectionPublishPort.class);
     private final RiotPermitPort permitPort = mock(RiotPermitPort.class);
     private final TierCollectionService service = new TierCollectionService(leaguePort, publishPort, permitPort);
 
@@ -99,7 +100,7 @@ class TierCollectionServiceTest {
 
         // then
         verify(publishPort).publishForCollection(List.of("p1"), "KR");
-        verify(publishPort, never()).publishForRenewal(any(), any(), any());
+        verifyNoMoreInteractions(publishPort);
     }
 
     /** 요청한 건수만큼 허가를 준다. */

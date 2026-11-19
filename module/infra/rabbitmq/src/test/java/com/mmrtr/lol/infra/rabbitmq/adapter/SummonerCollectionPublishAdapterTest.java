@@ -1,5 +1,7 @@
 package com.mmrtr.lol.infra.rabbitmq.adapter;
 
+import com.mmrtr.lol.domain.league.application.port.TierCollectionPublishPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRenewalPublishPort;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerRenewalMessage;
@@ -22,6 +24,14 @@ class SummonerCollectionPublishAdapterTest {
 
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
     private final SummonerCollectionPublishAdapter adapter = new SummonerCollectionPublishAdapter(rabbitTemplate);
+
+    @Test
+    @DisplayName("두 발행 포트를 모두 구현한다")
+    void 두_발행_포트를_모두_구현한다() {
+        assertThat(adapter)
+                .isInstanceOf(SummonerRenewalPublishPort.class)
+                .isInstanceOf(TierCollectionPublishPort.class);
+    }
 
     @Test
     @DisplayName("사용자 갱신 발행은 renewalId 를 싣고 background=false 로 보낸다")

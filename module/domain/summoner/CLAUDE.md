@@ -34,7 +34,7 @@ lol-server summoner 모듈의 조회·갱신을 옮겼다 (공개 API 재설계 
 
 ## 어댑터 위치
 
-이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: persistence(`SummonerQueryPersistenceAdapter`·`DuoProfileQueryPersistenceAdapter` 포함)·redis(`SummonerLookupLockRedisAdapter`·`SummonerRenewalStateRedisAdapter`)·rabbitmq(발행은 league 의 `SummonerCollectionPublishPort`, 갱신 실행은 `SummonerRenewalService`)·riot-client(SummonerApiAdapter)·api(`controller/summoner/SummonerQueryController`·`SummonerRenewalController`, `controller/internal/`).
+이 컨텍스트의 port 를 구현/소비하는 어댑터는 `module:infra:*` 에 있다: persistence(`SummonerQueryPersistenceAdapter`·`DuoProfileQueryPersistenceAdapter` 포함)·redis(`SummonerLookupLockRedisAdapter`·`SummonerRenewalStateRedisAdapter`)·rabbitmq(발행은 `SummonerRenewalPublishPort`, 갱신 실행은 `SummonerRenewalService`)·riot-client(SummonerApiAdapter)·api(`controller/summoner/SummonerQueryController`·`SummonerRenewalController`, `controller/internal/`).
 
 ## 규칙
 
