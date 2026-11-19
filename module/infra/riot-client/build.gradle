@@ -3,7 +3,7 @@ dependencies {
     implementation project(':module:domain:match')
     implementation project(':module:domain:spectator')
     implementation project(':module:domain:champion')
-    implementation project(':module:domain:league')
+    implementation project(':module:domain:ranking')
     implementation project(':module:shared')
     implementation project(':module:common')
     implementation project(':module:infra:redis')

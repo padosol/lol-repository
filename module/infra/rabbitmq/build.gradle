@@ -1,7 +1,7 @@
 dependencies {
     implementation project(':module:domain:summoner')
     implementation project(':module:domain:match')
-    implementation project(':module:domain:league')
+    implementation project(':module:domain:ranking')
     implementation project(':module:shared')
     implementation project(':module:common')  // RiotPermitPort·RiotCallPriority
     implementation project(':module:infra:redis')

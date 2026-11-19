@@ -18,7 +18,7 @@ flowchart TB
     end
 
     subgraph domain["🟢 domain (인프라 무지)"]
-      league["module:domain:league<br/>리그/랭킹/티어컷오프 (sink)"]
+      ranking["module:domain:ranking<br/>랭킹/티어컷오프"]
       gamedata["module:domain:gamedata<br/>버전·시즌·패치노트·큐"]
       champion["module:domain:champion"]
       spectator["module:domain:spectator"]
@@ -47,21 +47,20 @@ flowchart TB
     end
 
     application --> api & pg & redis & rabbit & riot & bq
-    application --> league & gamedata & champion & spectator & match & summoner & championstats
+    application --> ranking & gamedata & champion & spectator & match & summoner & championstats
 
-    api --> league & gamedata & champion & spectator & match & summoner & championstats
-    pg --> league & gamedata & spectator & match & summoner
+    api --> ranking & gamedata & champion & spectator & match & summoner & championstats
+    pg --> ranking & gamedata & spectator & match & summoner
     redis --> gamedata & champion & spectator & match & summoner & championstats
-    rabbit --> league & match & summoner
-    riot --> league & champion & spectator & match & summoner
+    rabbit --> ranking & match & summoner
+    riot --> ranking & champion & spectator & match & summoner
     bq --> championstats
 
-    match --> league
-    summoner --> league
+    match --> summoner
 
-    league & champion & spectator & match & summoner & championstats --> sharedM
+    ranking & champion & spectator & match & summoner & championstats --> sharedM
     infra --> sharedM
-    league & gamedata & champion & spectator & match & summoner & championstats --> common
+    ranking & gamedata & champion & spectator & match & summoner & championstats --> common
     api & pg & riot --> common
 
     rabbit --> redis & riot
@@ -73,7 +72,7 @@ flowchart TB
     classDef a fill:#fff4d6,stroke:#bf922d,color:#000
     classDef s fill:#fff9c4,stroke:#bfa52d,color:#000
     classDef t fill:#eeeeee,stroke:#777777,color:#000
-    class league,gamedata,champion,spectator,match,summoner,championstats d
+    class ranking,gamedata,champion,spectator,match,summoner,championstats d
     class api,pg,redis,rabbit,riot,bq i
     class application a
     class sharedM,common,logging s
@@ -82,7 +81,7 @@ flowchart TB
 
 **읽는 법**:
 - 화살표 = 컴파일 타임 의존 (`build.gradle` `implementation project(...)`).
-- `infra → domain` 단방향. 도메인 모듈 사이에는 `match → league`, `summoner → league` 만 허용(league 는 sink).
+- `infra → domain` 단방향. 도메인 모듈 사이에는 `match → summoner` 만 허용.
 - `app:application` 은 전 어댑터/도메인을 빈으로 등록하는 컴포지션 루트.
 - `tools:riot-mock` 은 앱 모듈이 아닌 독립 도구 프로젝트다 (아래 "도구 프로젝트").
 
@@ -110,7 +109,7 @@ flowchart TB
 | 도메인 `application/port` (out port) 시그니처 | 해당 port 를 구현하는 `module:infra:*` 어댑터 |
 | 도메인 `application/usecase` (in port) 시그니처 | `module:infra:api` 컨트롤러 / `rabbitmq` 리스너 |
 | 도메인 객체 필드 추가 | `infra:persistence`(Entity), `infra:api`(응답), `infra:redis`(직렬화) |
-| `league` 도메인 모델/포트 | `match`·`summoner` (교차 의존) + 위 인프라 |
+| `summoner` 도메인 모델/포트 | `match` (교차 의존) + 위 인프라 |
 | Flyway 마이그레이션(`infra:persistence` 의 `db/migration/riot`, `riot` 스키마) | `infra:persistence` (`RiotSchemaMigrationTest` 가 전 엔티티 validate) |
 | Riot API DTO | `infra:riot-client` (도메인은 모름) |
 | `module:domain:match` readmodel(MatchDto·TimelineDto) | 이를 쓰는 `infra:*` 어댑터와 `tools:riot-mock`(가짜 응답 생성) |

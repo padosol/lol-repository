@@ -6,7 +6,7 @@ import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.MostChampion;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RecentGame;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.RiotId;
 import com.mmrtr.lol.domain.summoner.readmodel.DuoProfileReadModel.TierInfo;
-import com.mmrtr.lol.infra.persistence.league.repository.LeagueSummonerJpaRepository;
+import com.mmrtr.lol.infra.persistence.summoner.league.repository.LeagueSummonerJpaRepository;
 import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;

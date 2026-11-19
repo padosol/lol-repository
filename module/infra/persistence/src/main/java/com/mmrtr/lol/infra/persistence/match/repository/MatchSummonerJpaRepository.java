@@ -1,6 +1,5 @@
 package com.mmrtr.lol.infra.persistence.match.repository;
 
-import com.mmrtr.lol.infra.persistence.league.repository.MostChampionProjection;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchParticipantEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

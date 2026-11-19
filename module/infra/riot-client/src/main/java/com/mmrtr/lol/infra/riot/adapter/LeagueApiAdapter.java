@@ -2,7 +2,7 @@ package com.mmrtr.lol.infra.riot.adapter;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.common.type.Tier;
-import com.mmrtr.lol.domain.league.application.port.LeagueApiPort;
+import com.mmrtr.lol.domain.ranking.application.port.LeagueApiPort;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueListDto;
 import com.mmrtr.lol.infra.riot.service.RiotApiService;

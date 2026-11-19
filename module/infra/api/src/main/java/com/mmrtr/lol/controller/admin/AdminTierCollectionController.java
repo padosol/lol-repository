@@ -1,6 +1,6 @@
 package com.mmrtr.lol.controller.admin;
 
-import com.mmrtr.lol.domain.league.application.usecase.CollectTierDataUseCase;
+import com.mmrtr.lol.domain.ranking.application.usecase.CollectTierDataUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

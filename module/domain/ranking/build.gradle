@@ -1,0 +1,17 @@
+// module:domain:ranking - 리그/랭킹/티어컷오프 컨텍스트 (도메인 + application port.in/out)
+dependencies {
+    implementation project(':module:shared')
+    implementation project(':module:common')   // 공개 조회 API 의 CoreException·PageResult
+
+    // Spring
+    implementation 'org.springframework:spring-context'
+    implementation 'org.springframework:spring-tx'
+
+    // Jackson (ReadModel DTO 어노테이션)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Logging
+    implementation 'org.slf4j:slf4j-api'
+
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
+}

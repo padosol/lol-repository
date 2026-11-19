@@ -1,7 +1,6 @@
 package com.mmrtr.lol.infra.persistence.match.repository;
 
 import com.mmrtr.lol.infra.persistence.config.JpaConfig;
-import com.mmrtr.lol.infra.persistence.league.repository.MostChampionProjection;
 import com.mmrtr.lol.infra.persistence.match.entity.MatchParticipantEntity;
 import com.mmrtr.lol.infra.persistence.match.entity.value.matchsummoner.ArenaValue;
 import com.mmrtr.lol.infra.persistence.match.entity.value.matchsummoner.ItemValue;

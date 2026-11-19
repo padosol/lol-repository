@@ -27,12 +27,12 @@ lol-repository (루트)
     ├── common                      # 공유 커널: error(CoreException) + MDC 유틸 (도메인 아님)
     ├── support/logging             # @LogExecutionTime / MDC 로깅 AOP
     ├── domain/
-    │   ├── league                  # 리그/랭킹/티어컷오프 (sink 컨텍스트)
+    │   ├── ranking                 # 랭킹/티어컷오프
     │   ├── champion                # 챔피언 로테이션
     │   ├── gamedata                # 패치 버전·시즌·패치노트·큐 조회 (공개 API game-data)
     │   ├── spectator               # 활성 게임 조회
-    │   ├── match                   # 매치/타임라인 (→ league port 의존)
-    │   ├── summoner                # 소환사 (→ league port 의존)
+    │   ├── match                   # 매치/타임라인 (→ summoner port 의존)
+    │   ├── summoner                # 소환사 (리그 테이블 소유)
     │   └── championstats           # 챔피언 통계 조회 (BigQuery 집계, 공개 API champion-stats)
     └── infra/                      # 어댑터(driven/driving) — 도메인 모듈에 의존
         ├── api                     # REST 컨트롤러 (driving)
@@ -51,7 +51,7 @@ com.mmrtr.lol.domain.{ctx}/
 ├── application/
 │   ├── port/               # Outbound Port (Repository/Api/Publish Port)
 │   └── usecase/            # UseCase (Inbound Port)
-└── readmodel/              # Riot/응답 DTO (match·league·gamedata·summoner·championstats)
+└── readmodel/              # Riot/응답 DTO (match·ranking·gamedata·summoner·championstats)
 ```
 
 > 컨텍스트 경계는 `module/domain/{ctx}/src/test` 의 `ArchitectureTest` 로 강제(`./gradlew archTest`).
@@ -102,7 +102,7 @@ com.mmrtr.lol.domain.{ctx}/
 
 # 특정 모듈 빌드
 ./gradlew :module:app:application:build
-./gradlew :module:domain:summoner:build      # match / league / champion / spectator / championstats 동일
+./gradlew :module:domain:summoner:build      # match / ranking / champion / spectator / championstats 동일
 ./gradlew :module:shared:build
 ./gradlew :module:common:build
 ./gradlew :module:support:logging:build
