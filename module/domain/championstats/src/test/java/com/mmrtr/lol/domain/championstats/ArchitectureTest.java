@@ -6,12 +6,15 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
  * championstats 컨텍스트 경계 테스트: 도메인은 인프라(BigQuery·Redis 등)를 알지 못한다 (헥사고날 도메인 무지성).
  */
 class ArchitectureTest {
+
+    private static final List<String> OTHERS = List.of("summoner", "match", "ranking", "spectator", "champion", "gamedata");
 
     private static final JavaClasses CONTEXT = new ClassFileImporter()
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
@@ -31,5 +34,19 @@ class ArchitectureTest {
                         "org.redisson..",
                         "io.micrometer..");
         rule.check(CONTEXT);
+    }
+
+    @Test
+    void 다른_컨텍스트는_입구로만_쓴다() {
+        String[] ports = OTHERS.stream()
+                .map(o -> "com.mmrtr.lol.domain." + o + ".application.port..")
+                .toArray(String[]::new);
+        String[] services = OTHERS.stream()
+                .map(o -> "com.mmrtr.lol.domain." + o + ".application")
+                .toArray(String[]::new);
+        noClasses().that().resideInAPackage("com.mmrtr.lol.domain.championstats..")
+                .should().dependOnClassesThat().resideInAnyPackage(ports)
+                .orShould().dependOnClassesThat().resideInAnyPackage(services)
+                .check(CONTEXT);
     }
 }

@@ -54,7 +54,7 @@ com.mmrtr.lol.domain.{ctx}/
 └── readmodel/              # Riot/응답 DTO (match·ranking·gamedata·summoner·championstats)
 ```
 
-> 컨텍스트 경계는 `module/domain/{ctx}/src/test` 의 `ArchitectureTest` 로 강제(`./gradlew archTest`).
+> 컨텍스트 경계는 `module/domain/{ctx}/src/test` 의 `ArchitectureTest` 로 강제(`./gradlew archTest`). 다른 컨텍스트는 `application.usecase`·`domain`·`readmodel` 로만 쓴다(`application.port..`·`application` 직접 참조 금지). 앱 모듈 `HexagonalArchitectureTest`(`hexagonalArchTest`)는 infra·controller 의 UseCase 구현 금지와 persistence 컨텍스트 간 import(freeze 기준선 2건, 새 위반 금지)를 막으며 `archTest` 에 포함된다.
 > 인프라 어댑터(`module/infra/*`)는 도메인 모듈의 port 를 구현하며 도메인에 단방향 의존한다.
 
 ### 데이터 흐름

@@ -99,6 +99,8 @@ flowchart TB
 
 - `module:infra:riot-client` 의 `RiotApiService`(전 어댑터가 주입) 가 `domain.match.readmodel`(MatchDto/TimelineDto)에 결합 → 어댑터를 도메인별로 쪼개려면 `RiotApiService` 분리 선행 필요.
 - `infra:persistence → infra:redis`, `infra:rabbitmq → infra:redis/riot-client` 의 인프라 간 의존.
+- persistence 컨텍스트 간 import 2건은 ArchUnit freeze 기준선(`module/app/application/src/test/resources/archunit_store`)으로 고정: `DuoProfileQueryPersistenceAdapter`(summoner) → match 리포지토리, `SpectatorTargetPersistenceAdapter`(spectator) → summoner 리포지토리. 새 위반은 테스트가 막는다.
+- 문자열 조인으로 컨텍스트를 넘는 곳 3곳(ArchUnit 이 못 잡음): `MatchQueryPersistenceAdapter` 의 `LEFT JOIN summoner`, `LeagueSummonerJpaRepository` 의 `JOIN SummonerEntity`, `SummonerJpaRepository` 의 `EXISTS … LeagueSummonerEntity`.
 
 > 어댑터의 컨텍스트별 물리 co-location(`module/domain/{ctx}/adapter/out/*`)은 위 결합 해소 후 진행한다.
 
