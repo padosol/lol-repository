@@ -1,7 +1,6 @@
 package com.mmrtr.lol.infra.persistence.match.service;
 
-import com.mmrtr.lol.common.type.Queue;
-import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.match.domain.MatchTierSnapshot;
 import com.mmrtr.lol.domain.match.readmodel.BanDto;
 import com.mmrtr.lol.domain.match.readmodel.ChallengesDto;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
@@ -53,7 +52,7 @@ public class MatchService implements MatchRepositoryPort {
      */
     @Override
     public void saveAll(List<MatchDto> matchDtos, List<TimelineDto> timelineDtos,
-                        Map<String, Map<String, LeagueSummoner>> leagueByQueueAndPuuid) {
+                        Map<String, MatchTierSnapshot> tierByMatchId) {
         long start = System.currentTimeMillis();
 
         // 엔티티 매핑
@@ -72,46 +71,26 @@ public class MatchService implements MatchRepositoryPort {
             MatchDto matchDto = matchDtos.get(i);
             MatchEntity match = matchEntities.get(i);
 
-            Queue queue = Queue.fromQueueId(matchDto.getInfo().getQueueId());
-            Map<String, LeagueSummoner> leagueMap = (queue != null)
-                    ? leagueByQueueAndPuuid.getOrDefault(queue.name(), Collections.emptyMap())
-                    : Collections.emptyMap();
+            MatchTierSnapshot snapshot =
+                    tierByMatchId.getOrDefault(match.getMatchId(), MatchTierSnapshot.empty());
 
-            List<ParticipantDto> participants = matchDto.getInfo().getParticipants();
-            List<Integer> absolutePointsList = new ArrayList<>();
-
-            for (ParticipantDto participant : participants) {
-                LeagueSummoner league = leagueMap.get(participant.getPuuid());
-
-                String tier = null;
-                String tierRank = null;
-                Integer absolutePoints = null;
-
-                if (league != null) {
-                    tier = league.getTier();
-                    tierRank = league.getRank();
-                    absolutePoints = league.getAbsolutePoints();
-                    absolutePointsList.add(absolutePoints);
-                }
-
-                MatchParticipantEntity matchParticipant = MatchParticipantEntity.of(match, participant, tier, tierRank, absolutePoints);
+            for (ParticipantDto participant : matchDto.getInfo().getParticipants()) {
                 ChallengesDto challengesDto = participant.getChallenges();
-
                 if (challengesDto == null) {
                     continue;
                 }
 
+                MatchTierSnapshot.ParticipantTier tier = snapshot.tierOf(participant.getPuuid()).orElse(null);
+                MatchParticipantEntity matchParticipant = tier == null
+                        ? MatchParticipantEntity.of(match, participant, null, null, null)
+                        : MatchParticipantEntity.of(match, participant,
+                                tier.tier(), tier.rank(), tier.absolutePoints());
                 allMatchParticipants.add(matchParticipant);
                 allChallenges.add(MatchParticipantChallengesEntity.of(matchParticipant, challengesDto));
             }
 
-            // 평균 티어 계산
-            if (!absolutePointsList.isEmpty()) {
-                int avgPoints = (int) absolutePointsList.stream()
-                        .mapToInt(Integer::intValue)
-                        .average()
-                        .orElse(0);
-                match.setAverageTier(avgPoints);
+            if (snapshot.averageTier() != null) {
+                match.setAverageTier(snapshot.averageTier());
             }
 
             List<TeamDto> teams = matchDto.getInfo().getTeams();
