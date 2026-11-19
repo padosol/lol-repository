@@ -57,6 +57,7 @@ flowchart TB
     bq --> championstats
 
     match --> summoner
+    ranking --> summoner & match
 
     ranking & champion & spectator & match & summoner & championstats --> sharedM
     infra --> sharedM

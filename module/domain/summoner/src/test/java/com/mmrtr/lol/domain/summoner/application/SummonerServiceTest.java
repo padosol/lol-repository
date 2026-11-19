@@ -1,6 +1,7 @@
 package com.mmrtr.lol.domain.summoner.application;
 
 import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.application.usecase.SaveSummonerDataUseCase;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.support.error.CoreException;
@@ -39,10 +40,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class SummonerServiceTest {
 
     private final SummonerApiPort summonerApiPort = mock(SummonerApiPort.class);
+    private final SummonerRepositoryPort summonerRepositoryPort = mock(SummonerRepositoryPort.class);
     private final SaveSummonerDataUseCase saveSummonerDataUseCase = mock(SaveSummonerDataUseCase.class);
     private final RiotPermitPort riotPermitPort = mock(RiotPermitPort.class);
     private final SummonerService service =
-            new SummonerService(summonerApiPort, saveSummonerDataUseCase, riotPermitPort, Runnable::run);
+            new SummonerService(summonerApiPort, summonerRepositoryPort, saveSummonerDataUseCase, riotPermitPort, Runnable::run);
 
     @BeforeEach
     void setUp() {
@@ -132,5 +134,14 @@ class SummonerServiceTest {
             }
         });
         return Optional.of(RiotPermits.of(permits));
+    }
+
+    @Test
+    @DisplayName("findAllByPuuidIn 은 저장소 결과를 돌려준다")
+    void findAllByPuuidIn은_저장소_결과를_돌려준다() {
+        Map<String, Summoner> found = Map.of("p1", Summoner.builder().puuid("p1").build());
+        given(summonerRepositoryPort.findAllByPuuidIn(List.of("p1"))).willReturn(found);
+
+        assertThat(service.findAllByPuuidIn(List.of("p1"))).isEqualTo(found);
     }
 }

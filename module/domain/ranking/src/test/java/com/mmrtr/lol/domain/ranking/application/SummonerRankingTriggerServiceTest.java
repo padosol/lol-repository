@@ -1,4 +1,4 @@
-package com.mmrtr.lol.infra.persistence.ranking.scheduler;
+package com.mmrtr.lol.domain.ranking.application;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,24 +14,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("소환사 랭킹 스케줄러")
-class SummonerRankingSchedulerTest {
+@DisplayName("소환사 랭킹 계산 트리거")
+class SummonerRankingTriggerServiceTest {
 
     @Mock
     private SummonerRankingCalculationService summonerRankingCalculationService;
 
     @InjectMocks
-    private SummonerRankingScheduler summonerRankingScheduler;
+    private SummonerRankingTriggerService summonerRankingTriggerService;
 
     @DisplayName("00시~02시 사이에 실행되면 티어 커트라인까지 갱신한다")
     @ParameterizedTest(name = "실행 시각 {0}")
-    @ValueSource(strings = {"00:00", "00:00:01", "01:00", "01:59:59.999999999"})
+    @ValueSource(strings = {"00:00", "00:00:01", "01:00", "01:59", "01:59:59.999999999"})
     void execute_커트라인갱신시간대_커트라인갱신포함(String executedAt) {
         // given
         LocalTime time = LocalTime.parse(executedAt);
 
         // when
-        summonerRankingScheduler.execute(time);
+        summonerRankingTriggerService.execute(time);
 
         // then
         verify(summonerRankingCalculationService).processQueueRanking("RANKED_SOLO_5x5", true);
@@ -39,13 +39,13 @@ class SummonerRankingSchedulerTest {
 
     @DisplayName("00시~02시 밖에서 실행되면 랭킹만 갱신하고 티어 커트라인은 건너뛴다")
     @ParameterizedTest(name = "실행 시각 {0}")
-    @ValueSource(strings = {"02:00", "02:00:01", "12:00", "23:59:59"})
+    @ValueSource(strings = {"02:00", "02:00:01", "12:00", "23:59", "23:59:59"})
     void execute_커트라인갱신시간대아님_커트라인갱신제외(String executedAt) {
         // given
         LocalTime time = LocalTime.parse(executedAt);
 
         // when
-        summonerRankingScheduler.execute(time);
+        summonerRankingTriggerService.execute(time);
 
         // then
         verify(summonerRankingCalculationService).processQueueRanking("RANKED_SOLO_5x5", false);
@@ -60,7 +60,7 @@ class SummonerRankingSchedulerTest {
         boolean expected = executedAt.isBefore(LocalTime.of(2, 0));
 
         // when
-        boolean actual = SummonerRankingScheduler.isTierCutoffWindow(executedAt);
+        boolean actual = SummonerRankingTriggerService.isTierCutoffWindow(executedAt);
 
         // then
         assertThat(actual).isEqualTo(expected);

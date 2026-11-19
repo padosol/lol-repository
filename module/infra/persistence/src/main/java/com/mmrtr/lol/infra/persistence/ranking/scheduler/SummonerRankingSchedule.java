@@ -1,5 +1,6 @@
 package com.mmrtr.lol.infra.persistence.ranking.scheduler;
 
+import com.mmrtr.lol.domain.ranking.application.usecase.TriggerSummonerRankingCalculationUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,10 +15,10 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "lol.ranking.scheduler.enabled", havingValue = "true", matchIfMissing = true)
 public class SummonerRankingSchedule {
 
-    private final SummonerRankingScheduler summonerRankingScheduler;
+    private final TriggerSummonerRankingCalculationUseCase triggerSummonerRankingCalculationUseCase;
 
     @Scheduled(fixedDelay = 7200000, initialDelay = 60000)
     public void run() {
-        summonerRankingScheduler.execute();
+        triggerSummonerRankingCalculationUseCase.execute();
     }
 }

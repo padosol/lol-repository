@@ -1,16 +1,17 @@
-package com.mmrtr.lol.infra.persistence.ranking.scheduler;
+package com.mmrtr.lol.domain.ranking.application;
 
 import com.mmrtr.lol.common.type.Tier;
+import com.mmrtr.lol.domain.match.application.usecase.MostChampionQueryUseCase;
+import com.mmrtr.lol.domain.match.readmodel.MostChampionPlayCount;
 import com.mmrtr.lol.domain.ranking.application.port.LeagueApiPort;
 import com.mmrtr.lol.domain.ranking.application.port.LeagueApiPort.LeagueEntry;
 import com.mmrtr.lol.domain.ranking.application.port.SummonerRankingRepositoryPort;
 import com.mmrtr.lol.domain.ranking.application.port.TierCutoffRepositoryPort;
+import com.mmrtr.lol.domain.ranking.domain.SummonerRanking;
 import com.mmrtr.lol.domain.ranking.domain.TierCutoff;
-import com.mmrtr.lol.domain.summoner.application.SummonerService;
-import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
+import com.mmrtr.lol.domain.summoner.application.usecase.SummonerLookupUseCase;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
-import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
@@ -59,7 +60,7 @@ class SummonerRankingCalculationServiceTest {
     private LeagueApiPort leagueApiPort;
 
     @Mock
-    private MatchSummonerJpaRepository matchSummonerJpaRepository;
+    private MostChampionQueryUseCase mostChampionQueryUseCase;
 
     @Mock
     private SummonerRankingRepositoryPort summonerRankingRepositoryPort;
@@ -68,10 +69,7 @@ class SummonerRankingCalculationServiceTest {
     private TierCutoffRepositoryPort tierCutoffRepositoryPort;
 
     @Mock
-    private SummonerRepositoryPort summonerRepositoryPort;
-
-    @Mock
-    private SummonerService summonerService;
+    private SummonerLookupUseCase summonerLookupUseCase;
 
     @Mock
     private RiotPermitPort riotPermitPort;
@@ -98,11 +96,11 @@ class SummonerRankingCalculationServiceTest {
                 Tier.CHALLENGER, List.of(entry(CHALLENGER_PUUID, 1500)),
                 Tier.GRANDMASTER, List.of(entry(GRANDMASTER_PUUID, 700))
         ));
-        lenient().when(summonerRepositoryPort.findAllByPuuidIn(anyCollection())).thenReturn(Map.of(
+        lenient().when(summonerLookupUseCase.findAllByPuuidIn(anyCollection())).thenReturn(Map.of(
                 CHALLENGER_PUUID, summoner(CHALLENGER_PUUID, "챌린저"),
                 GRANDMASTER_PUUID, summoner(GRANDMASTER_PUUID, "그랜드마스터")
         ));
-        lenient().when(matchSummonerJpaRepository.findMostChampionsByPuuids(anyList())).thenReturn(List.of());
+        lenient().when(mostChampionQueryUseCase.findMostChampionsByPuuids(anyList())).thenReturn(List.of());
     }
 
     @Test
@@ -143,9 +141,9 @@ class SummonerRankingCalculationServiceTest {
     @DisplayName("Riot 호출(최상위 리그·미등록 소환사 조회)은 BACKGROUND 허가로 한다 — 최상위 리그는 APEX_COST 를 한 번에 받는다")
     void processQueueRanking_riotCallsUnderBackground() {
         // given
-        when(summonerRepositoryPort.findAllByPuuidIn(anyCollection())).thenReturn(
+        when(summonerLookupUseCase.findAllByPuuidIn(anyCollection())).thenReturn(
                 new HashMap<>(Map.of(CHALLENGER_PUUID, summoner(CHALLENGER_PUUID, "챌린저"))));
-        when(summonerService.getSummonerByPuuid("KR", GRANDMASTER_PUUID, RiotCallPriority.BACKGROUND))
+        when(summonerLookupUseCase.getSummonerByPuuid("KR", GRANDMASTER_PUUID, RiotCallPriority.BACKGROUND))
                 .thenReturn(summoner(GRANDMASTER_PUUID, "그랜드마스터"));
 
         // when
@@ -158,7 +156,7 @@ class SummonerRankingCalculationServiceTest {
         verify(leagueApiPort).getApexEntries(eq(QUEUE), eq("KR"), permits.capture());
         assertThat(permits.getValue().remaining(RiotMethod.CHALLENGER_LEAGUE)).isEqualTo(1);
         assertThat(permits.getValue().remaining(RiotMethod.GRANDMASTER_LEAGUE)).isEqualTo(1);
-        verify(summonerService).getSummonerByPuuid("KR", GRANDMASTER_PUUID, RiotCallPriority.BACKGROUND);
+        verify(summonerLookupUseCase).getSummonerByPuuid("KR", GRANDMASTER_PUUID, RiotCallPriority.BACKGROUND);
     }
 
     @Test
@@ -175,6 +173,31 @@ class SummonerRankingCalculationServiceTest {
         verify(leagueApiPort, never()).getApexEntries(anyString(), anyString(), any());
         verify(summonerRankingRepositoryPort, never()).replaceAllRankings(anyString(), anyList());
         verifyNoInteractions(summonerRankingRepositoryPort, tierCutoffRepositoryPort);
+    }
+
+    @Test
+    @DisplayName("모스트 챔피언은 puuid별 앞 3개만 쓴다")
+    void 모스트_챔피언은_puuid별_앞_3개만_쓴다() {
+        // given
+        when(mostChampionQueryUseCase.findMostChampionsByPuuids(anyList())).thenReturn(List.of(
+                new MostChampionPlayCount(CHALLENGER_PUUID, "Ahri", 30),
+                new MostChampionPlayCount(CHALLENGER_PUUID, "Zed", 20),
+                new MostChampionPlayCount(CHALLENGER_PUUID, "Yone", 10),
+                new MostChampionPlayCount(CHALLENGER_PUUID, "Lux", 5),
+                new MostChampionPlayCount(GRANDMASTER_PUUID, "Jinx", 7)));
+
+        // when
+        summonerRankingCalculationService.processQueueRanking(QUEUE, false);
+
+        // then
+        ArgumentCaptor<List<SummonerRanking>> captor = ArgumentCaptor.captor();
+        verify(summonerRankingRepositoryPort).replaceAllRankings(eq(QUEUE), captor.capture());
+        assertThat(captor.getValue())
+                .extracting(SummonerRanking::getPuuid, SummonerRanking::getMostChampion1,
+                        SummonerRanking::getMostChampion2, SummonerRanking::getMostChampion3)
+                .containsExactlyInAnyOrder(
+                        tuple(CHALLENGER_PUUID, "Ahri", "Zed", "Yone"),
+                        tuple(GRANDMASTER_PUUID, "Jinx", null, null));
     }
 
     private static LeagueEntry entry(String puuid, int leaguePoints) {

@@ -2,7 +2,9 @@ package com.mmrtr.lol.domain.summoner.application;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.application.usecase.SaveSummonerDataUseCase;
+import com.mmrtr.lol.domain.summoner.application.usecase.SummonerLookupUseCase;
 import com.mmrtr.lol.support.error.CoreException;
 import com.mmrtr.lol.support.error.ErrorType;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
@@ -14,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -21,12 +24,13 @@ import java.util.concurrent.Executor;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class SummonerService {
+public class SummonerService implements SummonerLookupUseCase {
 
     private static final int BACKGROUND_ATTEMPTS = 10;
     private static final Duration BACKGROUND_PAUSE = Duration.ofSeconds(1);
 
     private final SummonerApiPort summonerApiPort;
+    private final SummonerRepositoryPort summonerRepositoryPort;
     private final SaveSummonerDataUseCase saveSummonerDataUseCase;
     private final RiotPermitPort riotPermitPort;
     private final Executor requestExecutor;
@@ -52,7 +56,13 @@ public class SummonerService {
         }
     }
 
+    @Override
+    public Map<String, Summoner> findAllByPuuidIn(Collection<String> puuids) {
+        return summonerRepositoryPort.findAllByPuuidIn(puuids);
+    }
+
     /** priority 로 Riot 호출 허가({@link SummonerApiPort#BY_PUUID_COST})를 받는다. HTTP 는 USER, 스케줄러는 BACKGROUND. */
+    @Override
     public Summoner getSummonerByPuuid(String regionType, String puuid, RiotCallPriority priority) {
         try {
             RiotPermits permits = acquire(regionType, priority, SummonerApiPort.BY_PUUID_COST);

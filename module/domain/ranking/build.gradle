@@ -2,6 +2,8 @@
 dependencies {
     implementation project(':module:shared')
     implementation project(':module:common')   // 공개 조회 API 의 CoreException·PageResult
+    implementation project(':module:domain:summoner')  // 랭킹 계산이 소환사 조회 UseCase 를 쓴다
+    implementation project(':module:domain:match')     // 랭킹 계산이 모스트 챔피언 조회 UseCase 를 쓴다
 
     // Spring
     implementation 'org.springframework:spring-context'
