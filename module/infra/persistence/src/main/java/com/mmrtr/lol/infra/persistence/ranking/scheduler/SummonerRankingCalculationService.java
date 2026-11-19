@@ -302,10 +302,7 @@ public class SummonerRankingCalculationService {
 
         Map<String, List<String>> result = new HashMap<>();
         for (MostChampionProjection projection : mostChampions) {
-            List<String> champions = result.computeIfAbsent(projection.getPuuid(), k -> new ArrayList<>());
-            if (champions.size() < 3) {
-                champions.add(projection.getChampionName());
-            }
+            result.computeIfAbsent(projection.getPuuid(), k -> new ArrayList<>()).add(projection.getChampionName());
         }
 
         return result;
