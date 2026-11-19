@@ -14,17 +14,17 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStatus;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
+import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
 import com.mmrtr.lol.domain.summoner.domain.RenewalTransition;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
-import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
@@ -45,25 +45,21 @@ class RenewalAccountStepTest {
 
     private final RenewalRecordPort recordPort = mock(RenewalRecordPort.class);
     private final SummonerRepositoryPort summonerRepositoryPort = mock(SummonerRepositoryPort.class);
-    private final RiotApiService riotApiService = mock(RiotApiService.class);
+    private final SummonerApiPort summonerApiPort = mock(SummonerApiPort.class);
     private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private final RenewalStepPublisher stepPublisher = mock(RenewalStepPublisher.class);
     private final RenewalFinisher finisher = mock(RenewalFinisher.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalAccountStep step = new RenewalAccountStep(
-            recordPort, summonerRepositoryPort, riotApiService, permitPort, stepPublisher, finisher, meterRegistry,
+            recordPort, summonerRepositoryPort, summonerApiPort, permitPort, stepPublisher, finisher, meterRegistry,
             executor);
 
     @BeforeEach
     void setUp() {
         givenRecord("r1");
-        AccountDto account = new AccountDto();
-        account.setPuuid("p1");
-        account.setGameName("Hide on bush");
-        account.setTagLine("KR1");
-        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
-                .willReturn(CompletableFuture.completedFuture(account));
+        given(summonerApiPort.fetchGameIdentity(eq("p1"), eq(Platform.KR), any(), any()))
+                .willReturn(CompletableFuture.completedFuture(new GameIdentity("Hide on bush", "KR1")));
         given(recordPort.markSteps("p1", "r1", EnumSet.of(RenewalStep.ACCOUNT))).willReturn(RenewalTransition.NONE);
     }
 
@@ -77,7 +73,7 @@ class RenewalAccountStepTest {
     }
 
     private void givenRiotFails(Throwable cause) {
-        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
+        given(summonerApiPort.fetchGameIdentity(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.failedFuture(cause));
     }
 
@@ -170,7 +166,7 @@ class RenewalAccountStepTest {
 
         // then
         verify(stepPublisher).requeueLater(RabbitMqBinding.RENEWAL_ACCOUNT, msg("r1"));
-        verifyNoInteractions(riotApiService);
+        verifyNoInteractions(summonerApiPort);
         verify(finisher, never()).fail(anyString(), anyString(), anyString());
         assertThat(count("requeue")).isEqualTo(1);
     }
@@ -186,7 +182,7 @@ class RenewalAccountStepTest {
 
         // then
         verify(finisher).skipped("stale");
-        verifyNoInteractions(riotApiService, stepPublisher);
+        verifyNoInteractions(summonerApiPort, stepPublisher);
         assertThat(count("skipped")).isEqualTo(1);
     }
 
@@ -198,7 +194,7 @@ class RenewalAccountStepTest {
 
         // when // then
         assertThatCode(() -> step.run(msg("r1"))).doesNotThrowAnyException();
-        verifyNoInteractions(riotApiService, stepPublisher);
+        verifyNoInteractions(summonerApiPort, stepPublisher);
         assertThat(count("failed")).isEqualTo(1);
     }
 
@@ -211,7 +207,7 @@ class RenewalAccountStepTest {
 
         // when // then
         assertThatCode(() -> step.run(msg("r1"))).doesNotThrowAnyException();
-        verifyNoInteractions(riotApiService, stepPublisher);
+        verifyNoInteractions(summonerApiPort, stepPublisher);
         assertThat(count("failed")).isEqualTo(1);
         assertThat(count("skipped")).isZero();
     }
@@ -230,7 +226,7 @@ class RenewalAccountStepTest {
     @DisplayName("그 밖의 예외는 분류한 reason 으로 실패시킨다")
     void run_otherException_failsWithClassifiedReason() {
         // given
-        given(riotApiService.getAccountByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
+        given(summonerApiPort.fetchGameIdentity(eq("p1"), eq(Platform.KR), any(), any()))
                 .willThrow(new IllegalStateException("boom"));
 
         // when
@@ -248,7 +244,7 @@ class RenewalAccountStepTest {
 
         // then
         verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, Map.of(RiotMethod.ACCOUNT_BY_PUUID, 1));
-        verify(riotApiService).getAccountByPuuid(eq("p1"), eq(Platform.KR),
+        verify(summonerApiPort).fetchGameIdentity(eq("p1"), eq(Platform.KR),
                 org.mockito.ArgumentMatchers.argThat(permit -> permit.method() == RiotMethod.ACCOUNT_BY_PUUID
                         && permit.priority() == RiotCallPriority.USER), any());
     }

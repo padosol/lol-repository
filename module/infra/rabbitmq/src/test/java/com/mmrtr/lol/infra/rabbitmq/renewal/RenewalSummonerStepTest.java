@@ -14,20 +14,20 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStatus;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
 import com.mmrtr.lol.domain.summoner.domain.RenewalTransition;
+import com.mmrtr.lol.domain.summoner.domain.vo.SummonerProfile;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker.RevisionCheckResult;
-import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
@@ -55,29 +55,22 @@ class RenewalSummonerStepTest {
     private final RenewalRecordPort recordPort = mock(RenewalRecordPort.class);
     private final SummonerRepositoryPort summonerRepositoryPort = mock(SummonerRepositoryPort.class);
     private final SummonerRevisionChecker revisionChecker = mock(SummonerRevisionChecker.class);
-    private final RiotApiService riotApiService = mock(RiotApiService.class);
+    private final SummonerApiPort summonerApiPort = mock(SummonerApiPort.class);
     private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private final RenewalStepPublisher stepPublisher = mock(RenewalStepPublisher.class);
     private final RenewalFinisher finisher = mock(RenewalFinisher.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalSummonerStep step = new RenewalSummonerStep(
-            recordPort, summonerRepositoryPort, revisionChecker, riotApiService, permitPort, stepPublisher, finisher,
+            recordPort, summonerRepositoryPort, revisionChecker, summonerApiPort, permitPort, stepPublisher, finisher,
             meterRegistry, executor);
-
-    private SummonerDto summonerDto;
 
     @BeforeEach
     void setUp() {
-        summonerDto = new SummonerDto();
-        summonerDto.setPuuid("p1");
-        summonerDto.setProfileIconId(ICON);
-        summonerDto.setSummonerLevel(LEVEL);
-        summonerDto.setRevisionDate(RIOT_REVISION);
         givenRecord("r1", RenewalStatus.PROGRESS, null);
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
-                .willReturn(CompletableFuture.completedFuture(summonerDto));
-        given(revisionChecker.check("p1", summonerDto)).willReturn(new RevisionCheckResult(true, DB_REVISION_SECONDS));
+        given(summonerApiPort.fetchSummonerProfile(eq("p1"), eq(Platform.KR), any(), any()))
+                .willReturn(CompletableFuture.completedFuture(new SummonerProfile(ICON, LEVEL, RIOT_REVISION)));
+        given(revisionChecker.check("p1", RIOT_REVISION)).willReturn(new RevisionCheckResult(true, DB_REVISION_SECONDS));
         given(summonerRepositoryPort.updateStatusInfo("p1", ICON, LEVEL)).willReturn(true);
     }
 
@@ -91,7 +84,7 @@ class RenewalSummonerStepTest {
     }
 
     private void givenRiotFails(Throwable cause) {
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
+        given(summonerApiPort.fetchSummonerProfile(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.failedFuture(cause));
     }
 
@@ -103,7 +96,7 @@ class RenewalSummonerStepTest {
     @DisplayName("revisionDate 가 같으면 네 단계를 한 번에 켜 끝낸다")
     void run_revisionUnchanged_marksAllStepsAndFinishes() {
         // given
-        given(revisionChecker.check("p1", summonerDto)).willReturn(new RevisionCheckResult(false, DB_REVISION_SECONDS));
+        given(revisionChecker.check("p1", RIOT_REVISION)).willReturn(new RevisionCheckResult(false, DB_REVISION_SECONDS));
         given(recordPort.markSteps("p1", "r1", EnumSet.allOf(RenewalStep.class)))
                 .willReturn(RenewalTransition.SUCCEEDED);
 
@@ -144,7 +137,7 @@ class RenewalSummonerStepTest {
 
         // then
         verify(finisher).skipped("stale");
-        verifyNoInteractions(riotApiService, permitPort, stepPublisher);
+        verifyNoInteractions(summonerApiPort, permitPort, stepPublisher);
     }
 
     @Test
@@ -157,7 +150,7 @@ class RenewalSummonerStepTest {
         step.run(message("r1"));
 
         // then
-        verify(riotApiService).getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any());
+        verify(summonerApiPort).fetchSummonerProfile(eq("p1"), eq(Platform.KR), any(), any());
         verify(finisher, never()).skipped(anyString());
     }
 
@@ -169,7 +162,7 @@ class RenewalSummonerStepTest {
 
         // then
         verify(finisher).skipped("stale");
-        verifyNoInteractions(riotApiService, stepPublisher);
+        verifyNoInteractions(summonerApiPort, stepPublisher);
         verify(recordPort, never()).markSteps(anyString(), anyString(), any());
     }
 
@@ -184,7 +177,7 @@ class RenewalSummonerStepTest {
 
         // then
         verify(finisher).skipped("stale");
-        verifyNoInteractions(riotApiService);
+        verifyNoInteractions(summonerApiPort);
     }
 
     @Test
@@ -195,7 +188,7 @@ class RenewalSummonerStepTest {
 
         // when // then
         assertThatCode(() -> step.run(message("r1"))).doesNotThrowAnyException();
-        verifyNoInteractions(riotApiService, stepPublisher);
+        verifyNoInteractions(summonerApiPort, stepPublisher);
         assertThat(meterRegistry.get("lol.renewal.step").tags("step", "summoner", "result", "failed")
                 .counter().count()).isEqualTo(1);
     }
@@ -208,7 +201,7 @@ class RenewalSummonerStepTest {
 
         // then
         verify(finisher).fail("p1", "r1", "other");
-        verifyNoInteractions(riotApiService, stepPublisher);
+        verifyNoInteractions(summonerApiPort, stepPublisher);
     }
 
     @Test
@@ -282,14 +275,14 @@ class RenewalSummonerStepTest {
         verify(stepPublisher).republishSummonerLater(message);
         verify(stepPublisher, never()).republishSummoner(any());
         verify(finisher, never()).fail(anyString(), anyString(), anyString());
-        verifyNoInteractions(riotApiService);
+        verifyNoInteractions(summonerApiPort);
     }
 
     @Test
     @DisplayName("그 밖의 예외는 분류한 reason 으로 실패시킨다")
     void run_otherException_failsWithClassifiedReason() {
         // given
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
+        given(summonerApiPort.fetchSummonerProfile(eq("p1"), eq(Platform.KR), any(), any()))
                 .willThrow(new IllegalStateException("boom"));
 
         // when
@@ -303,7 +296,7 @@ class RenewalSummonerStepTest {
     @DisplayName("CompletionException 으로 감싸인 404 도 not_found 로 본다")
     void run_wrappedNotFound_failsNotFound() {
         // given
-        given(riotApiService.getSummonerByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
+        given(summonerApiPort.fetchSummonerProfile(eq("p1"), eq(Platform.KR), any(), any()))
                 .willThrow(new CompletionException(new RiotClientNotFoundException(HttpStatus.NOT_FOUND, "", null)));
 
         // when
@@ -321,7 +314,7 @@ class RenewalSummonerStepTest {
 
         // then
         verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, Map.of(RiotMethod.SUMMONER_BY_PUUID, 1));
-        verify(riotApiService).getSummonerByPuuid(eq("p1"), eq(Platform.KR),
+        verify(summonerApiPort).fetchSummonerProfile(eq("p1"), eq(Platform.KR),
                 org.mockito.ArgumentMatchers.argThat(permit -> permit.method() == RiotMethod.SUMMONER_BY_PUUID
                         && permit.priority() == RiotCallPriority.USER), any());
     }

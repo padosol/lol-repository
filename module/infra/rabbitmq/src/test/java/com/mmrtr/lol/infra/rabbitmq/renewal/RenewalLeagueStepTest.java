@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
 import com.mmrtr.lol.domain.summoner.application.usecase.SaveSummonerDataUseCase;
 import com.mmrtr.lol.domain.summoner.domain.RenewalRecord;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStatus;
@@ -22,10 +23,8 @@ import com.mmrtr.lol.domain.summoner.domain.RenewalTransition;
 import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
-import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
 import com.mmrtr.lol.infra.riot.exception.RiotClientNotFoundException;
 import com.mmrtr.lol.infra.riot.exception.RiotRateLimitException;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
@@ -48,32 +47,33 @@ class RenewalLeagueStepTest {
 
     private final RenewalRecordPort recordPort = mock(RenewalRecordPort.class);
     private final SaveSummonerDataUseCase saveSummonerDataUseCase = mock(SaveSummonerDataUseCase.class);
-    private final RiotApiService riotApiService = mock(RiotApiService.class);
+    private final SummonerApiPort summonerApiPort = mock(SummonerApiPort.class);
     private final RiotPermitPort permitPort = RiotPermitFixtures.grantingPort();
     private final RenewalStepPublisher stepPublisher = mock(RenewalStepPublisher.class);
     private final RenewalFinisher finisher = mock(RenewalFinisher.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final Executor executor = Runnable::run;
     private final RenewalLeagueStep step = new RenewalLeagueStep(
-            recordPort, saveSummonerDataUseCase, riotApiService, permitPort, stepPublisher, finisher, meterRegistry,
+            recordPort, saveSummonerDataUseCase, summonerApiPort, permitPort, stepPublisher, finisher, meterRegistry,
             executor);
 
     @BeforeEach
     void setUp() {
         givenRecord("r1");
-        LeagueEntryDto entry = new LeagueEntryDto();
-        entry.setLeagueId("league-1");
-        entry.setQueueType("RANKED_SOLO_5x5");
-        entry.setTier("GOLD");
-        entry.setRank("I");
-        entry.setLeaguePoints(50);
-        entry.setWins(10);
-        entry.setLosses(5);
-        entry.setHotStreak(true);
-        entry.setVeteran(true);
-        entry.setFreshBlood(true);
-        entry.setInactive(true);
-        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
+        LeagueInfo entry = LeagueInfo.builder()
+                .leagueId("league-1")
+                .queueType("RANKED_SOLO_5x5")
+                .tier("GOLD")
+                .rank("I")
+                .leaguePoints(50)
+                .wins(10)
+                .losses(5)
+                .hotStreak(true)
+                .veteran(true)
+                .freshBlood(true)
+                .inactive(true)
+                .build();
+        given(summonerApiPort.fetchLeagueInfos(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(Set.of(entry)));
         given(recordPort.markSteps("p1", "r1", EnumSet.of(RenewalStep.LEAGUE))).willReturn(RenewalTransition.NONE);
     }
@@ -88,7 +88,7 @@ class RenewalLeagueStepTest {
     }
 
     private void givenRiotFails(Throwable cause) {
-        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
+        given(summonerApiPort.fetchLeagueInfos(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.failedFuture(cause));
     }
 
@@ -143,7 +143,7 @@ class RenewalLeagueStepTest {
     @DisplayName("리그 항목이 없어도 빈 집합으로 저장하고 단계를 끝낸다")
     void run_noEntries_savesEmptyAndMarks() {
         // given
-        given(riotApiService.getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR), any(), any()))
+        given(summonerApiPort.fetchLeagueInfos(eq("p1"), eq(Platform.KR), any(), any()))
                 .willReturn(CompletableFuture.completedFuture(Set.of()));
 
         // when
@@ -207,7 +207,7 @@ class RenewalLeagueStepTest {
 
         // then
         verify(stepPublisher).requeueLater(RabbitMqBinding.RENEWAL_LEAGUE, msg("r1"));
-        verifyNoInteractions(riotApiService);
+        verifyNoInteractions(summonerApiPort);
     }
 
     @Test
@@ -221,7 +221,7 @@ class RenewalLeagueStepTest {
 
         // then
         verify(finisher).skipped("stale");
-        verifyNoInteractions(riotApiService, stepPublisher, saveSummonerDataUseCase);
+        verifyNoInteractions(summonerApiPort, stepPublisher, saveSummonerDataUseCase);
         assertThat(count("skipped")).isEqualTo(1);
     }
 
@@ -233,7 +233,7 @@ class RenewalLeagueStepTest {
 
         // when // then
         assertThatCode(() -> step.run(msg("r1"))).doesNotThrowAnyException();
-        verifyNoInteractions(riotApiService, stepPublisher, saveSummonerDataUseCase);
+        verifyNoInteractions(summonerApiPort, stepPublisher, saveSummonerDataUseCase);
         assertThat(count("failed")).isEqualTo(1);
     }
 
@@ -245,7 +245,7 @@ class RenewalLeagueStepTest {
 
         // then
         verify(permitPort).tryAcquire("KR", RiotCallPriority.USER, Map.of(RiotMethod.LEAGUE_ENTRIES_BY_PUUID, 1));
-        verify(riotApiService).getLeagueEntriesByPuuid(eq("p1"), eq(Platform.KR),
+        verify(summonerApiPort).fetchLeagueInfos(eq("p1"), eq(Platform.KR),
                 org.mockito.ArgumentMatchers.argThat(permit -> permit.method() == RiotMethod.LEAGUE_ENTRIES_BY_PUUID
                         && permit.priority() == RiotCallPriority.USER), any());
     }
