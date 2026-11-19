@@ -2,13 +2,13 @@ package com.mmrtr.lol.infra.rabbitmq.renewal;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
+import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
-import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
@@ -29,7 +29,7 @@ public class RenewalAccountStep {
 
     private final RenewalRecordPort recordPort;
     private final SummonerRepositoryPort summonerRepositoryPort;
-    private final RiotApiService riotApiService;
+    private final SummonerApiPort summonerApiPort;
     private final RiotPermitPort permitPort;
     private final RenewalStepPublisher stepPublisher;
     private final RenewalFinisher finisher;
@@ -37,12 +37,12 @@ public class RenewalAccountStep {
     private final RenewalStepFailures failures;
 
     public RenewalAccountStep(RenewalRecordPort recordPort, SummonerRepositoryPort summonerRepositoryPort,
-                              RiotApiService riotApiService, RiotPermitPort permitPort,
+                              SummonerApiPort summonerApiPort, RiotPermitPort permitPort,
                               RenewalStepPublisher stepPublisher, RenewalFinisher finisher,
                               MeterRegistry meterRegistry, Executor requestExecutor) {
         this.recordPort = recordPort;
         this.summonerRepositoryPort = summonerRepositoryPort;
-        this.riotApiService = riotApiService;
+        this.summonerApiPort = summonerApiPort;
         this.permitPort = permitPort;
         this.stepPublisher = stepPublisher;
         this.finisher = finisher;
@@ -65,7 +65,7 @@ public class RenewalAccountStep {
             return;
         }
 
-        AccountDto account;
+        GameIdentity identity;
         try {
             Optional<RiotPermits> granted = permitPort
                     .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.ACCOUNT_BY_PUUID, 1));
@@ -75,7 +75,7 @@ public class RenewalAccountStep {
                 return;
             }
             RiotPermit permit = granted.get().take(RiotMethod.ACCOUNT_BY_PUUID);
-            account = riotApiService.getAccountByPuuid(puuid, platform, permit, requestExecutor).join();
+            identity = summonerApiPort.fetchGameIdentity(puuid, platform, permit, requestExecutor).join();
         } catch (Exception e) {
             failures.fetchFailed(puuid, renewalId, message.attempt(), e,
                     () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_ACCOUNT, message.nextAttempt()));
@@ -83,7 +83,7 @@ public class RenewalAccountStep {
         }
 
         try {
-            summonerRepositoryPort.updateGameIdentity(puuid, account.getGameName(), account.getTagLine());
+            summonerRepositoryPort.updateGameIdentity(puuid, identity.gameName(), identity.tagLine());
             finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.of(RenewalStep.ACCOUNT)));
             failures.success();
         } catch (Exception e) {

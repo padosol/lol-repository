@@ -2,7 +2,6 @@ package com.mmrtr.lol.infra.rabbitmq.service;
 
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
-import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -19,7 +18,7 @@ public class SummonerRevisionChecker {
 
     private final SummonerRepositoryPort summonerRepositoryPort;
 
-    public RevisionCheckResult check(String puuid, SummonerDto summonerDto) {
+    public RevisionCheckResult check(String puuid, long riotRevisionDateMillis) {
         Optional<Summoner> existingSummoner = summonerRepositoryPort.findByPuuid(puuid);
 
         long dbRevisionDateSeconds = existingSummoner
@@ -29,7 +28,7 @@ public class SummonerRevisionChecker {
 
         if (existingSummoner.isPresent()) {
             LocalDateTime riotRevisionDate = LocalDateTime.ofInstant(
-                    Instant.ofEpochMilli(summonerDto.getRevisionDate()), ZoneId.systemDefault());
+                    Instant.ofEpochMilli(riotRevisionDateMillis), ZoneId.systemDefault());
             log.info("revision 비교 - DB: {}, RIOT: {}", existingSummoner.get().getRevisionInfo().revisionDate(), riotRevisionDate);
             if (existingSummoner.get().getRevisionInfo().revisionDate().equals(riotRevisionDate)) {
                 log.info("revisionDate is same. No need to update. revision: {}", riotRevisionDate);

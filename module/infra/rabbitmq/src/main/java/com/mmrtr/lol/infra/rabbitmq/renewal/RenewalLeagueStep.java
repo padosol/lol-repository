@@ -2,14 +2,13 @@ package com.mmrtr.lol.infra.rabbitmq.renewal;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
 import com.mmrtr.lol.domain.summoner.application.usecase.SaveSummonerDataUseCase;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
 import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
-import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
@@ -21,7 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -32,7 +30,7 @@ public class RenewalLeagueStep {
 
     private final RenewalRecordPort recordPort;
     private final SaveSummonerDataUseCase saveSummonerDataUseCase;
-    private final RiotApiService riotApiService;
+    private final SummonerApiPort summonerApiPort;
     private final RiotPermitPort permitPort;
     private final RenewalStepPublisher stepPublisher;
     private final RenewalFinisher finisher;
@@ -40,12 +38,12 @@ public class RenewalLeagueStep {
     private final RenewalStepFailures failures;
 
     public RenewalLeagueStep(RenewalRecordPort recordPort, SaveSummonerDataUseCase saveSummonerDataUseCase,
-                             RiotApiService riotApiService, RiotPermitPort permitPort,
+                             SummonerApiPort summonerApiPort, RiotPermitPort permitPort,
                              RenewalStepPublisher stepPublisher, RenewalFinisher finisher,
                              MeterRegistry meterRegistry, Executor requestExecutor) {
         this.recordPort = recordPort;
         this.saveSummonerDataUseCase = saveSummonerDataUseCase;
-        this.riotApiService = riotApiService;
+        this.summonerApiPort = summonerApiPort;
         this.permitPort = permitPort;
         this.stepPublisher = stepPublisher;
         this.finisher = finisher;
@@ -68,7 +66,7 @@ public class RenewalLeagueStep {
             return;
         }
 
-        Set<LeagueEntryDto> entries;
+        Set<LeagueInfo> entries;
         try {
             Optional<RiotPermits> granted = permitPort
                     .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.LEAGUE_ENTRIES_BY_PUUID, 1));
@@ -78,7 +76,7 @@ public class RenewalLeagueStep {
                 return;
             }
             RiotPermit permit = granted.get().take(RiotMethod.LEAGUE_ENTRIES_BY_PUUID);
-            entries = riotApiService.getLeagueEntriesByPuuid(puuid, platform, permit, requestExecutor).join();
+            entries = summonerApiPort.fetchLeagueInfos(puuid, platform, permit, requestExecutor).join();
         } catch (Exception e) {
             failures.fetchFailed(puuid, renewalId, message.attempt(), e,
                     () -> stepPublisher.publish(RabbitMqBinding.RENEWAL_LEAGUE, message.nextAttempt()));
@@ -86,30 +84,12 @@ public class RenewalLeagueStep {
         }
 
         try {
-            saveSummonerDataUseCase.saveLeagues(puuid, toLeagueInfos(entries));
+            saveSummonerDataUseCase.saveLeagues(puuid, entries);
             finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.of(RenewalStep.LEAGUE)));
             failures.success();
         } catch (Exception e) {
             log.error("리그 단계 처리 실패. puuid={}", puuid, e);
             failures.fail(puuid, renewalId, e);
         }
-    }
-
-    private static Set<LeagueInfo> toLeagueInfos(Set<LeagueEntryDto> entries) {
-        return entries.stream()
-                .map(dto -> LeagueInfo.builder()
-                        .leagueId(dto.getLeagueId())
-                        .queueType(dto.getQueueType())
-                        .tier(dto.getTier())
-                        .rank(dto.getRank())
-                        .leaguePoints(dto.getLeaguePoints())
-                        .wins(dto.getWins())
-                        .losses(dto.getLosses())
-                        .hotStreak(dto.isHotStreak())
-                        .veteran(dto.isVeteran())
-                        .freshBlood(dto.isFreshBlood())
-                        .inactive(dto.isInactive())
-                        .build())
-                .collect(Collectors.toSet());
     }
 }

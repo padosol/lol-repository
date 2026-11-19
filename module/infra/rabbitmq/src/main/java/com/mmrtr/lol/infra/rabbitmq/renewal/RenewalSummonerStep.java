@@ -2,17 +2,17 @@ package com.mmrtr.lol.infra.rabbitmq.renewal;
 
 import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.summoner.application.port.RenewalRecordPort;
+import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
 import com.mmrtr.lol.domain.summoner.domain.RenewalStep;
 import com.mmrtr.lol.domain.summoner.domain.RenewalTransition;
+import com.mmrtr.lol.domain.summoner.domain.vo.SummonerProfile;
 import com.mmrtr.lol.infra.rabbitmq.config.RabbitMqBinding;
 import com.mmrtr.lol.infra.rabbitmq.dto.RenewalStepMessage;
 import com.mmrtr.lol.infra.rabbitmq.dto.SummonerMessage;
 import com.mmrtr.lol.infra.rabbitmq.listener.RenewalFailureReason;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker;
 import com.mmrtr.lol.infra.rabbitmq.service.SummonerRevisionChecker.RevisionCheckResult;
-import com.mmrtr.lol.infra.riot.dto.summoner.SummonerDto;
-import com.mmrtr.lol.infra.riot.service.RiotApiService;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotMethod;
 import com.mmrtr.lol.support.riot.RiotPermit;
@@ -37,7 +37,7 @@ public class RenewalSummonerStep {
     private final RenewalRecordPort recordPort;
     private final SummonerRepositoryPort summonerRepositoryPort;
     private final SummonerRevisionChecker revisionChecker;
-    private final RiotApiService riotApiService;
+    private final SummonerApiPort summonerApiPort;
     private final RiotPermitPort permitPort;
     private final RenewalStepPublisher stepPublisher;
     private final RenewalFinisher finisher;
@@ -45,13 +45,13 @@ public class RenewalSummonerStep {
     private final RenewalStepFailures failures;
 
     public RenewalSummonerStep(RenewalRecordPort recordPort, SummonerRepositoryPort summonerRepositoryPort,
-                               SummonerRevisionChecker revisionChecker, RiotApiService riotApiService,
+                               SummonerRevisionChecker revisionChecker, SummonerApiPort summonerApiPort,
                                RiotPermitPort permitPort, RenewalStepPublisher stepPublisher,
                                RenewalFinisher finisher, MeterRegistry meterRegistry, Executor requestExecutor) {
         this.recordPort = recordPort;
         this.summonerRepositoryPort = summonerRepositoryPort;
         this.revisionChecker = revisionChecker;
-        this.riotApiService = riotApiService;
+        this.summonerApiPort = summonerApiPort;
         this.permitPort = permitPort;
         this.stepPublisher = stepPublisher;
         this.finisher = finisher;
@@ -74,31 +74,31 @@ public class RenewalSummonerStep {
             return;
         }
 
-        SummonerDto summonerDto;
+        SummonerProfile profile;
         try {
-            Optional<SummonerDto> fetched = fetchSummoner(puuid, platform);
+            Optional<SummonerProfile> fetched = fetchSummoner(puuid, platform);
             if (fetched.isEmpty()) {
                 failures.denied(puuid, renewalId, () -> stepPublisher.republishSummonerLater(message));
                 return;
             }
-            summonerDto = fetched.get();
+            profile = fetched.get();
         } catch (Exception e) {
             handleFetchFailure(message, e);
             return;
         }
 
         try {
-            saveAndDispatch(message, platform, summonerDto);
+            saveAndDispatch(message, platform, profile);
         } catch (Exception e) {
             log.error("소환사 단계 처리 실패. puuid={}", puuid, e);
             failures.fail(puuid, renewalId, e);
         }
     }
 
-    private void saveAndDispatch(SummonerMessage message, Platform platform, SummonerDto summonerDto) {
+    private void saveAndDispatch(SummonerMessage message, Platform platform, SummonerProfile profile) {
         String puuid = message.getPuuid();
         String renewalId = message.getRenewalId();
-        RevisionCheckResult check = revisionChecker.check(puuid, summonerDto);
+        RevisionCheckResult check = revisionChecker.check(puuid, profile.revisionDateMillis());
         if (!check.needsRenewal()) {
             finisher.finish(puuid, recordPort.markSteps(puuid, renewalId, EnumSet.allOf(RenewalStep.class)));
             failures.success();
@@ -106,11 +106,11 @@ public class RenewalSummonerStep {
         }
 
         if (!summonerRepositoryPort.updateStatusInfo(
-                puuid, summonerDto.getProfileIconId(), summonerDto.getSummonerLevel())) {
+                puuid, profile.profileIconId(), profile.summonerLevel())) {
             failures.fail(puuid, renewalId, "not_found");
             return;
         }
-        recordPort.saveRiotRevisionDate(puuid, renewalId, summonerDto.getRevisionDate());
+        recordPort.saveRiotRevisionDate(puuid, renewalId, profile.revisionDateMillis());
         RenewalTransition transition = recordPort.markSteps(puuid, renewalId, EnumSet.of(RenewalStep.SUMMONER));
 
         String platformName = platform.name();
@@ -125,14 +125,14 @@ public class RenewalSummonerStep {
     }
 
     /** USER 허가 1건을 받아 부른다. 허가가 거절되면 비어 있다. */
-    private Optional<SummonerDto> fetchSummoner(String puuid, Platform platform) {
+    private Optional<SummonerProfile> fetchSummoner(String puuid, Platform platform) {
         Optional<RiotPermits> granted = permitPort
                 .tryAcquire(platform.name(), RiotCallPriority.USER, Map.of(RiotMethod.SUMMONER_BY_PUUID, 1));
         if (granted.isEmpty()) {
             return Optional.empty();
         }
         RiotPermit permit = granted.get().take(RiotMethod.SUMMONER_BY_PUUID);
-        return Optional.of(riotApiService.getSummonerByPuuid(puuid, platform, permit, requestExecutor).join());
+        return Optional.of(summonerApiPort.fetchSummonerProfile(puuid, platform, permit, requestExecutor).join());
     }
 
     private void handleFetchFailure(SummonerMessage message, Exception e) {
