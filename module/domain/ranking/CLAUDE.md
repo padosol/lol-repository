@@ -1,6 +1,6 @@
 # module:domain:ranking
 
-랭킹/티어컷오프 데이터 수집·계산과 공개 조회 API `/api/v1/rankings/**`. 타 도메인 컨텍스트에 의존하지 않는다.
+랭킹/티어컷오프 데이터 수집·계산과 공개 조회 API `/api/v1/rankings/**`. 랭킹 계산(`SummonerRankingCalculationService`)·커트라인 시간대 트리거(`SummonerRankingTriggerService`)는 ranking application 에 있고, summoner(`SummonerLookupUseCase`)·match(`MostChampionQueryUseCase`) 의 UseCase 만 부른다.
 리더보드·티어 컷오프 조회는 lol-server `leaderboard`·`gamedata`(TierCutoff) 에서 이전했다 (MP-133).
 
 ## 책임 / 구조

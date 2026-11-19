@@ -1,4 +1,4 @@
-package com.mmrtr.lol.infra.persistence.ranking.scheduler;
+package com.mmrtr.lol.domain.ranking.application;
 
 import com.mmrtr.lol.domain.ranking.application.usecase.TriggerSummonerRankingCalculationUseCase;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +11,7 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class SummonerRankingScheduler implements TriggerSummonerRankingCalculationUseCase {
+public class SummonerRankingTriggerService implements TriggerSummonerRankingCalculationUseCase {
 
     private final SummonerRankingCalculationService summonerRankingCalculationService;
 
@@ -26,7 +26,7 @@ public class SummonerRankingScheduler implements TriggerSummonerRankingCalculati
     private static final LocalTime TIER_CUTOFF_WINDOW_START = LocalTime.MIDNIGHT;
     private static final LocalTime TIER_CUTOFF_WINDOW_END = LocalTime.of(2, 0);
 
-    /** 주기 실행은 {@link SummonerRankingSchedule}, 수동 실행은 관리자 API 가 부른다. */
+    /** 주기 실행은 SummonerRankingSchedule, 수동 실행은 관리자 API 가 부른다. */
     @Override
     public void execute() {
         execute(LocalTime.now());

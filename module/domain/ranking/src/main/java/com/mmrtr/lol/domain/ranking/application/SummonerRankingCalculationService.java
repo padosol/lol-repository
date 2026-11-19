@@ -1,17 +1,16 @@
-package com.mmrtr.lol.infra.persistence.ranking.scheduler;
+package com.mmrtr.lol.domain.ranking.application;
 
 import com.mmrtr.lol.common.type.Tier;
+import com.mmrtr.lol.domain.match.application.usecase.MostChampionQueryUseCase;
+import com.mmrtr.lol.domain.match.readmodel.MostChampionPlayCount;
 import com.mmrtr.lol.domain.ranking.application.port.LeagueApiPort;
 import com.mmrtr.lol.domain.ranking.application.port.LeagueApiPort.LeagueEntry;
 import com.mmrtr.lol.domain.ranking.application.port.SummonerRankingRepositoryPort;
 import com.mmrtr.lol.domain.ranking.application.port.TierCutoffRepositoryPort;
 import com.mmrtr.lol.domain.ranking.domain.SummonerRanking;
 import com.mmrtr.lol.domain.ranking.domain.TierCutoff;
-import com.mmrtr.lol.domain.summoner.application.SummonerService;
-import com.mmrtr.lol.domain.summoner.application.port.SummonerRepositoryPort;
+import com.mmrtr.lol.domain.summoner.application.usecase.SummonerLookupUseCase;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
-import com.mmrtr.lol.infra.persistence.match.repository.MatchSummonerJpaRepository;
-import com.mmrtr.lol.infra.persistence.match.repository.MostChampionProjection;
 import com.mmrtr.lol.support.riot.RiotCallPriority;
 import com.mmrtr.lol.support.riot.RiotPermitPort;
 import com.mmrtr.lol.support.riot.RiotPermits;
@@ -36,11 +35,10 @@ import java.util.Optional;
 public class SummonerRankingCalculationService {
 
     private final LeagueApiPort leagueApiPort;
-    private final MatchSummonerJpaRepository matchSummonerJpaRepository;
+    private final MostChampionQueryUseCase mostChampionQueryUseCase;
     private final SummonerRankingRepositoryPort summonerRankingRepositoryPort;
     private final TierCutoffRepositoryPort tierCutoffRepositoryPort;
-    private final SummonerRepositoryPort summonerRepositoryPort;
-    private final SummonerService summonerService;
+    private final SummonerLookupUseCase summonerLookupUseCase;
     private final RiotPermitPort riotPermitPort;
 
     private static final String PLATFORM_KR = "KR";
@@ -107,7 +105,7 @@ public class SummonerRankingCalculationService {
                     .map(e -> e.entry.puuid())
                     .toList();
 
-            Map<String, Summoner> summonerMap = summonerRepositoryPort.findAllByPuuidIn(puuids);
+            Map<String, Summoner> summonerMap = summonerLookupUseCase.findAllByPuuidIn(puuids);
 
             // 미등록 소환사 조회 (500ms 간격)
             List<String> unknownPuuids = mergedEntries.stream()
@@ -257,7 +255,7 @@ public class SummonerRankingCalculationService {
         int fetched = 0;
         for (String puuid : unknownPuuids) {
             try {
-                Summoner summoner = summonerService.getSummonerByPuuid(PLATFORM_KR, puuid, RiotCallPriority.BACKGROUND);
+                Summoner summoner = summonerLookupUseCase.getSummonerByPuuid(PLATFORM_KR, puuid, RiotCallPriority.BACKGROUND);
                 summonerMap.put(puuid, summoner);
                 fetched++;
                 if (fetched % 50 == 0) {
@@ -298,13 +296,13 @@ public class SummonerRankingCalculationService {
             return Map.of();
         }
 
-        List<MostChampionProjection> mostChampions = matchSummonerJpaRepository.findMostChampionsByPuuids(puuids);
+        List<MostChampionPlayCount> mostChampions = mostChampionQueryUseCase.findMostChampionsByPuuids(puuids);
 
         Map<String, List<String>> result = new HashMap<>();
-        for (MostChampionProjection projection : mostChampions) {
-            List<String> champions = result.computeIfAbsent(projection.getPuuid(), k -> new ArrayList<>());
+        for (MostChampionPlayCount playCount : mostChampions) {
+            List<String> champions = result.computeIfAbsent(playCount.puuid(), k -> new ArrayList<>());
             if (champions.size() < 3) {
-                champions.add(projection.getChampionName());
+                champions.add(playCount.championName());
             }
         }
 
