@@ -6,6 +6,7 @@ import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
 import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
 import com.mmrtr.lol.domain.summoner.domain.vo.RevisionInfo;
 import com.mmrtr.lol.domain.summoner.domain.vo.StatusInfo;
+import com.mmrtr.lol.domain.summoner.domain.vo.SummonerProfile;
 import com.mmrtr.lol.domain.summoner.application.port.SummonerApiPort;
 import com.mmrtr.lol.infra.riot.dto.account.AccountDto;
 import com.mmrtr.lol.infra.riot.dto.league.LeagueEntryDto;
@@ -114,6 +115,28 @@ public class SummonerApiAdapter implements SummonerApiPort {
 
             throw new CoreException(ErrorType.DEFAULT_ERROR, "유저 정보 조회 중 오류가 발생했습니다.");
         });
+    }
+
+    @Override
+    public CompletableFuture<GameIdentity> fetchGameIdentity(
+            String puuid, Platform platform, RiotPermit permit, Executor executor) {
+        return riotApiService.getAccountByPuuid(puuid, platform, permit, executor)
+                .thenApply(dto -> new GameIdentity(dto.getGameName(), dto.getTagLine()));
+    }
+
+    @Override
+    public CompletableFuture<SummonerProfile> fetchSummonerProfile(
+            String puuid, Platform platform, RiotPermit permit, Executor executor) {
+        return riotApiService.getSummonerByPuuid(puuid, platform, permit, executor)
+                .thenApply(dto -> new SummonerProfile(
+                        dto.getProfileIconId(), dto.getSummonerLevel(), dto.getRevisionDate()));
+    }
+
+    @Override
+    public CompletableFuture<Set<LeagueInfo>> fetchLeagueInfos(
+            String puuid, Platform platform, RiotPermit permit, Executor executor) {
+        return riotApiService.getLeagueEntriesByPuuid(puuid, platform, permit, executor)
+                .thenApply(this::toLeagueInfos);
     }
 
     private Summoner toDomain(AccountDto accountDto,

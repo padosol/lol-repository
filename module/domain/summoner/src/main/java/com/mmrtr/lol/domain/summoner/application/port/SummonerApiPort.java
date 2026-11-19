@@ -1,10 +1,16 @@
 package com.mmrtr.lol.domain.summoner.application.port;
 
+import com.mmrtr.lol.common.type.Platform;
 import com.mmrtr.lol.domain.summoner.domain.Summoner;
+import com.mmrtr.lol.domain.summoner.domain.vo.GameIdentity;
+import com.mmrtr.lol.domain.summoner.domain.vo.LeagueInfo;
+import com.mmrtr.lol.domain.summoner.domain.vo.SummonerProfile;
 import com.mmrtr.lol.support.riot.RiotMethod;
+import com.mmrtr.lol.support.riot.RiotPermit;
 import com.mmrtr.lol.support.riot.RiotPermits;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -28,4 +34,14 @@ public interface SummonerApiPort {
 
     CompletableFuture<Summoner> fetchSummonerByPuuid(
             String puuid, String platform, RiotPermits permits, Executor executor);
+
+    /** 갱신 단계용 단건 조회. Riot 예외를 감싸지 않아 호출하는 쪽이 원인 체인으로 실패를 분류한다. */
+    CompletableFuture<GameIdentity> fetchGameIdentity(
+            String puuid, Platform platform, RiotPermit permit, Executor executor);
+
+    CompletableFuture<SummonerProfile> fetchSummonerProfile(
+            String puuid, Platform platform, RiotPermit permit, Executor executor);
+
+    CompletableFuture<Set<LeagueInfo>> fetchLeagueInfos(
+            String puuid, Platform platform, RiotPermit permit, Executor executor);
 }
