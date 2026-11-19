@@ -3,6 +3,7 @@ package com.mmrtr.lol.domain.match.application.usecase;
 import com.mmrtr.lol.common.type.Queue;
 import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
 import com.mmrtr.lol.domain.league.application.port.LeagueSummonerRepositoryPort;
+import com.mmrtr.lol.domain.match.domain.MatchTierSnapshot;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.ParticipantDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
@@ -23,7 +24,23 @@ public class SaveMatchDataUseCase {
 
     public void execute(List<MatchDto> matches, List<TimelineDto> timelines) {
         Map<String, Map<String, LeagueSummoner>> leagueMap = buildLeagueMap(matches);
-        matchRepositoryPort.saveAll(matches, timelines, leagueMap);
+        Map<String, MatchTierSnapshot> tierByMatchId = new HashMap<>();
+        for (MatchDto matchDto : matches) {
+            tierByMatchId.put(matchDto.getMetadata().getMatchId(), snapshotOf(matchDto, leagueMap));
+        }
+        matchRepositoryPort.saveAll(matches, timelines, tierByMatchId);
+    }
+
+    private MatchTierSnapshot snapshotOf(MatchDto matchDto,
+                                         Map<String, Map<String, LeagueSummoner>> leagueMap) {
+        Queue queue = Queue.fromQueueId(matchDto.getInfo().getQueueId());
+        if (queue == null) {
+            return MatchTierSnapshot.empty();
+        }
+        List<String> puuids = matchDto.getInfo().getParticipants().stream()
+                .map(ParticipantDto::getPuuid)
+                .toList();
+        return MatchTierSnapshot.of(puuids, leagueMap.getOrDefault(queue.name(), Map.of()));
     }
 
     private Map<String, Map<String, LeagueSummoner>> buildLeagueMap(List<MatchDto> matches) {

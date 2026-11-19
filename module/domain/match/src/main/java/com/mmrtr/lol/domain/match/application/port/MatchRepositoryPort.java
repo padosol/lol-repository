@@ -1,6 +1,6 @@
 package com.mmrtr.lol.domain.match.application.port;
 
-import com.mmrtr.lol.domain.league.domain.LeagueSummoner;
+import com.mmrtr.lol.domain.match.domain.MatchTierSnapshot;
 import com.mmrtr.lol.domain.match.readmodel.MatchDto;
 import com.mmrtr.lol.domain.match.readmodel.timeline.TimelineDto;
 
@@ -11,7 +11,7 @@ import java.util.Set;
 public interface MatchRepositoryPort {
 
     void saveAll(List<MatchDto> matches, List<TimelineDto> timelines,
-                 Map<String, Map<String, LeagueSummoner>> leagueMap);
+                 Map<String, MatchTierSnapshot> tierByMatchId);
 
     List<String> findExistingMatchIds(List<String> matchIds);
 
