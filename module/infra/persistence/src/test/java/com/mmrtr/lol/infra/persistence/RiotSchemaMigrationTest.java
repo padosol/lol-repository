@@ -76,6 +76,19 @@ class RiotSchemaMigrationTest {
                 "batch_job_seq", "batch_job_execution_seq", "batch_step_execution_seq");
     }
 
+    @DisplayName("CONCURRENTLY 로 만드는 인덱스가 Flyway 에서 끝까지 만들어져 유효하다")
+    @Test
+    void migration_freshDatabase_buildsConcurrentIndexValid() {
+        // when
+        Object valid = single("""
+                SELECT i.indisvalid FROM pg_index i
+                WHERE i.indexrelid = 'riot.idx_match_participant_puuid_champion_name'::regclass
+                """);
+
+        // then
+        assertThat(valid).isEqualTo(true);
+    }
+
     private Object single(String sql) {
         return entityManager.createNativeQuery(sql).getSingleResult();
     }

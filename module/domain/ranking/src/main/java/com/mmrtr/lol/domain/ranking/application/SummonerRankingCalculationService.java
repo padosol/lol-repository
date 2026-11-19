@@ -300,10 +300,7 @@ public class SummonerRankingCalculationService {
 
         Map<String, List<String>> result = new HashMap<>();
         for (MostChampionPlayCount playCount : mostChampions) {
-            List<String> champions = result.computeIfAbsent(playCount.puuid(), k -> new ArrayList<>());
-            if (champions.size() < 3) {
-                champions.add(playCount.championName());
-            }
+            result.computeIfAbsent(playCount.puuid(), k -> new ArrayList<>()).add(playCount.championName());
         }
 
         return result;

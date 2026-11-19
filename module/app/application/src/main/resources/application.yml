@@ -42,6 +42,8 @@ lol:
 ---
 # 분산 추적은 local 프로파일에서만 켠다 (application-local.yml). 다른 프로파일은 tracer 를 만들지 않아 traceId 를 만들지도
 # 보내지도 않는다. management.tracing.enabled=false 는 보내기만 막고 tracer 는 그대로 만들어 로그에 traceId 가 붙으므로 쓰지 않는다
+# Noop tracer 도 뺀다. 남겨 두면 Tracer 빈이 있다고 보고 지표 handler 를 TracingAwareMeterObservationHandler 로 감싸는데,
+# TracingContext 를 넣는 handler(MicrometerTracingAutoConfiguration)는 빠져 있어 @Scheduled·HTTP 관측을 닫을 때마다 예외가 난다
 spring:
   config:
     activate:
@@ -51,3 +53,4 @@ spring:
       - org.springframework.boot.actuate.autoconfigure.tracing.OpenTelemetryTracingAutoConfiguration
       - org.springframework.boot.actuate.autoconfigure.tracing.MicrometerTracingAutoConfiguration
       - org.springframework.boot.actuate.autoconfigure.tracing.otlp.OtlpTracingAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.tracing.NoopTracerAutoConfiguration
